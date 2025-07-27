@@ -1,858 +1,1052 @@
-<!DOCTYPE html>
-<html lang="cs">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VR 2D Satelitní Mapa - Three.js</title>
-    
-    <!-- Leaflet pro 2D mapu -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    
-    <!-- Three.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
-    <!-- WebXR Polyfill pro VR podporu -->
-    <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.js"></script>
-    
-    <!-- html2canvas pro DOM -> Canvas konverzi -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<!doctype html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        <title>VR 2D Satelitní Mapa - Babylon.js</title>
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #000;
-            color: #fff;
-            height: 100vh;
-            overflow: hidden;
-        }
+        <!-- Babylon.js -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
+        <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
+        <script src="https://cdn.babylonjs.com/recast.js"></script>
+        <script src="https://cdn.babylonjs.com/ammo.js"></script>
+        <script src="https://cdn.babylonjs.com/havok/HavokPhysics_umd.js"></script>
+        <script src="https://cdn.babylonjs.com/cannon.js"></script>
+        <script src="https://cdn.babylonjs.com/Oimo.js"></script>
+        <script src="https://cdn.babylonjs.com/earcut.min.js"></script>
+        <script src="https://cdn.babylonjs.com/babylon.js"></script>
+        <script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+        <script src="https://cdn.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
+        <script src="https://cdn.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
+        <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+        <script src="https://cdn.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+        <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+        <script src="https://cdn.babylonjs.com/addons/babylonjs.addons.min.js"></script>
+        <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
 
-        #container {
-            width: 100%;
-            height: 100vh;
-            position: relative;
-        }
+        <!-- Leaflet pro 2D mapu -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
-        #vrCanvas {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
+        <style>
+            html,
+            body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
 
-        /* Hidden mapy container pro VR texturu */
-        #hiddenMapContainer {
-            position: absolute;
-            left: -3000px;
-            top: -3000px;
-            width: 1200px;
-            height: 800px;
-            background: #1a1a1a;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            color: #fff;
-            overflow: hidden;
-            border-radius: 12px;
-        }
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
 
-        #hiddenMapContainer #map {
-            width: 75%;
-            height: 100%;
-            float: left;
-        }
+            #canvasZone {
+                width: 100%;
+                height: 100%;
+            }
 
-        #hiddenMapContainer .vr-controls {
-            width: 25%;
-            height: 100%;
-            float: right;
-            background: rgba(0, 0, 0, 0.95);
-            padding: 15px;
-            box-sizing: border-box;
-            overflow-y: auto;
-        }
+            /* Hidden mapy container pro VR texturu */
+            #mapContainer {
+                position: absolute;
+                left: -3000px;
+                top: -3000px;
+                width: 1024px;
+                height: 768px;
+                background: #1a1a1a;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                color: #fff;
+                overflow: hidden;
+                border-radius: 8px;
+            }
 
-        #hiddenMapContainer .control-group {
-            margin-bottom: 12px;
-        }
+            #mapContainer #map {
+                width: 70%;
+                height: 100%;
+                float: left;
+            }
 
-        #hiddenMapContainer .control-group label {
-            display: block;
-            margin-bottom: 6px;
-            font-size: 11px;
-            color: #e0e0e0;
-            font-weight: 500;
-        }
+            #mapContainer .vr-controls {
+                width: 30%;
+                height: 100%;
+                float: right;
+                background: rgba(0, 0, 0, 0.95);
+                padding: 15px;
+                box-sizing: border-box;
+                overflow-y: auto;
+            }
 
-        #hiddenMapContainer .control-group input[type="checkbox"] {
-            margin-right: 6px;
-            transform: scale(1.0);
-        }
+            #mapContainer .control-group {
+                margin-bottom: 12px;
+            }
 
-        #hiddenMapContainer .control-group select,
-        #hiddenMapContainer .control-group input[type="range"],
-        #hiddenMapContainer .control-group input[type="color"],
-        #hiddenMapContainer .control-group input[type="number"],
-        #hiddenMapContainer .control-group input[type="text"] {
-            width: 100%;
-            padding: 4px 6px;
-            background: #333;
-            color: #fff;
-            border: 1px solid #555;
-            border-radius: 3px;
-            font-size: 10px;
-            margin-bottom: 4px;
-        }
+            #mapContainer .control-group label {
+                display: block;
+                margin-bottom: 6px;
+                font-size: 11px;
+                color: #e0e0e0;
+                font-weight: 500;
+            }
 
-        #hiddenMapContainer .control-group input[type="range"] {
-            height: 5px;
-            padding: 0;
-        }
+            #mapContainer .control-group input[type="checkbox"] {
+                margin-right: 6px;
+                transform: scale(1.0);
+            }
 
-        #hiddenMapContainer .control-group input[type="color"] {
-            height: 20px;
-            padding: 0;
-        }
+            #mapContainer .control-group select,
+            #mapContainer .control-group input[type="range"],
+            #mapContainer .control-group input[type="color"],
+            #mapContainer .control-group input[type="number"],
+            #mapContainer .control-group input[type="text"] {
+                width: 100%;
+                padding: 4px 6px;
+                background: #333;
+                color: #fff;
+                border: 1px solid #555;
+                border-radius: 3px;
+                font-size: 10px;
+                margin-bottom: 4px;
+            }
 
-        #hiddenMapContainer button {
-            width: 100%;
-            padding: 6px 8px;
-            background: linear-gradient(135deg, #4a90e2, #357abd);
-            color: white;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 10px;
-            font-weight: 500;
-            margin-bottom: 4px;
-        }
+            #mapContainer .control-group input[type="range"] {
+                height: 5px;
+                padding: 0;
+            }
 
-        #hiddenMapContainer button:hover {
-            background: linear-gradient(135deg, #357abd, #2c5aa0);
-        }
+            #mapContainer .control-group input[type="color"] {
+                height: 20px;
+                padding: 0;
+            }
 
-        #hiddenMapContainer button.secondary {
-            background: linear-gradient(135deg, #dc3545, #c82333);
-        }
+            #mapContainer button {
+                width: 100%;
+                padding: 6px 8px;
+                background: linear-gradient(135deg, #4a90e2, #357abd);
+                color: white;
+                border: none;
+                border-radius: 3px;
+                cursor: pointer;
+                font-size: 10px;
+                font-weight: 500;
+                margin-bottom: 4px;
+            }
 
-        #hiddenMapContainer h3 {
-            color: #4a90e2;
-            margin-bottom: 8px;
-            font-size: 12px;
-        }
+            #mapContainer button:hover {
+                background: linear-gradient(135deg, #357abd, #2c5aa0);
+            }
 
-        #hiddenMapContainer .info-text {
-            font-size: 9px;
-            line-height: 1.3;
-            color: #ccc;
-            background: rgba(255, 255, 255, 0.05);
-            padding: 6px;
-            border-radius: 3px;
-            margin-top: 8px;
-        }
+            #mapContainer button.secondary {
+                background: linear-gradient(135deg, #dc3545, #c82333);
+            }
 
-        /* UI Overlay pro VR informace */
-        .vr-ui {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px;
-            border-radius: 8px;
-            z-index: 1000;
-            font-size: 14px;
-            max-width: 300px;
-        }
+            #mapContainer h3 {
+                color: #4a90e2;
+                margin-bottom: 8px;
+                font-size: 12px;
+            }
 
-        .vr-ui h3 {
-            color: #4a90e2;
-            margin-bottom: 10px;
-        }
+            #mapContainer .info-text {
+                font-size: 9px;
+                line-height: 1.3;
+                color: #ccc;
+                background: rgba(255, 255, 255, 0.05);
+                padding: 6px;
+                border-radius: 3px;
+                margin-top: 8px;
+            }
 
-        .vr-toggle {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: #4a90e2;
-            color: white;
-            padding: 12px 20px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            z-index: 1001;
-        }
+            /* Leaflet styling pro VR */
+            #mapContainer .leaflet-control-zoom,
+            #mapContainer .leaflet-control-attribution {
+                font-size: 9px !important;
+            }
 
-        .vr-toggle:hover {
-            background: #357abd;
-        }
+            #mapContainer .leaflet-popup-content {
+                color: #333 !important;
+                font-size: 10px !important;
+            }
 
-        /* Leaflet styling pro VR */
-        #hiddenMapContainer .leaflet-control-zoom,
-        #hiddenMapContainer .leaflet-control-attribution {
-            font-size: 9px !important;
-        }
-
-        #hiddenMapContainer .leaflet-popup-content {
-            color: #333 !important;
-            font-size: 10px !important;
-        }
-
-        #hiddenMapContainer .leaflet-popup-content-wrapper {
-            border-radius: 4px !important;
-        }
-    </style>
-</head>
-<body>
-    <div id="container">
-        <canvas id="vrCanvas"></canvas>
+            #mapContainer .leaflet-popup-content-wrapper {
+                border-radius: 4px !important;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
         
-        <div class="vr-ui">
-            <h3>🌍 VR 2D Mapa</h3>
-            <p>Klikněte na "Vstoupit do VR" pro VR prostředí s headsetem.</p>
-            <p><strong>Desktop ovládání:</strong></p>
-            <p>• Myš = otáčení kamery<br>
-            • WASD = pohyb<br>
-            • Klik na mapu = GPS<br>
-            • Scroll = zoom</p>
-            <p><strong>VR ovládání:</strong></p>
-            <p>• VR Controller = pointer<br>
-            • Trigger = klik na mapu<br>
-            • Haptic feedback aktivní</p>
-            <div id="gpsDisplay" style="margin-top: 10px; padding: 8px; background: rgba(74, 144, 226, 0.2); border-radius: 4px;">
-                <strong>GPS:</strong> <span id="gpsCoords">Klikněte na mapu</span>
-            </div>
-            <div id="vrStatus" style="margin-top: 8px; padding: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; font-size: 12px;">
-                <strong>VR Status:</strong> <span id="vrStatusText">Kontroluji...</span>
-            </div>
-        </div>
-        
-        <button class="vr-toggle" onclick="toggleVR()">Vstoupit do VR</button>
-    </div>
-    
-    <!-- Hidden container pro VR texturu -->
-    <div id="hiddenMapContainer">
-        <div id="map"></div>
-        <div class="vr-controls">
-            <h3>🌍 VR Mapa</h3>
-            
-            <div class="control-group">
-                <label>
-                    <input type="checkbox" id="countries" checked> Hranice států
-                </label>
-                <label for="borderColor">Barva hranic:</label>
-                <input type="color" id="borderColor" value="#ffffff">
-            </div>
-            
-            <div class="control-group">
-                <label for="overlayLayer">Overlay:</label>
-                <select id="overlayLayer">
-                    <option value="none">Žádná</option>
-                    <option value="topo" selected>🗺️ Topo</option>
-                    <option value="streets">🏙️ Ulice</option>
-                </select>
-            </div>
-            
-            <div class="control-group">
-                <label for="overlayOpacity">Mix: <span id="opacityValue">70%</span></label>
-                <input type="range" id="overlayOpacity" min="0" max="100" value="70">
-            </div>
-            
-            <div class="control-group">
-                <h3>📍 Marker</h3>
-                <input type="number" id="markerLat" step="0.0001" placeholder="Šířka">
-                <input type="number" id="markerLng" step="0.0001" placeholder="Délka">
-                <input type="text" id="markerText" placeholder="Název">
-                <button onclick="addMarker()">Přidat</button>
-                <button onclick="clearMarkers()" class="secondary">Smazat</button>
-            </div>
-            
-            <div class="control-group">
-                <label for="baseBrightness">Jas: <span id="baseBrightnessValue">100%</span></label>
-                <input type="range" id="baseBrightness" min="50" max="150" value="100">
+        <!-- Hidden container pro VR texturu -->
+        <div id="mapContainer">
+            <div id="map"></div>
+            <div class="vr-controls">
+                <h3>🌍 VR Mapa</h3>
                 
-                <label for="baseContrast">Kontrast: <span id="baseContrastValue">100%</span></label>
-                <input type="range" id="baseContrast" min="50" max="150" value="100">
-            </div>
-            
-            <div class="info-text">
-                <strong>VR Ovládání:</strong><br>
-                • VR Controller = pointer<br>
-                • Trigger = klik<br>
-                • Grip = drag<br><br>
-                <strong>GPS:</strong> <span id="gpsInfo">Klikněte na mapu</span>
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="countries" checked> Hranice států
+                    </label>
+                    <label for="borderColor">Barva hranic:</label>
+                    <input type="color" id="borderColor" value="#ffffff">
+                </div>
+                
+                <div class="control-group">
+                    <label for="overlayLayer">Overlay:</label>
+                    <select id="overlayLayer">
+                        <option value="none">Žádná</option>
+                        <option value="topo" selected>🗺️ Topo</option>
+                        <option value="streets">🏙️ Ulice</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="overlayOpacity">Mix: <span id="opacityValue">70%</span></label>
+                    <input type="range" id="overlayOpacity" min="0" max="100" value="70">
+                </div>
+                
+                <div class="control-group">
+                    <h3>📍 Marker</h3>
+                    <input type="number" id="markerLat" step="0.0001" placeholder="Šířka">
+                    <input type="number" id="markerLng" step="0.0001" placeholder="Délka">
+                    <input type="text" id="markerText" placeholder="Název">
+                    <button onclick="addMarker()">Přidat</button>
+                    <button onclick="clearMarkers()" class="secondary">Smazat</button>
+                </div>
+                
+                <div class="control-group">
+                    <label for="baseBrightness">Jas: <span id="baseBrightnessValue">100%</span></label>
+                    <input type="range" id="baseBrightness" min="50" max="150" value="100">
+                    
+                    <label for="baseContrast">Kontrast: <span id="baseContrastValue">100%</span></label>
+                    <input type="range" id="baseContrast" min="50" max="150" value="100">
+                </div>
+                
+                <div class="info-text">
+                    <strong>VR Ovládání:</strong><br>
+                    • VR Controller = pointer<br>
+                    • Trigger = klik<br>
+                    • Grip = drag<br><br>
+                    <strong>GPS:</strong> <span id="gpsInfo">Klikněte na mapu</span>
+                </div>
             </div>
         </div>
-    </div>
 
-    <script>
-        console.log('🚀 Spouštím VR 2D mapu s Three.js...');
-        
-        // Globální proměnné
-        let scene, camera, renderer, vrMapPlane, vrButton;
-        let vrMap = null;
-        let markersGroup = null;
-        let markerCount = 0;
-        let baseLayer = null;
-        let mapTexture = null;
-        let isVRSupported = false;
-        let vrSession = null;
-        let vrControllers = [];
+        <script>
+            var canvas = document.getElementById("renderCanvas");
 
-        // Three.js inicializace
-        function initThreeJS() {
-            // Scéna
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x001122);
-
-            // Kamera
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 2, 5);
-
-            // Renderer s WebXR podporou
-            const canvas = document.getElementById('vrCanvas');
-            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            
-            // WebXR setup
-            renderer.xr.enabled = true;
-            
-            // Kontrola VR podpory
-            checkVRSupport();
-
-            // Osvětlení
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
-            scene.add(ambientLight);
-
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(10, 10, 5);
-            scene.add(directionalLight);
-
-            // Ovládání myší pro desktop
-            setupControls();
-
-            console.log('✅ Three.js s WebXR inicializováno');
-        }
-
-        // Kontrola VR podpory
-        async function checkVRSupport() {
-            if ('xr' in navigator) {
-                try {
-                    isVRSupported = await navigator.xr.isSessionSupported('immersive-vr');
-                    console.log('🥽 VR Podpora:', isVRSupported ? 'Dostupná' : 'Nedostupná');
-                    updateVRButton();
-                } catch (error) {
-                    console.log('❌ VR Kontrola selhala:', error);
-                    isVRSupported = false;
-                    updateVRButton();
-                }
-            } else {
-                console.log('❌ WebXR není podporován v tomto prohlížeči');
-                isVRSupported = false;
-                updateVRButton();
+            var startRenderLoop = function (engine, canvas) {
+                engine.runRenderLoop(function () {
+                    if (sceneToRender && sceneToRender.activeCamera) {
+                        sceneToRender.render();
+                    }
+                });
             }
-        }
 
-        // Update VR tlačítka a statusu
-        function updateVRButton() {
-            const button = document.querySelector('.vr-toggle');
-            const statusText = document.getElementById('vrStatusText');
-            
-            if (isVRSupported) {
-                button.textContent = '🥽 Vstoupit do VR';
-                button.style.background = '#4a90e2';
-                button.disabled = false;
-                statusText.textContent = 'VR Připraveno';
-                statusText.style.color = '#4CAF50';
-            } else {
-                button.textContent = '❌ VR Nepodporováno';
-                button.style.background = '#666';
-                button.disabled = true;
-                statusText.textContent = 'VR Nedostupné';
-                statusText.style.color = '#ff6b6b';
-            }
-        }
+            var engine = null;
+            var scene = null;
+            var sceneToRender = null;
+            var createDefaultEngine = function() { 
+                return new BABYLON.Engine(canvas, true, { 
+                    preserveDrawingBuffer: true, 
+                    stencil: true,  
+                    disableWebGL2Support: false
+                }); 
+            };
 
-        // VR Session management
-        async function startVRSession() {
-            if (!isVRSupported || vrSession) return;
+            // Mapa proměnné
+            let vrMap = null;
+            let markersGroup = null;
+            let markerCount = 0;
+            let baseLayer = null;
 
-            try {
-                vrSession = await navigator.xr.requestSession('immersive-vr', {
-                    requiredFeatures: ['local-floor']
+            // Inicializace Leaflet mapy
+            function initializeLeafletMap() {
+                console.log('🗺️ Inicializuji Leaflet mapu pro VR...');
+                
+                vrMap = L.map('map', {
+                    center: [49.75, 15.5], // Střed ČR
+                    zoom: 4,
+                    minZoom: 3,
+                    maxZoom: 8,
+                    zoomControl: true,
+                    attributionControl: true,
+                    worldCopyJump: true
                 });
 
-                // VR session setup
-                await renderer.xr.setSession(vrSession);
-                
-                // VR controllers setup
-                setupVRControllers();
-                
-                // VR session event listeners
-                vrSession.addEventListener('end', onVRSessionEnd);
-                
-                // Update UI
-                document.querySelector('.vr-toggle').textContent = '🖥️ Opustit VR';
-                document.querySelector('.vr-toggle').style.background = '#dc3545';
-                
-                console.log('🥽 VR Session spuštěna!');
-                
-            } catch (error) {
-                console.error('❌ VR Session se nepodařilo spustit:', error);
-                alert('Nepodařilo se spustit VR. Zkontrolujte, zda máte připojený VR headset.');
+                // Markery
+                markersGroup = L.layerGroup().addTo(vrMap);
+
+                // Podkladová mapa - OpenStreetMap (nahradíte svými offline tiles)
+                baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    minZoom: 3,
+                    maxZoom: 8,
+                    className: 'base-layer-filtered'
+                });
+                baseLayer.addTo(vrMap);
+
+                // Event listeners pro mapu
+                vrMap.on('click', function(e) {
+                    const lat = e.latlng.lat.toFixed(4);
+                    const lng = e.latlng.lng.toFixed(4);
+                    document.getElementById('gpsInfo').textContent = `${lat}, ${lng}`;
+                    document.getElementById('markerLat').value = lat;
+                    document.getElementById('markerLng').value = lng;
+                    console.log(`📍 GPS: ${lat}, ${lng}`);
+                });
+
+                vrMap.on('zoomend', function() {
+                    const zoom = vrMap.getZoom();
+                    console.log(`🔍 Zoom úroveň: ${zoom}`);
+                });
+
+                // Vzorové markery
+                const sampleMarkers = [
+                    {lat: 50.0755, lng: 14.4378, text: "Praha"},
+                    {lat: 49.1951, lng: 16.6068, text: "Brno"},
+                    {lat: 49.7384, lng: 13.3736, text: "Plzeň"}
+                ];
+
+                sampleMarkers.forEach(point => {
+                    const marker = L.marker([point.lat, point.lng]).addTo(markersGroup);
+                    marker.bindPopup(`
+                        <div style="color: #333; font-family: Arial, sans-serif;">
+                            <strong style="color: #4a90e2;">${point.text}</strong><br>
+                            <small>GPS: ${point.lat}, ${point.lng}</small>
+                        </div>
+                    `);
+                    markerCount++;
+                });
+
+                console.log('✅ Leaflet mapa inicializována pro VR');
             }
-        }
 
-        // Ukončení VR session
-        function endVRSession() {
-            if (vrSession) {
-                vrSession.end();
-            }
-        }
-
-        // VR session end handler
-        function onVRSessionEnd() {
-            vrSession = null;
-            
-            // Update UI
-            document.querySelector('.vr-toggle').textContent = '🥽 Vstoupit do VR';
-            document.querySelector('.vr-toggle').style.background = '#4a90e2';
-            
-            console.log('🖥️ VR Session ukončena');
-        }
-
-        // Setup VR controllers
-        function setupVRControllers() {
-            // Controller 1
-            const controller1 = renderer.xr.getController(0);
-            controller1.addEventListener('selectstart', onSelectStart);
-            controller1.addEventListener('selectend', onSelectEnd);
-            scene.add(controller1);
-
-            // Controller 2
-            const controller2 = renderer.xr.getController(1);
-            controller2.addEventListener('selectstart', onSelectStart);
-            controller2.addEventListener('selectend', onSelectEnd);
-            scene.add(controller2);
-
-            vrControllers = [controller1, controller2];
-
-            // VR Controller ray helpers
-            const geometry = new THREE.BufferGeometry().setFromPoints([
-                new THREE.Vector3(0, 0, 0),
-                new THREE.Vector3(0, 0, -1)
-            ]);
-
-            const line1 = new THREE.Line(geometry.clone());
-            line1.name = 'ray';
-            line1.scale.z = 5;
-            controller1.add(line1);
-
-            const line2 = new THREE.Line(geometry.clone());
-            line2.name = 'ray';
-            line2.scale.z = 5;
-            controller2.add(line2);
-
-            console.log('🎮 VR Controllers nastaveny');
-        }
-
-        // VR Controller events
-        function onSelectStart(event) {
-            const controller = event.target;
-            
-            // Raycasting pro VR controller
-            const tempMatrix = new THREE.Matrix4();
-            tempMatrix.identity().extractRotation(controller.matrixWorld);
-
-            const raycaster = new THREE.Raycaster();
-            raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
-            raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
-
-            const intersects = raycaster.intersectObject(vrMapPlane);
-            if (intersects.length > 0) {
-                const intersect = intersects[0];
-                const uv = intersect.uv;
-                simulateMapClick(uv.x, 1 - uv.y);
+            // Funkce pro markery
+            window.addMarker = function() {
+                const lat = parseFloat(document.getElementById('markerLat').value);
+                const lng = parseFloat(document.getElementById('markerLng').value);
+                const text = document.getElementById('markerText').value || `Marker ${++markerCount}`;
                 
-                // Haptic feedback
-                if (controller.gamepad && controller.gamepad.hapticActuators) {
-                    controller.gamepad.hapticActuators[0].pulse(0.5, 100);
+                if (isNaN(lat) || isNaN(lng)) {
+                    alert('Zadejte platné GPS souřadnice!');
+                    return;
                 }
-            }
-        }
-
-        function onSelectEnd(event) {
-            // Controller release
-        }
-
-        // Three.js inicializace
-        function initThreeJS() {
-            // Scéna
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x001122);
-
-            // Kamera
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 2, 5);
-
-            // Renderer
-            const canvas = document.getElementById('vrCanvas');
-            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-
-            // Osvětlení
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
-            scene.add(ambientLight);
-
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(10, 10, 5);
-            scene.add(directionalLight);
-
-            // Ovládání myší
-            setupControls();
-
-            console.log('✅ Three.js inicializováno');
-        }
-
-        // Kontroly myši pro kameru
-        function setupControls() {
-            let mouseX = 0, mouseY = 0;
-            let mouseXOnMouseDown = 0, mouseYOnMouseDown = 0;
-            let targetRotationX = 0, targetRotationY = 0;
-            let targetRotationOnMouseDownX = 0, targetRotationOnMouseDownY = 0;
-            let isMouseDown = false;
-
-            document.addEventListener('mousedown', (event) => {
-                event.preventDefault();
-                isMouseDown = true;
-                mouseXOnMouseDown = event.clientX - window.innerWidth / 2;
-                mouseYOnMouseDown = event.clientY - window.innerHeight / 2;
-                targetRotationOnMouseDownX = targetRotationX;
-                targetRotationOnMouseDownY = targetRotationY;
-            });
-
-            document.addEventListener('mouseup', (event) => {
-                event.preventDefault();
-                isMouseDown = false;
-            });
-
-            document.addEventListener('mousemove', (event) => {
-                mouseX = event.clientX - window.innerWidth / 2;
-                mouseY = event.clientY - window.innerHeight / 2;
-
-                if (isMouseDown) {
-                    targetRotationY = targetRotationOnMouseDownY + (mouseX - mouseXOnMouseDown) * 0.02;
-                    targetRotationX = Math.max(-Math.PI/2, Math.min(Math.PI/2, 
-                        targetRotationOnMouseDownX + (mouseY - mouseYOnMouseDown) * 0.02));
-                }
-            });
-
-            // WASD pohyb
-            const keys = {};
-            document.addEventListener('keydown', (event) => keys[event.code] = true);
-            document.addEventListener('keyup', (event) => keys[event.code] = false);
-
-            function updateCamera() {
-                // Rotace kamery
-                camera.rotation.x += (targetRotationX - camera.rotation.x) * 0.1;
-                camera.rotation.y += (targetRotationY - camera.rotation.y) * 0.1;
-
-                // Pohyb WASD
-                const speed = 0.1;
-                if (keys['KeyW']) camera.position.z -= speed;
-                if (keys['KeyS']) camera.position.z += speed;
-                if (keys['KeyA']) camera.position.x -= speed;
-                if (keys['KeyD']) camera.position.x += speed;
-                if (keys['KeyQ']) camera.position.y += speed;
-                if (keys['KeyE']) camera.position.y -= speed;
-
-                requestAnimationFrame(updateCamera);
-            }
-            updateCamera();
-        }
-
-        // Inicializace Leaflet mapy
-        function initializeLeafletMap() {
-            console.log('🗺️ Inicializuji Leaflet mapu...');
-            
-            vrMap = L.map('map', {
-                center: [49.75, 15.5], // Střed ČR
-                zoom: 4,
-                minZoom: 3,
-                maxZoom: 8,
-                zoomControl: true,
-                attributionControl: true,
-                worldCopyJump: true
-            });
-
-            // Markery
-            markersGroup = L.layerGroup().addTo(vrMap);
-
-            // Podkladová mapa - OpenStreetMap
-            baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
-                minZoom: 3,
-                maxZoom: 8,
-                className: 'base-layer-filtered'
-            });
-            baseLayer.addTo(vrMap);
-
-            // Event listeners pro mapu
-            vrMap.on('click', function(e) {
-                const lat = e.latlng.lat.toFixed(4);
-                const lng = e.latlng.lng.toFixed(4);
                 
-                // Update UI
-                document.getElementById('gpsInfo').textContent = `${lat}, ${lng}`;
-                document.getElementById('gpsCoords').textContent = `${lat}, ${lng}`;
-                document.getElementById('markerLat').value = lat;
-                document.getElementById('markerLng').value = lng;
-                
-                console.log(`📍 GPS: ${lat}, ${lng}`);
-            });
-
-            // Vzorové markery
-            const sampleMarkers = [
-                {lat: 50.0755, lng: 14.4378, text: "Praha"},
-                {lat: 49.1951, lng: 16.6068, text: "Brno"},
-                {lat: 49.7384, lng: 13.3736, text: "Plzeň"}
-            ];
-
-            sampleMarkers.forEach(point => {
-                const marker = L.marker([point.lat, point.lng]).addTo(markersGroup);
+                const marker = L.marker([lat, lng]).addTo(markersGroup);
                 marker.bindPopup(`
                     <div style="color: #333; font-family: Arial, sans-serif;">
-                        <strong style="color: #4a90e2;">${point.text}</strong><br>
-                        <small>GPS: ${point.lat}, ${point.lng}</small>
+                        <strong style="color: #4a90e2;">${text}</strong><br>
+                        <small>GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}</small>
                     </div>
                 `);
-                markerCount++;
+                
+                document.getElementById('markerLat').value = '';
+                document.getElementById('markerLng').value = '';
+                document.getElementById('markerText').value = '';
+                
+                vrMap.setView([lat, lng], Math.max(vrMap.getZoom(), 6));
+            };
+
+            window.clearMarkers = function() {
+                const count = markersGroup.getLayers().length;
+                markersGroup.clearLayers();
+                markerCount = 0;
+                console.log(`🗑️ Smazáno ${count} markerů`);
+            };
+
+            // Event listenery pro ovládání
+            document.getElementById('overlayOpacity').addEventListener('input', function() {
+                document.getElementById('opacityValue').textContent = `${this.value}%`;
             });
 
-            console.log('✅ Leaflet mapa inicializována');
-            
-            // Spustit aktualizaci textury
-            setTimeout(updateMapTexture, 2000);
-        }
+            document.getElementById('baseBrightness').addEventListener('input', function() {
+                document.getElementById('baseBrightnessValue').textContent = `${this.value}%`;
+                applyBaseFilters();
+            });
 
-        // Aktualizace textury mapy
-        async function updateMapTexture() {
-            try {
-                const mapContainer = document.getElementById('hiddenMapContainer');
+            document.getElementById('baseContrast').addEventListener('input', function() {
+                document.getElementById('baseContrastValue').textContent = `${this.value}%`;
+                applyBaseFilters();
+            });
+
+            function applyBaseFilters() {
+                const brightness = document.getElementById('baseBrightness').value;
+                const contrast = document.getElementById('baseContrast').value;
                 
-                // html2canvas konverze
-                const canvas = await html2canvas(mapContainer, {
-                    width: 1200,
-                    height: 800,
-                    scale: 1,
-                    useCORS: true,
-                    allowTaint: false,
-                    backgroundColor: '#1a1a1a'
-                });
+                const filterValue = `brightness(${brightness}%) contrast(${contrast}%)`;
+                
+                const baseContainer = baseLayer.getContainer();
+                if (baseContainer) {
+                    baseContainer.style.filter = filterValue;
+                }
+            }
 
-                // Vytvoření Three.js textury
-                if (mapTexture) mapTexture.dispose();
-                mapTexture = new THREE.CanvasTexture(canvas);
-                mapTexture.needsUpdate = true;
+            var createScene = async function () {
+                console.log('🚀 Vytvářím VR scénu s 2D mapou...');
+                
+                // Inicializace 2D mapy
+                initializeLeafletMap();
+                
+                // This creates a basic Babylon Scene object (non-mesh)
+                var scene = new BABYLON.Scene(engine);
 
-                // Aplikace na plane
-                if (!vrMapPlane) {
-                    const geometry = new THREE.PlaneGeometry(8, 6);
-                    const material = new THREE.MeshBasicMaterial({ 
-                        map: mapTexture,
-                        transparent: true
+                // This creates and positions a free camera (non-mesh)
+                var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 5, -10), scene);
+
+                // This targets the camera to scene origin
+                camera.setTarget(BABYLON.Vector3.Zero());
+
+                // This attaches the camera to the canvas
+                camera.attachControl(canvas, true);
+
+                // This creates a light, aiming 0,1,0 - to the sky (non-mesh)
+                var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+
+                // Default intensity is 1. Let's dim the light a small amount
+                light.intensity = 0.7;
+
+                // create a texture from our map container
+                const mapContainer = document.getElementById('mapContainer');
+                new HtmlMesh(mapContainer, scene);
+
+                // XR - SKUTEČNÁ VR PODPORA!
+                const xrHelper = await scene.createDefaultXRExperienceAsync();
+                
+                console.log('✅ VR scéna s 2D mapou vytvořena');
+                return scene;
+            };
+
+            // HtmlTexture converts a HTML DOM element into a texture using html2canvas
+            class HtmlTexture extends BABYLON.DynamicTexture {
+                constructor(domElement, scene) {
+                    super("HtmlTexture", html2canvas(domElement), scene);
+                    this.domElement = domElement;
+
+                    // Create an observer on the DOM, and run html2canvas update in the next loop
+                    const observer = new MutationObserver(() => {
+
+                        if (!this.scheduleUpdate) {
+                            // ideally should use xr.requestAnimationFrame, here setTimeout to avoid passing the renderer
+                            this.scheduleUpdate = setTimeout(() => this.update(), 16);
+                        }
+
                     });
-                    
-                    vrMapPlane = new THREE.Mesh(geometry, material);
-                    
-                    // Positioning pro desktop i VR
-                    vrMapPlane.position.set(0, 1.5, -2); // Před uživatelem ve VR
-                    vrMapPlane.rotation.x = -0.3; // Mírně nakloněno dolů pro lepší čitelnost
-                    
-                    scene.add(vrMapPlane);
 
-                    // Raycaster pro klikání
-                    setupRaycasting();
-                } else {
-                    vrMapPlane.material.map = mapTexture;
-                    vrMapPlane.material.needsUpdate = true;
+                    const config = { attributes: true, childList: true, subtree: true, characterData: true };
+                    observer.observe(domElement, config);
+
+                    this.observer = observer;
                 }
 
-                console.log('✅ Mapa textura aktualizována');
+                get width() {
+                    return this._canvas.width;
+                }
+
+                get height() {
+                    return this._canvas.height;
+                }
+
+                update() {
+                    html2canvas(this.domElement);
+                    super.update()
+                    this.scheduleUpdate = null;
+                }
+            }
+
+            // creates a plane mesh and material with an attached HtmlTexture
+            // handles events for HTML interactions
+            class HtmlMesh { // TODO: derive from mesh class?
+                constructor(domElement, scene) {
+                    this.domElement = domElement;
+
+                    // create HTML texture
+                    this.texture = new HtmlTexture(domElement, scene);
+                    this.texture.hasAlpha = true;
+
+                    // create plane
+                    this.mesh = BABYLON.MeshBuilder.CreatePlane("plane", { height: 5, width: 6.67 }); // 4:3 ratio
+                    this.material = new BABYLON.StandardMaterial("Mat", scene);
+
+                    // create material
+                    this.material.diffuseTexture = this.texture;
+                    this.mesh.material = this.material;
+
+                    // remember to update or you will get NOTHING :)
+                    this.texture.update();
+
+                    // setup actions
+                    this.mesh.actionManager = new BABYLON.ActionManager(scene);
+
+                    // mousedown event on OnPickDownTrigger action
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            {
+                                trigger: BABYLON.ActionManager.OnPickDownTrigger,
+                            },
+                            (evt) => {
+                                const htmlCoords = evt.additionalData.getTextureCoordinates();
+                                // XXX: y coordinates are inverted between browser and 3D
+                                htmlevent(this.domElement, "mousedown", htmlCoords.x, 1 - htmlCoords.y);
+                            },
+                        )
+                    );
+
+                    // mouseup event on OnPickUpTrigger action
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            {
+                                trigger: BABYLON.ActionManager.OnPickUpTrigger,
+                            },
+                            (evt) => {
+                                const htmlCoords = evt.additionalData.getTextureCoordinates();
+                                // XXX: y coordinates are inverted between browser and 3D
+                                htmlevent(this.domElement, "mouseup", htmlCoords.x, 1 - htmlCoords.y);
+                            },
+                        )
+                    );
+
+                    // click event on OnPickTrigger action
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            {
+                                trigger: BABYLON.ActionManager.OnPickTrigger,
+                            },
+                            (evt) => {
+                                const htmlCoords = evt.additionalData.getTextureCoordinates();
+                                // XXX: y coordinates are inverted between browser and 3D
+                                htmlevent(this.domElement, "click", htmlCoords.x, 1 - htmlCoords.y);
+                            },
+                        )
+                    );
+
+                    // mousemove event on OnPointerOverTrigger action
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            {
+                                trigger: BABYLON.ActionManager.OnPointerOverTrigger,
+                            },
+                            (evt) => {
+                                // XXX: additionalData is structured different for mousemove
+                                const htmlCoords = evt.additionalData.pickResult.getTextureCoordinates();
+                                // XXX: y coordinates are inverted between browser and 3D
+                                htmlevent(this.domElement, "mousemove", htmlCoords.x, 1 - htmlCoords.y);
+                            },
+                        )
+                    );
+
+                    // if you set AbstractMesh.pointerOverDisableMeshTesting to
+                    // true, this trigger will be triggered every time you move the
+                    // mouse and you are still over the mesh 
+                    this.mesh.pointerOverDisableMeshTesting = true;
+                }
+            }
+
+            // loads a js module
+            // from https://www.educative.io/answers/how-to-dynamically-load-a-js-file-in-javascript
+            const loadScript = (FILE_URL, async = true, type = "text/javascript") => {
+                return new Promise((resolve, reject) => {
+                    try {
+                        const scriptEle = document.createElement("script");
+                        scriptEle.type = type;
+                        scriptEle.async = async;
+                        scriptEle.src =FILE_URL;
+
+                        scriptEle.addEventListener("load", (ev) => {
+                            resolve({ status: true });
+                        });
+
+                        scriptEle.addEventListener("error", (ev) => {
+                            reject({
+                                status: false,
+                                message: `Failed to load the script ${FILE_URL}`
+                            });
+                        });
+
+                        document.body.appendChild(scriptEle);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            };
+
+            // borrowed from three.js with very slight modifications
+            // https://github.com/mrdoob/three.js/blob/43fbcefc202c176b6fc221c439e8dbdf85788679/examples/jsm/interactive/HTMLMesh.js#L125
+            const canvases = new WeakMap();
+            function html2canvas(element) {
+
+                // TODO: move to relevant code block below
+                const range = document.createRange();
+
+                function Clipper(context) {
+
+                    const clips = [];
+                    let isClipping = false;
+
+                    function doClip() {
+
+                        if (isClipping) {
+
+                            isClipping = false;
+                            context.restore();
+
+                        }
+
+                        if (clips.length === 0) return;
+
+                        let minX = - Infinity, minY = - Infinity;
+                        let maxX = Infinity, maxY = Infinity;
+
+                        for (let i = 0; i < clips.length; i++) {
+
+                            const clip = clips[i];
+
+                            minX = Math.max(minX, clip.x);
+                            minY = Math.max(minY, clip.y);
+                            maxX = Math.min(maxX, clip.x + clip.width);
+                            maxY = Math.min(maxY, clip.y + clip.height);
+
+                        }
+
+                        context.save();
+                        context.beginPath();
+                        context.rect(minX, minY, maxX - minX, maxY - minY);
+                        context.clip();
+
+                        isClipping = true;
+
+                    }
+
+                    return {
+
+                        add: function (clip) {
+
+                            clips.push(clip);
+                            doClip();
+
+                        },
+
+                        remove: function () {
+
+                            clips.pop();
+                            doClip();
+
+                        }
+
+                    };
+
+                }
+
+                function drawText(style, x, y, string) {
+
+                    if (string !== '') {
+
+                        if (style.textTransform === 'uppercase') {
+
+                            string = string.toUpperCase();
+
+                        }
+
+                        context.font = style.fontWeight + ' ' + style.fontSize + ' ' + style.fontFamily;
+                        context.textBaseline = 'top';
+                        context.fillStyle = style.color;
+                        context.fillText(string, x, y + parseFloat(style.fontSize) * 0.1);
+
+                    }
+
+                }
+
+                function buildRectPath(x, y, w, h, r) {
+
+                    if (w < 2 * r) r = w / 2;
+                    if (h < 2 * r) r = h / 2;
+
+                    context.beginPath();
+                    context.moveTo(x + r, y);
+                    context.arcTo(x + w, y, x + w, y + h, r);
+                    context.arcTo(x + w, y + h, x, y + h, r);
+                    context.arcTo(x, y + h, x, y, r);
+                    context.arcTo(x, y, x + w, y, r);
+                    context.closePath();
+
+                }
+
+                function drawBorder(style, which, x, y, width, height) {
+
+                    const borderWidth = style[which + 'Width'];
+                    const borderStyle = style[which + 'Style'];
+                    const borderColor = style[which + 'Color'];
+
+                    if (borderWidth !== '0px' && borderStyle !== 'none' && borderColor !== 'transparent' && borderColor !== 'rgba(0, 0, 0, 0)') {
+
+                        context.strokeStyle = borderColor;
+                        context.lineWidth = parseFloat(borderWidth);
+                        context.beginPath();
+                        context.moveTo(x, y);
+                        context.lineTo(x + width, y + height);
+                        context.stroke();
+
+                    }
+
+                }
+
+                function drawElement(element, style) {
+
+                    let x = 0, y = 0, width = 0, height = 0;
+
+                    if (element.nodeType === Node.TEXT_NODE) {
+
+                        // text
+
+                        range.selectNode(element);
+
+                        const rect = range.getBoundingClientRect();
+
+                        x = rect.left - offset.left - 0.5;
+                        y = rect.top - offset.top - 0.5;
+                        width = rect.width;
+                        height = rect.height;
+
+                        drawText(style, x, y, element.nodeValue.trim());
+
+                    } else if (element.nodeType === Node.COMMENT_NODE) {
+
+                        return;
+
+                    } else if (element instanceof HTMLCanvasElement) {
+
+                        // Canvas element
+                        if (element.style.display === 'none') return;
+
+                        const rect = element.getBoundingClientRect();
+
+                        x = rect.left - offset.left - 0.5;
+                        y = rect.top - offset.top - 0.5;
+
+                        context.save();
+                        const dpr = window.devicePixelRatio;
+                        context.scale(1 / dpr, 1 / dpr);
+                        context.drawImage(element, x, y);
+                        context.restore();
+
+                    } else if (element instanceof HTMLImageElement) {
+
+                        if (element.style.display === 'none') return;
+
+                        const rect = element.getBoundingClientRect();
+
+                        x = rect.left - offset.left - 0.5;
+                        y = rect.top - offset.top - 0.5;
+                        width = rect.width;
+                        height = rect.height;
+
+                        context.drawImage(element, x, y, width, height);
+
+                    } else {
+
+                        if (element.style.display === 'none') return;
+
+                        const rect = element.getBoundingClientRect();
+
+                        x = rect.left - offset.left - 0.5;
+                        y = rect.top - offset.top - 0.5;
+                        width = rect.width;
+                        height = rect.height;
+
+                        style = window.getComputedStyle(element);
+
+                        // Get the border of the element used for fill and border
+
+                        buildRectPath(x, y, width, height, parseFloat(style.borderRadius));
+
+                        const backgroundColor = style.backgroundColor;
+
+                        if (backgroundColor !== 'transparent' && backgroundColor !== 'rgba(0, 0, 0, 0)') {
+
+                            context.fillStyle = backgroundColor;
+                            context.fill();
+
+                        }
+
+                        // If all the borders match then stroke the round rectangle
+
+                        const borders = ['borderTop', 'borderLeft', 'borderBottom', 'borderRight'];
+
+                        let match = true;
+                        let prevBorder = null;
+
+                        for (const border of borders) {
+
+                            if (prevBorder !== null) {
+
+                                match = (style[border + 'Width'] === style[prevBorder + 'Width']) &&
+                                    (style[border + 'Color'] === style[prevBorder + 'Color']) &&
+                                    (style[border + 'Style'] === style[prevBorder + 'Style']);
+
+                            }
+
+                            if (match === false) break;
+
+                            prevBorder = border;
+
+                        }
+
+                        if (match === true) {
+
+                            // They all match so stroke the rectangle from before allows for border-radius
+
+                            const width = parseFloat(style.borderTopWidth);
+
+                            if (style.borderTopWidth !== '0px' && style.borderTopStyle !== 'none' && style.borderTopColor !== 'transparent' && style.borderTopColor !== 'rgba(0, 0, 0, 0)') {
+
+                                context.strokeStyle = style.borderTopColor;
+                                context.lineWidth = width;
+                                context.stroke();
+
+                            }
+
+                        } else {
+
+                            // Otherwise draw individual borders
+
+                            drawBorder(style, 'borderTop', x, y, width, 0);
+                            drawBorder(style, 'borderLeft', x, y, 0, height);
+                            drawBorder(style, 'borderBottom', x, y + height, width, 0);
+                            drawBorder(style, 'borderRight', x + width, y, 0, height);
+
+                        }
+
+                        if (element instanceof HTMLInputElement) {
+
+                            let accentColor = style.accentColor;
+
+                            if (accentColor === undefined || accentColor === 'auto') accentColor = style.color;
+
+                            // TODO
+                            // color.set(accentColor);
+
+                            // const luminance = Math.sqrt(0.299 * (color.r ** 2) +
+                            // 0.587 * (color.g ** 2) + 0.114 * (color.b ** 2));
+                            const luminance = 0;
+                            const accentTextColor = luminance < 0.5 ? 'white' : '#111111';
+
+                            if (element.type === 'radio') {
+
+                                buildRectPath(x, y, width, height, height);
+
+                                context.fillStyle = 'white';
+                                context.strokeStyle = accentColor;
+                                context.lineWidth = 1;
+                                context.fill();
+                                context.stroke();
+
+                                if (element.checked) {
+
+                                    buildRectPath(x + 2, y + 2, width - 4, height - 4, height);
+
+                                    context.fillStyle = accentColor;
+                                    context.strokeStyle = accentTextColor;
+                                    context.lineWidth = 2;
+                                    context.fill();
+                                    context.stroke();
+
+                                }
+
+                            }
+
+                            if (element.type === 'checkbox') {
+
+                                buildRectPath(x, y, width, height, 2);
+
+                                context.fillStyle = element.checked ? accentColor : 'white';
+                                context.strokeStyle = element.checked ? accentTextColor : accentColor;
+                                context.lineWidth = 1;
+                                context.stroke();
+                                context.fill();
+
+                                if (element.checked) {
+
+                                    const currentTextAlign = context.textAlign;
+
+                                    context.textAlign = 'center';
+
+                                    const properties = {
+                                        color: accentTextColor,
+                                        fontFamily: style.fontFamily,
+                                        fontSize: height + 'px',
+                                        fontWeight: 'bold'
+                                    };
+
+                                    drawText(properties, x + (width / 2), y, '✔');
+
+                                    context.textAlign = currentTextAlign;
+
+                                }
+
+                            }
+
+                            if (element.type === 'range') {
+
+                                const [min, max, value] = ['min', 'max', 'value'].map(property => parseFloat(element[property]));
+                                const position = ((value - min) / (max - min)) * (width - height);
+
+                                buildRectPath(x, y + (height / 4), width, height / 2, height / 4);
+                                context.fillStyle = accentTextColor;
+                                context.strokeStyle = accentColor;
+                                context.lineWidth = 1;
+                                context.fill();
+                                context.stroke();
+
+                                buildRectPath(x, y + (height / 4), position + (height / 2), height / 2, height / 4);
+                                context.fillStyle = accentColor;
+                                context.fill();
+
+                                buildRectPath(x + position, y, height, height, height / 2);
+                                context.fillStyle = accentColor;
+                                context.fill();
+
+                            }
+
+                            if (element.type === 'color' || element.type === 'text' || element.type === 'number') {
+
+                                clipper.add({ x: x, y: y, width: width, height: height });
+
+                                drawText(style, x + parseInt(style.paddingLeft), y + parseInt(style.paddingTop), element.value);
+
+                                clipper.remove();
+
+                            }
+
+                        }
+
+                    }
+
+                    /*
+                    // debug
+                    context.strokeStyle = '#' + Math.random().toString( 16 ).slice( - 3 );
+                    context.strokeRect( x - 0.5, y - 0.5, width + 1, height + 1 );
+                    */
+
+                    const isClipping = style.overflow === 'auto' || style.overflow === 'hidden';
+
+                    if (isClipping) clipper.add({ x: x, y: y, width: width, height: height });
+
+                    for (let i = 0; i < element.childNodes.length; i++) {
+
+                        drawElement(element.childNodes[i], style);
+
+                    }
+
+                    if (isClipping) clipper.remove();
+
+                }
+
+                const offset = element.getBoundingClientRect();
+
+                let canvas = canvases.get(element);
+
+                if (canvas === undefined) {
+
+                    canvas = document.createElement('canvas');
+                    canvas.width = offset.width;
+                    canvas.height = offset.height;
+                    console.log(`initial size: ${canvas.width}x${canvas.height}`)
+                    canvases.set(element, canvas);
+
+                }
+
+                const context = canvas.getContext('2d'/*, { alpha: false }*/);
+
+                const clipper = new Clipper(context);
+
+                // console.time( 'drawElement' );
+
+                context.clearRect(0, 0, canvas.width, canvas.height);
+
+                drawElement(element);
+
+                // console.timeEnd( 'drawElement' );
+
+                return canvas;
+            }
+
+            function htmlevent(element, event, x, y) {
+                const mouseEventInit = {
+                    clientX: (x * element.offsetWidth) + element.offsetLeft,
+                    clientY: (y * element.offsetHeight) + element.offsetTop,
+                    view: element.ownerDocument.defaultView
+                };
+
+                const m = new MouseEvent(event, mouseEventInit);
+                window.dispatchEvent(m);
+
+                const rect = element.getBoundingClientRect();
+
+                x = x * rect.width + rect.left;
+                y = y * rect.height + rect.top;
+
+                function traverse(element) {
+
+                    if (element.nodeType !== Node.TEXT_NODE && element.nodeType !== Node.COMMENT_NODE) {
+                        const rect = element.getBoundingClientRect();
+
+                        if (x > rect.left && x < rect.right && y > rect.top && y < rect.bottom) {
+                            element.dispatchEvent(new MouseEvent(event, mouseEventInit));
+
+                            if (element instanceof HTMLInputElement && element.type === 'range' && (event === 'mousedown' || event === 'click')) {
+                                const [min, max] = ['min', 'max'].map(property => parseFloat(element[property]));
+
+                                const width = rect.width;
+                                const offsetX = x - rect.x;
+                                const proportion = offsetX / width;
+                                element.value = min + (max - min) * proportion;
+                                element.dispatchEvent(new InputEvent('input', { bubbles: true }));
+                            }
+                        }
+
+                        for (let i = 0; i < element.childNodes.length; i++) {
+                            traverse(element.childNodes[i]);
+                        }
+                    }
+                }
+
+                traverse(element);
+            }
+
+            window.initFunction = async function() {
                 
-            } catch (error) {
-                console.error('❌ Chyba při aktualizaci textury:', error);
-            }
-        }
+                var asyncEngineCreation = async function() {
+                    try {
+                    return createDefaultEngine();
+                    } catch(e) {
+                    console.log("the available createEngine function failed. Creating the default engine instead");
+                    return createDefaultEngine();
+                    }
+                }
 
-        // Raycasting pro interakci s mapou
-        function setupRaycasting() {
-            const raycaster = new THREE.Raycaster();
-            const mouse = new THREE.Vector2();
-
-            renderer.domElement.addEventListener('click', (event) => {
-                // Převod souřadnic myši
-                mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-                mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-                raycaster.setFromCamera(mouse, camera);
-                const intersects = raycaster.intersectObject(vrMapPlane);
-
-                if (intersects.length > 0) {
-                    const intersect = intersects[0];
-                    const uv = intersect.uv;
+                window.engine = await asyncEngineCreation();
+                
+                const engineOptions = window.engine.getCreationOptions?.();
+                if (!engineOptions || engineOptions.audioEngine !== false) {
                     
-                    // Převod UV souřadnic na souřadnice mapy
-                    simulateMapClick(uv.x, 1 - uv.y);
                 }
+                if (!engine) throw 'engine should not be null.';
+                startRenderLoop(engine, canvas);
+                window.scene = createScene();
+            };
+            
+            initFunction().then(() => {
+                scene.then(returnedScene => { 
+                    sceneToRender = returnedScene; 
+                });
             });
-        }
 
-        // Simulace kliknutí na mapu
-        function simulateMapClick(uvX, uvY) {
-            const mapElement = document.getElementById('map');
-            const rect = mapElement.getBoundingClientRect();
-            
-            const x = uvX * rect.width;
-            const y = uvY * rect.height;
-            
-            // Vytvoření syntetického click eventu
-            const clickEvent = new MouseEvent('click', {
-                clientX: rect.left + x,
-                clientY: rect.top + y,
-                bubbles: true
+            // Resize
+            window.addEventListener("resize", function () {
+                engine.resize();
             });
-            
-            mapElement.dispatchEvent(clickEvent);
-        }
 
-        // Funkce pro markery
-        window.addMarker = function() {
-            const lat = parseFloat(document.getElementById('markerLat').value);
-            const lng = parseFloat(document.getElementById('markerLng').value);
-            const text = document.getElementById('markerText').value || `Marker ${++markerCount}`;
-            
-            if (isNaN(lat) || isNaN(lng)) {
-                alert('Zadejte platné GPS souřadnice!');
-                return;
-            }
-            
-            const marker = L.marker([lat, lng]).addTo(markersGroup);
-            marker.bindPopup(`
-                <div style="color: #333; font-family: Arial, sans-serif;">
-                    <strong style="color: #4a90e2;">${text}</strong><br>
-                    <small>GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}</small>
-                </div>
-            `);
-            
-            document.getElementById('markerLat').value = '';
-            document.getElementById('markerLng').value = '';
-            document.getElementById('markerText').value = '';
-            
-            vrMap.setView([lat, lng], Math.max(vrMap.getZoom(), 6));
-            
-            // Aktualizace textury
-            setTimeout(updateMapTexture, 500);
-        };
-
-        window.clearMarkers = function() {
-            const count = markersGroup.getLayers().length;
-            markersGroup.clearLayers();
-            markerCount = 0;
-            console.log(`🗑️ Smazáno ${count} markerů`);
-            
-            // Aktualizace textury
-            setTimeout(updateMapTexture, 500);
-        };
-
-        // VR toggle - skutečné VR prostředí
-        window.toggleVR = function() {
-            console.log('🎮 VR Toggle clicked!');
-            
-            if (!vrSession) {
-                // Spustit VR session
-                startVRSession();
-            } else {
-                // Ukončit VR session
-                endVRSession();
-            }
-        };
-
-        // Event listenery pro ovládání
-        document.getElementById('overlayOpacity').addEventListener('input', function() {
-            document.getElementById('opacityValue').textContent = `${this.value}%`;
-            setTimeout(updateMapTexture, 200);
-        });
-
-        document.getElementById('baseBrightness').addEventListener('input', function() {
-            document.getElementById('baseBrightnessValue').textContent = `${this.value}%`;
-            applyBaseFilters();
-        });
-
-        document.getElementById('baseContrast').addEventListener('input', function() {
-            document.getElementById('baseContrastValue').textContent = `${this.value}%`;
-            applyBaseFilters();
-        });
-
-        function applyBaseFilters() {
-            const brightness = document.getElementById('baseBrightness').value;
-            const contrast = document.getElementById('baseContrast').value;
-            
-            const filterValue = `brightness(${brightness}%) contrast(${contrast}%)`;
-            
-            const baseContainer = baseLayer.getContainer();
-            if (baseContainer) {
-                baseContainer.style.filter = filterValue;
-                setTimeout(updateMapTexture, 200);
-            }
-        }
-
-        // Render loop s VR podporou
-        function animate() {
-            renderer.setAnimationLoop(render);
-        }
-
-        function render() {
-            // Update VR controllers
-            if (vrControllers.length > 0) {
-                for (let controller of vrControllers) {
-                    // Controller updates
-                }
-            }
-            
-            renderer.render(scene, camera);
-        }
-
-        // Resize handler
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        window.addEventListener('resize', onWindowResize);
-
-        // Inicializace
-        function init() {
-            console.log('🚀 Inicializuji VR mapu...');
-            initThreeJS();
-            initializeLeafletMap();
-            animate();
-            console.log('✅ VR mapa připravena!');
-        }
-
-        // Spuštění po načtení stránky
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', init);
-        } else {
-            init();
-        }
-    </script>
-</body>
+            console.log('🌍 VR Mapová aplikace s Babylon.js připravena!');
+        </script>
+    </body>
 </html>
