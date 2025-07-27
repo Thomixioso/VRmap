@@ -103,14 +103,16 @@
         <h3>🌍 VR Živá Mapa</h3>
         <p><strong>Desktop:</strong></p>
         <ul style="font-size: 12px; margin: 5px 0; padding-left: 15px;">
-            <li>WASD = posun mapy</li>
+            <li>WASD = posun mapy (GPS)</li>
             <li>Q/E = zoom</li>
+            <li>Šipky = pohyb kamery XZ</li>
+            <li>PgUp/PgDn = výška kamery</li>
             <li>Klik = přidat marker</li>
         </ul>
         <p><strong>VR:</strong></p>
         <ul style="font-size: 12px; margin: 5px 0; padding-left: 15px;">
             <li>Trigger = plynulý drag mapy</li>
-            <li>Levý joystick = pohyb ve VR prostoru</li>
+            <li>Levý joystick = pohyb kamery ve VR prostoru</li>
             <li>Pravý joystick Y = zoom in/out</li>
             <li>Pravý joystick X = rotace mapy</li>
         </ul>
@@ -237,12 +239,12 @@
             scene.add(userGroup);
             console.log('✅ userGroup vytvořena:', userGroup);
             
-            // Camera
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 0, 80);
+            // Camera - mnohem dále od mapy
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 10, 120); // Ještě dále dozadu + výše
             camera.lookAt(0, 0, 0);
             userGroup.add(camera);
-            console.log('✅ Camera vytvořena');
+            console.log('✅ Camera vytvořena na pozici:', camera.position);
             
             // Renderer
             renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -312,7 +314,39 @@
             mapPlane.name = 'mapPlane';
             mapGroup.add(mapPlane);
             
+            // Reference objekty pro orientaci
+            addReferenceObjects();
+            
             loadCenterTile();
+        }
+        
+        function addReferenceObjects() {
+            // Červená koule v centru mapy
+            const centerSphere = new THREE.Mesh(
+                new THREE.SphereGeometry(2, 16, 16),
+                new THREE.MeshBasicMaterial({ color: 0xff0000 })
+            );
+            centerSphere.position.set(0, 0, 2);
+            mapGroup.add(centerSphere);
+            
+            // Bílé rohové markery
+            const corners = [
+                { x: -25, y: -25, z: 1 },
+                { x: 25, y: -25, z: 1 },
+                { x: 25, y: 25, z: 1 },
+                { x: -25, y: 25, z: 1 }
+            ];
+            
+            corners.forEach((corner, i) => {
+                const marker = new THREE.Mesh(
+                    new THREE.BoxGeometry(2, 2, 2),
+                    new THREE.MeshBasicMaterial({ color: 0xffffff })
+                );
+                marker.position.set(corner.x, corner.y, corner.z);
+                mapGroup.add(marker);
+            });
+            
+            console.log('✅ Reference objekty přidány pro orientaci');
         }
         
         function loadCenterTile() {
@@ -479,9 +513,11 @@
                 
                 mapGroup.position.x = mapOffset.x;
                 mapGroup.position.y = mapOffset.y;
+                
+                console.log(`🎯 Drag offset: ${mapOffset.x.toFixed(2)}, ${mapOffset.y.toFixed(2)}`);
             }
             
-            // Joysticky
+            // Joysticky pro všechny input sources
             for (let i = 0; i < session.inputSources.length; i++) {
                 const inputSource = session.inputSources[i];
                 if (!inputSource || !inputSource.gamepad) continue;
@@ -489,34 +525,55 @@
                 const gamepad = inputSource.gamepad;
                 
                 if (gamepad.axes && gamepad.axes.length >= 4) {
-                    const leftX = gamepad.axes[0];
-                    const leftY = gamepad.axes[1];
-                    const rightX = gamepad.axes[2];
-                    const rightY = gamepad.axes[3];
+                    const leftX = gamepad.axes[0];   // Levý joystick X
+                    const leftY = gamepad.axes[1];   // Levý joystick Y  
+                    const rightX = gamepad.axes[2];  // Pravý joystick X
+                    const rightY = gamepad.axes[3];  // Pravý joystick Y
                     
-                    // Levý joystick = Locomotion
+                    // LEVÝ JOYSTICK = CAMERA/USER LOCOMOTION (3D pohyb)
                     if (Math.abs(leftX) > 0.1 || Math.abs(leftY) > 0.1) {
-                        const moveSpeed = 0.5;
-                        userGroup.position.x += leftX * moveSpeed;
-                        userGroup.position.z += leftY * moveSpeed;
-                        console.log(`🚶 Locomotion: ${leftX.toFixed(2)}, ${leftY.toFixed(2)}`);
+                        const moveSpeed = 2.0; // Zvýšená rychlost
+                        
+                        // Dopředu/dozadu podle směru kamery
+                        const forward = new THREE.Vector3(0, 0, -1);
+                        forward.applyQuaternion(camera.quaternion);
+                        forward.y = 0; // Pohyb jen v horizontální rovině
+                        forward.normalize();
+                        
+                        // Vlevo/vpravo
+                        const right = new THREE.Vector3(1, 0, 0);
+                        right.applyQuaternion(camera.quaternion);
+                        right.y = 0;
+                        right.normalize();
+                        
+                        // Aplikuj pohyb na userGroup
+                        const movement = new THREE.Vector3();
+                        movement.add(forward.clone().multiplyScalar(leftY * moveSpeed)); // Y = dopředu/dozadu
+                        movement.add(right.clone().multiplyScalar(leftX * moveSpeed));   // X = vlevo/vpravo
+                        
+                        userGroup.position.add(movement);
+                        
+                        console.log(`🚶 VR Locomotion: joystick(${leftX.toFixed(2)}, ${leftY.toFixed(2)}) -> userGroup(${userGroup.position.x.toFixed(1)}, ${userGroup.position.y.toFixed(1)}, ${userGroup.position.z.toFixed(1)})`);
                     }
                     
-                    // Pravý joystick Y = Zoom
+                    // PRAVÝ JOYSTICK Y = ZOOM
                     if (Math.abs(rightY) > 0.1) {
                         const zoomSpeed = 0.08;
                         mapZoom += rightY * zoomSpeed;
                         mapZoom = Math.max(1, Math.min(18, mapZoom));
+                        
+                        console.log(`🔍 Zoom: ${mapZoom.toFixed(1)}`);
                         
                         if (Math.random() < 0.1) {
                             loadCenterTile();
                         }
                     }
                     
-                    // Pravý joystick X = Rotace mapy
+                    // PRAVÝ JOYSTICK X = ROTACE MAPY
                     if (Math.abs(rightX) > 0.1) {
                         const rotSpeed = 0.02;
                         mapGroup.rotation.z += rightX * rotSpeed;
+                        console.log(`🔄 Rotace mapy: ${(mapGroup.rotation.z * 180 / Math.PI).toFixed(1)}°`);
                     }
                 }
             }
@@ -536,7 +593,9 @@
             
             function updateDesktopMovement() {
                 const moveSpeed = 0.01;
+                const cameraSpeed = 2.0; // Pro pohyb kamery
                 
+                // WASD = posun mapy (GPS)
                 if (keys['w']) {
                     mapCenter.lat += moveSpeed;
                     loadCenterTile();
@@ -553,6 +612,8 @@
                     mapCenter.lng += moveSpeed;
                     loadCenterTile();
                 }
+                
+                // Q/E = zoom
                 if (keys['q'] && mapZoom < 18) {
                     mapZoom += 0.1;
                     loadCenterTile();
@@ -560,6 +621,34 @@
                 if (keys['e'] && mapZoom > 1) {
                     mapZoom -= 0.1;
                     loadCenterTile();
+                }
+                
+                // Arrow keys = pohyb kamery v prostoru (pro testování)
+                if (keys['arrowup']) {
+                    userGroup.position.z -= cameraSpeed;
+                    console.log(`📷 Camera Z: ${userGroup.position.z.toFixed(1)}`);
+                }
+                if (keys['arrowdown']) {
+                    userGroup.position.z += cameraSpeed;
+                    console.log(`📷 Camera Z: ${userGroup.position.z.toFixed(1)}`);
+                }
+                if (keys['arrowleft']) {
+                    userGroup.position.x -= cameraSpeed;
+                    console.log(`📷 Camera X: ${userGroup.position.x.toFixed(1)}`);
+                }
+                if (keys['arrowright']) {
+                    userGroup.position.x += cameraSpeed;
+                    console.log(`📷 Camera X: ${userGroup.position.x.toFixed(1)}`);
+                }
+                
+                // Page Up/Down = výška kamery
+                if (keys['pageup']) {
+                    userGroup.position.y += cameraSpeed;
+                    console.log(`📷 Camera Y: ${userGroup.position.y.toFixed(1)}`);
+                }
+                if (keys['pagedown']) {
+                    userGroup.position.y -= cameraSpeed;
+                    console.log(`📷 Camera Y: ${userGroup.position.y.toFixed(1)}`);
                 }
                 
                 mapCenter.lat = Math.max(-85, Math.min(85, mapCenter.lat));
