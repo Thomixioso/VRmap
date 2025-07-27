@@ -266,13 +266,21 @@
         }
         
         // === NAČÍTÁNÍ MAP TILES ===
-        function loadMapTiles() {
-            updateStatus('📡 Načítám map tiles...');
-            
-            // Pro demonstraci - vytvoříme procedurální texturu
-            // V reálné aplikaci byste načítali z tiles_satellite_labeled/{z}/{x}/{y}.jpg
-            createProceduralMapTexture();
-        }
+
+
+    function loadMapTiles() {
+    const tileUrl = `tiles_satellite_labeled/${currentZoom}/{x}/{y}.jpg`;
+    
+    const loader = new THREE.TextureLoader();
+    loader.load(tileUrl, (texture) => {
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        mapPlane.material.map = texture;
+        mapPlane.material.needsUpdate = true;
+        updateStatus('✅ Offline mapa načtena');
+    });
+}
+  
         
         function createProceduralMapTexture() {
             const canvas = document.createElement('canvas');
