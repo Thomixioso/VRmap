@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VR Satelitní Mapa - Meta Quest 3</title>
+    <title>VR Placatá Mapa - Meta Quest 3</title>
     <style>
         body {
             margin: 0;
@@ -33,10 +33,23 @@
             z-index: 100;
         }
         
-        .back-button {
+        #controls {
             position: absolute;
             top: 10px;
             right: 10px;
+            z-index: 100;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 8px;
+            color: white;
+            min-width: 200px;
+        }
+        
+        .back-button {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 101;
             background: rgba(0, 0, 0, 0.9);
             color: white;
@@ -50,7 +63,7 @@
         
         .back-button:hover {
             background: rgba(255, 255, 255, 0.1);
-            transform: translateY(-2px);
+            transform: translateX(-50%) translateY(-2px);
         }
         
         canvas {
@@ -66,17 +79,54 @@
             font-size: 18px;
             text-align: center;
         }
+        
+        button {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 2px;
+            font-size: 12px;
+        }
+        
+        button:hover {
+            background: #357abd;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            margin: 5px 0;
+        }
     </style>
 </head>
 <body>
     <a href="index.html" class="back-button">← Zpět na výběr</a>
     
     <div id="info">
-        <h3>🌍 VR Satelitní Mapa</h3>
-        <p><strong>Desktop:</strong> Drag pro rotaci, kolečko pro zoom</p>
-        <p><strong>VR:</strong> Przyrodní pohyb hlavy a ovladače</p>
-        <p><strong>Kontroly:</strong> Trigger = teleport, Grip = grab world</p>
+        <h3>🗺️ VR Placatá Mapa</h3>
+        <p><strong>Desktop:</strong> WASD + myš, kolečko = zoom</p>
+        <p><strong>VR:</strong> Chůze, teleport triggerem</p>
+        <p><strong>Klik/Touch:</strong> Přidat marker, zobrazit GPS</p>
         <div id="coords">GPS: 49.75, 15.5</div>
+        <div id="status">Načítám mapu...</div>
+    </div>
+    
+    <div id="controls">
+        <h4>🎮 Ovládání</h4>
+        <div>
+            <label>Zoom úroveň: <span id="zoomLevel">4</span></label>
+            <input type="range" id="zoomSlider" min="3" max="8" value="4">
+        </div>
+        <div>
+            <button onclick="moveToCenter()">🏠 Střed ČR</button>
+            <button onclick="clearMarkers()">🗑️ Smaž markery</button>
+        </div>
+        <div>
+            <button onclick="toggleWireframe()">📐 Wireframe</button>
+            <button onclick="toggleNight()">🌙 Noční režim</button>
+        </div>
     </div>
     
     <div class="loading" id="loading">🚀 Načítám VR mapu...</div>
@@ -87,25 +137,32 @@
         import { VRButton } from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/webxr/VRButton.js';
         import { XRControllerModelFactory } from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/webxr/XRControllerModelFactory.js';
         
+        // === NASTAVENÍ ===
+        const WORLD_SIZE = 100; // velikost mapy v 3D prostoru
+        const MAP_CENTER = { lat: 49.75, lng: 15.5 }; // střed ČR
+        
         // === ZÁKLADNÍ SETUP ===
-        let scene, camera, renderer, earth, controls;
+        let scene, camera, renderer, mapPlane, mapGroup;
         let controller1, controller2, controllerGrip1, controllerGrip2;
-        let raycaster, intersected = [];
-        let tempMatrix = new THREE.Matrix4();
+        let raycaster, mouse = new THREE.Vector2();
         let markers = [];
-        let userPosition = new THREE.Vector3(0, 1.6, 3); // výška očí v VR
+        let currentZoom = 4;
+        let mapTextures = new Map();
+        let isNightMode = false;
+        let isWireframe = false;
         
         // === INICIALIZACE ===
         function init() {
-            console.log('🚀 Inicializuji VR mapu...');
+            console.log('🚀 Inicializuji VR placatou mapu...');
             
             // Scene
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x0a0a0a);
+            scene.background = new THREE.Color(0x87CEEB); // nebesky modrá
             
-            // Camera - pro VR se automaticky upravuje
+            // Camera
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.copy(userPosition);
+            camera.position.set(0, 10, 10); // nad mapou
+            camera.lookAt(0, 0, 0);
             
             // Renderer s WebXR
             renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -113,104 +170,175 @@
             renderer.setPixelRatio(window.devicePixelRatio);
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            renderer.xr.enabled = true; // 🔥 Klíčové pro VR!
+            renderer.xr.enabled = true;
             document.body.appendChild(renderer.domElement);
             
             // VR Button
             document.getElementById('vrButton').appendChild(VRButton.createButton(renderer));
             
             setupLighting();
-            createEarth();
+            createFlatMap();
             setupVRControllers();
             setupInteractions();
+            loadMapTiles();
+            addSampleMarkers();
             
-            // Animation loop pro VR
+            // Animation loop
             renderer.setAnimationLoop(animate);
             
             document.getElementById('loading').style.display = 'none';
-            console.log('✅ VR mapa připravena!');
+            updateStatus('✅ VR mapa připravena!');
         }
         
         // === OSVĚTLENÍ ===
         function setupLighting() {
-            // Ambientní světlo
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            // Ambientní světlo pro den
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
             scene.add(ambientLight);
             
             // Slunce
-            const sunLight = new THREE.DirectionalLight(0xffffff, 1);
-            sunLight.position.set(5, 5, 5);
+            const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            sunLight.position.set(50, 100, 50);
             sunLight.castShadow = true;
-            sunLight.shadow.camera.near = 0.1;
-            sunLight.shadow.camera.far = 50;
-            sunLight.shadow.camera.left = -10;
-            sunLight.shadow.camera.right = 10;
-            sunLight.shadow.camera.top = 10;
-            sunLight.shadow.camera.bottom = -10;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.camera.near = 0.5;
+            sunLight.shadow.camera.far = 500;
+            sunLight.shadow.camera.left = -100;
+            sunLight.shadow.camera.right = 100;
+            sunLight.shadow.camera.top = 100;
+            sunLight.shadow.camera.bottom = -100;
             scene.add(sunLight);
+            
+            // Mlha pro vzdálenost
+            scene.fog = new THREE.Fog(0x87CEEB, 50, 200);
         }
         
-        // === ZEMSKÝ GLÓBUS ===
-        function createEarth() {
-            console.log('🌍 Vytvářím Zemi...');
+        // === PLACATÁ MAPA ===
+        function createFlatMap() {
+            console.log('🗺️ Vytvářím placatou mapu...');
             
-            // Geometrie
-            const geometry = new THREE.SphereGeometry(2, 64, 32);
+            mapGroup = new THREE.Group();
+            scene.add(mapGroup);
             
-            // Textura - můžeme použít vaše satelitní tiles
-            const textureLoader = new THREE.TextureLoader();
-            const earthTexture = createProceduralEarthTexture();
+            // Základní rovina
+            const geometry = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 100, 100);
             
-            // Material
+            // Materiál s texturou
             const material = new THREE.MeshLambertMaterial({
-                map: earthTexture,
-                transparent: false
+                color: 0x90EE90, // základní zelená
+                wireframe: false
             });
             
-            earth = new THREE.Mesh(geometry, material);
-            earth.receiveShadow = true;
-            earth.position.set(0, 0, -5); // před uživatelem
-            scene.add(earth);
+            mapPlane = new THREE.Mesh(geometry, material);
+            mapPlane.rotation.x = -Math.PI / 2; // položit na zem
+            mapPlane.receiveShadow = true;
+            mapPlane.name = 'mapPlane';
             
-            // Přidání markerů vzorových měst
-            addSampleMarkers();
+            mapGroup.add(mapPlane);
+            
+            // Okraje mapy
+            createMapBorders();
         }
         
-        // === PROCEDURÁLNÍ TEXTURA ZEMĚ ===
-        function createProceduralEarthTexture() {
+        function createMapBorders() {
+            const borderHeight = 2;
+            const borderGeometry = new THREE.BoxGeometry(2, borderHeight, WORLD_SIZE + 4);
+            const borderMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
+            
+            // 4 strany
+            const borders = [
+                { x: -WORLD_SIZE/2 - 1, z: 0 }, // levá
+                { x: WORLD_SIZE/2 + 1, z: 0 },  // pravá
+                { x: 0, z: -WORLD_SIZE/2 - 1 }, // zadní
+                { x: 0, z: WORLD_SIZE/2 + 1 }   // přední
+            ];
+            
+            borders.forEach((pos, i) => {
+                const border = new THREE.Mesh(
+                    i < 2 ? borderGeometry : new THREE.BoxGeometry(WORLD_SIZE + 4, borderHeight, 2),
+                    borderMaterial
+                );
+                border.position.set(pos.x, borderHeight/2, pos.z);
+                border.castShadow = true;
+                mapGroup.add(border);
+            });
+        }
+        
+        // === NAČÍTÁNÍ MAP TILES ===
+        function loadMapTiles() {
+            updateStatus('📡 Načítám map tiles...');
+            
+            // Pro demonstraci - vytvoříme procedurální texturu
+            // V reálné aplikaci byste načítali z tiles_satellite_labeled/{z}/{x}/{y}.jpg
+            createProceduralMapTexture();
+        }
+        
+        function createProceduralMapTexture() {
             const canvas = document.createElement('canvas');
-            canvas.width = 1024;
-            canvas.height = 512;
+            canvas.width = 2048;
+            canvas.height = 2048;
             const ctx = canvas.getContext('2d');
             
-            // Gradient kontinentů
-            const gradient = ctx.createLinearGradient(0, 0, 1024, 512);
-            gradient.addColorStop(0, '#1e3c72');
-            gradient.addColorStop(0.3, '#2a5298');
-            gradient.addColorStop(0.5, '#1e3c72');
-            gradient.addColorStop(0.7, '#134e5e');
-            gradient.addColorStop(1, '#0f4c75');
-            
+            // Základní podklad - trávník
+            const gradient = ctx.createRadialGradient(1024, 1024, 0, 1024, 1024, 1024);
+            gradient.addColorStop(0, '#90EE90');
+            gradient.addColorStop(0.5, '#228B22');
+            gradient.addColorStop(1, '#006400');
             ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 1024, 512);
+            ctx.fillRect(0, 0, 2048, 2048);
             
-            // Simulace kontinentů
-            ctx.fillStyle = '#2d5016';
-            drawContinent(ctx, 200, 150, 150, 100); // Evropa
-            drawContinent(ctx, 400, 200, 180, 120); // Asie
-            drawContinent(ctx, 100, 300, 120, 80);  // Afrika
-            drawContinent(ctx, 750, 200, 100, 150); // Amerika
+            // Simulace měst a silnic
+            ctx.strokeStyle = '#A0A0A0';
+            ctx.lineWidth = 3;
+            drawRandomRoads(ctx);
             
+            // Města
+            ctx.fillStyle = '#FF6B6B';
+            drawCity(ctx, 1024, 800, 'Praha'); // Praha přibližně uprostřed
+            drawCity(ctx, 1200, 1100, 'Brno');
+            drawCity(ctx, 800, 900, 'Plzeň');
+            drawCity(ctx, 1400, 700, 'Ostrava');
+            
+            // Aplikuj texturu na mapu
             const texture = new THREE.CanvasTexture(canvas);
             texture.wrapS = THREE.RepeatWrapping;
-            texture.wrapT = THREE.ClampToEdgeWrapping;
-            return texture;
+            texture.wrapT = THREE.RepeatWrapping;
+            
+            mapPlane.material.map = texture;
+            mapPlane.material.needsUpdate = true;
+            
+            updateStatus('✅ Mapa načtena');
         }
         
-        function drawContinent(ctx, x, y, w, h) {
+        function drawRandomRoads(ctx) {
+            for (let i = 0; i < 20; i++) {
+                ctx.beginPath();
+                const startX = Math.random() * 2048;
+                const startY = Math.random() * 2048;
+                ctx.moveTo(startX, startY);
+                
+                for (let j = 0; j < 5; j++) {
+                    const endX = startX + (Math.random() - 0.5) * 400;
+                    const endY = startY + (Math.random() - 0.5) * 400;
+                    ctx.lineTo(endX, endY);
+                }
+                ctx.stroke();
+            }
+        }
+        
+        function drawCity(ctx, x, y, name) {
+            // Město jako kruh
             ctx.beginPath();
-            ctx.ellipse(x, y, w, h, 0, 0, 2 * Math.PI);
+            ctx.arc(x, y, 20, 0, 2 * Math.PI);
             ctx.fill();
+            
+            // Název města
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(name, x, y - 30);
+            ctx.fillStyle = '#FF6B6B'; // reset barvy
         }
         
         // === VR OVLADAČE ===
@@ -218,6 +346,7 @@
             console.log('🎮 Nastavuji VR ovladače...');
             
             const controllerModelFactory = new XRControllerModelFactory();
+            raycaster = new THREE.Raycaster();
             
             // Controller 1 (pravý)
             controller1 = renderer.xr.getController(0);
@@ -247,7 +376,7 @@
             
             const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0xff0000 }));
             line.name = 'line';
-            line.scale.z = 5;
+            line.scale.z = 10;
             
             controller1.add(line.clone());
             controller2.add(line.clone());
@@ -255,47 +384,65 @@
         
         // === INTERAKCE ===
         function setupInteractions() {
-            raycaster = new THREE.Raycaster();
+            // Desktop controls
+            setupDesktopControls();
             
-            // Desktop controls jako fallback
-            if (!navigator.xr) {
-                setupDesktopControls();
-            }
+            // Mouse/touch pro klikání
+            renderer.domElement.addEventListener('click', onMapClick);
+            
+            // Zoom slider
+            document.getElementById('zoomSlider').addEventListener('input', (e) => {
+                currentZoom = parseInt(e.target.value);
+                document.getElementById('zoomLevel').textContent = currentZoom;
+                updateMapScale();
+            });
         }
         
         function setupDesktopControls() {
+            const keys = { w: false, a: false, s: false, d: false };
+            
+            document.addEventListener('keydown', (e) => {
+                const key = e.key.toLowerCase();
+                if (keys.hasOwnProperty(key)) keys[key] = true;
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                const key = e.key.toLowerCase();
+                if (keys.hasOwnProperty(key)) keys[key] = false;
+            });
+            
+            // Pohyb kamery
+            function updateMovement() {
+                const speed = 0.5;
+                if (keys.w) camera.position.z -= speed;
+                if (keys.s) camera.position.z += speed;
+                if (keys.a) camera.position.x -= speed;
+                if (keys.d) camera.position.x += speed;
+                
+                requestAnimationFrame(updateMovement);
+            }
+            updateMovement();
+            
+            // Mouse look
             let isMouseDown = false;
-            let mouseX = 0, mouseY = 0;
-            
-            renderer.domElement.addEventListener('mousedown', (e) => {
-                isMouseDown = true;
-                mouseX = e.clientX;
-                mouseY = e.clientY;
-            });
-            
-            renderer.domElement.addEventListener('mouseup', () => {
-                isMouseDown = false;
-            });
+            renderer.domElement.addEventListener('mousedown', () => isMouseDown = true);
+            renderer.domElement.addEventListener('mouseup', () => isMouseDown = false);
             
             renderer.domElement.addEventListener('mousemove', (e) => {
                 if (!isMouseDown) return;
                 
-                const deltaX = e.clientX - mouseX;
-                const deltaY = e.clientY - mouseY;
+                const deltaX = e.movementX * 0.002;
+                const deltaY = e.movementY * 0.002;
                 
-                earth.rotation.y += deltaX * 0.01;
-                earth.rotation.x += deltaY * 0.01;
-                
-                mouseX = e.clientX;
-                mouseY = e.clientY;
-                
-                updateGPSDisplay();
+                camera.rotation.y -= deltaX;
+                camera.rotation.x -= deltaY;
+                camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
             });
             
+            // Zoom kolečkem
             renderer.domElement.addEventListener('wheel', (e) => {
-                const scale = 1 + e.deltaY * 0.001;
-                earth.scale.multiplyScalar(scale);
-                earth.scale.clampScalar(0.5, 5);
+                camera.position.y += e.deltaY * 0.01;
+                camera.position.y = Math.max(2, Math.min(50, camera.position.y));
             });
         }
         
@@ -307,12 +454,19 @@
             if (intersections.length > 0) {
                 const intersection = intersections[0];
                 
-                // Teleportace k místu na Zemi
-                teleportToPoint(intersection.point);
-                
-                // Haptic feedback
-                if (controller.gamepad && controller.gamepad.hapticActuators) {
-                    controller.gamepad.hapticActuators[0].pulse(0.5, 100);
+                if (intersection.object.name === 'mapPlane') {
+                    // Přidat marker na místo
+                    const worldPos = intersection.point;
+                    const gps = worldToGPS(worldPos);
+                    addMarker(gps.lat, gps.lng, `Marker ${markers.length + 1}`);
+                    
+                    // Haptic feedback
+                    if (controller.gamepad && controller.gamepad.hapticActuators) {
+                        controller.gamepad.hapticActuators[0].pulse(0.5, 100);
+                    }
+                    
+                    updateGPSDisplay(gps.lat, gps.lng);
+                    updateStatus(`📍 Marker přidán: ${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}`);
                 }
             }
         }
@@ -322,31 +476,77 @@
         }
         
         function getIntersections(controller) {
+            const tempMatrix = new THREE.Matrix4();
             tempMatrix.identity().extractRotation(controller.matrixWorld);
+            
             raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
             raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
             
-            return raycaster.intersectObjects([earth, ...markers]);
+            return raycaster.intersectObjects([mapPlane, ...markers]);
         }
         
-        function teleportToPoint(point) {
-            // Převod 3D pozice na GPS souřadnice
-            const spherical = new THREE.Spherical();
-            spherical.setFromVector3(point.clone().normalize());
+        function onMapClick(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             
-            const lat = (Math.PI / 2 - spherical.phi) * 180 / Math.PI;
-            const lng = (spherical.theta - Math.PI) * 180 / Math.PI;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects([mapPlane]);
             
-            console.log(`📍 Teleport na: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-            updateGPSDisplay(lat, lng);
-            
-            // Zoom na místo
-            const targetPosition = point.clone().normalize().multiplyScalar(3.5);
-            camera.position.copy(targetPosition);
-            camera.lookAt(point);
+            if (intersects.length > 0) {
+                const worldPos = intersects[0].point;
+                const gps = worldToGPS(worldPos);
+                addMarker(gps.lat, gps.lng, `Marker ${markers.length + 1}`);
+                updateGPSDisplay(gps.lat, gps.lng);
+                updateStatus(`📍 Marker přidán: ${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}`);
+            }
         }
         
         // === MARKERY ===
+        function addMarker(lat, lng, label, color = 0xff0000) {
+            const worldPos = gpsToWorld(lat, lng);
+            
+            // Marker geometrie
+            const geometry = new THREE.ConeGeometry(1, 3, 8);
+            const material = new THREE.MeshLambertMaterial({ color: color });
+            const marker = new THREE.Mesh(geometry, material);
+            
+            marker.position.set(worldPos.x, 1.5, worldPos.z);
+            marker.castShadow = true;
+            marker.userData = { label, lat, lng };
+            
+            scene.add(marker);
+            markers.push(marker);
+            
+            // Text label
+            createTextLabel(marker, label);
+            
+            console.log(`📍 Marker "${label}" přidán na: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+        }
+        
+        function createTextLabel(marker, text) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 256;
+            canvas.height = 64;
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(0, 0, 256, 64);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '24px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, 128, 40);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            
+            sprite.position.set(0, 3, 0);
+            sprite.scale.set(4, 1, 1);
+            
+            marker.add(sprite);
+        }
+        
         function addSampleMarkers() {
             const sampleLocations = [
                 {name: "Praha", lat: 50.0755, lng: 14.4378, color: 0xff0000},
@@ -360,74 +560,65 @@
             });
         }
         
-        function addMarker(lat, lng, label, color = 0xff0000) {
-            // Převod GPS na 3D pozici na kouli
-            const phi = (90 - lat) * Math.PI / 180;
-            const theta = (lng + 180) * Math.PI / 180;
-            
-            const x = 2.1 * Math.sin(phi) * Math.cos(theta);
-            const y = 2.1 * Math.cos(phi);
-            const z = 2.1 * Math.sin(phi) * Math.sin(theta);
-            
-            // Marker geometrie
-            const geometry = new THREE.SphereGeometry(0.02, 8, 6);
-            const material = new THREE.MeshBasicMaterial({ color: color });
-            const marker = new THREE.Mesh(geometry, material);
-            
-            marker.position.set(x, y, z);
-            marker.userData = { label, lat, lng };
-            
-            earth.add(marker);
-            markers.push(marker);
-            
-            // Text label
-            const textGeometry = createTextGeometry(label);
-            const textMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-            const textMesh = new THREE.Mesh(textGeometry, textMaterial);
-            textMesh.position.copy(marker.position);
-            textMesh.position.multiplyScalar(1.1);
-            textMesh.scale.set(0.5, 0.5, 0.5);
-            textMesh.lookAt(camera.position);
-            
-            earth.add(textMesh);
+        // === KOORDINÁTY ===
+        function gpsToWorld(lat, lng) {
+            // Převod GPS na world pozici (zjednodušené)
+            const x = (lng - MAP_CENTER.lng) * WORLD_SIZE / 10; // ~10° lng = world_size
+            const z = -(lat - MAP_CENTER.lat) * WORLD_SIZE / 10; // záporné Z pro správnou orientaci
+            return { x, z };
         }
         
-        function createTextGeometry(text) {
-            // Zjednodušená text geometrie
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = 256;
-            canvas.height = 64;
-            
-            ctx.fillStyle = 'white';
-            ctx.font = '32px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(text, 128, 40);
-            
-            const texture = new THREE.CanvasTexture(canvas);
-            const geometry = new THREE.PlaneGeometry(0.5, 0.125);
-            const material = new THREE.MeshBasicMaterial({
-                map: texture,
-                transparent: true,
-                alphaTest: 0.1
-            });
-            
-            return geometry;
+        function worldToGPS(worldPos) {
+            const lng = MAP_CENTER.lng + (worldPos.x * 10 / WORLD_SIZE);
+            const lat = MAP_CENTER.lat - (worldPos.z * 10 / WORLD_SIZE);
+            return { lat, lng };
         }
         
-        // === UTILS ===
-        function updateGPSDisplay(lat = 49.75, lng = 15.5) {
+        // === UTILITY FUNKCE ===
+        function updateMapScale() {
+            const scale = Math.pow(2, currentZoom - 4); // exponenciální škálování
+            mapGroup.scale.setScalar(scale);
+        }
+        
+        function moveToCenter() {
+            camera.position.set(0, 10, 10);
+            camera.lookAt(0, 0, 0);
+            updateStatus('🏠 Návrat do středu');
+        }
+        
+        function clearMarkers() {
+            markers.forEach(marker => scene.remove(marker));
+            markers = [];
+            updateStatus('🗑️ Všechny markery smazány');
+        }
+        
+        function toggleWireframe() {
+            isWireframe = !isWireframe;
+            mapPlane.material.wireframe = isWireframe;
+            updateStatus(`📐 Wireframe: ${isWireframe ? 'ZAP' : 'VYP'}`);
+        }
+        
+        function toggleNight() {
+            isNightMode = !isNightMode;
+            scene.background = new THREE.Color(isNightMode ? 0x000033 : 0x87CEEB);
+            updateStatus(`🌙 Noční režim: ${isNightMode ? 'ZAP' : 'VYP'}`);
+        }
+        
+        function updateGPSDisplay(lat = MAP_CENTER.lat, lng = MAP_CENTER.lng) {
             document.getElementById('coords').textContent = `GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        }
+        
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+            console.log(message);
         }
         
         // === ANIMATION LOOP ===
         function animate() {
-            // Jemná rotace Země
-            earth.rotation.y += 0.001;
-            
-            // Update markerů aby se dívaly na kameru
-            markers.forEach(marker => {
-                // marker.lookAt(camera.position);
+            // Animace markerů - lehké kolébání
+            markers.forEach((marker, i) => {
+                marker.rotation.y += 0.01;
+                marker.position.y = 1.5 + Math.sin(Date.now() * 0.002 + i) * 0.1;
             });
             
             renderer.render(scene, camera);
@@ -440,11 +631,17 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
         
+        // === GLOBÁLNÍ FUNKCE PRO TLAČÍTKA ===
+        window.moveToCenter = moveToCenter;
+        window.clearMarkers = clearMarkers;
+        window.toggleWireframe = toggleWireframe;
+        window.toggleNight = toggleNight;
+        
         // === START ===
         init();
         
-        console.log('🌍 VR Mapa připravena pro Meta Quest 3!');
+        console.log('🗺️ VR placatá mapa připravena!');
         
     </script>
 </body>
-</html>f
+</html>
