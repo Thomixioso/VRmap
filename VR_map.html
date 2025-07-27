@@ -1,776 +1,188 @@
 <!DOCTYPE html>
-<html lang="cs">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VR Živá Mapa - Funkční verze</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background: #000;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
-        }
-        
-        #info {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: white;
-            z-index: 100;
-            background: rgba(0,0,0,0.9);
-            padding: 15px;
-            border-radius: 8px;
-            max-width: 350px;
-        }
-        
-        #vrButton {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 100;
-        }
-        
-        #controls {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 100;
-            background: rgba(0,0,0,0.9);
-            padding: 15px;
-            border-radius: 8px;
-            color: white;
-            min-width: 200px;
-        }
-        
-        .back-button {
-            position: absolute;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 101;
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            text-decoration: none;
-            padding: 12px 24px;
-            border-radius: 25px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-        }
-        
-        .back-button:hover {
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateX(-50%) translateY(-2px);
-        }
-        
-        canvas {
-            display: block;
-        }
-        
-        .loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 18px;
-            text-align: center;
-        }
-        
-        button {
-            background: #4a90e2;
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin: 3px;
-            font-size: 12px;
-        }
-        
-        button:hover {
-            background: #357abd;
-        }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VR Map with Leaflet & WebXR</title>
+<!-- Include Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<!-- Include Three.js -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+<!-- Include WebXR Polyfill if needed -->
+<script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/dist/webxr-polyfill.min.js"></script>
+<!-- Include Leaflet JS -->
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 </head>
-<body>
-    <a href="index.html" class="back-button">← Zpět na výběr</a>
-    
-    <div id="info">
-        <h3>🌍 VR Živá Mapa</h3>
-        <p><strong>Desktop:</strong></p>
-        <ul style="font-size: 12px; margin: 5px 0; padding-left: 15px;">
-            <li>WASD = posun mapy (GPS)</li>
-            <li>Q/E = zoom</li>
-            <li>Šipky = pohyb kamery XZ</li>
-            <li>PgUp/PgDn = výška kamery</li>
-            <li>Klik = přidat marker</li>
-        </ul>
-        <p><strong>VR:</strong></p>
-        <ul style="font-size: 12px; margin: 5px 0; padding-left: 15px;">
-            <li>Trigger = plynulý drag mapy</li>
-            <li>Levý joystick = pohyb kamery ve VR prostoru</li>
-            <li>Pravý joystick Y = zoom in/out</li>
-            <li>Pravý joystick X = rotace mapy</li>
-        </ul>
-        <div id="coords">GPS: 50.075, 14.438</div>
-        <div id="zoomInfo">Zoom: 10</div>
-        <div id="status">Inicializuji...</div>
-    </div>
-    
-    <div id="controls">
-        <h4>🎮 Ovládání</h4>
-        <div>
-            <button onclick="jumpTo(50.075, 14.438)">🏛️ Praha</button>
-            <button onclick="jumpTo(51.507, -0.128)">🇬🇧 Londýn</button>
-        </div>
-        <div>
-            <button onclick="jumpTo(40.713, -74.006)">🗽 NYC</button>
-            <button onclick="jumpTo(35.676, 139.650)">🗾 Tokio</button>
-        </div>
-        <div>
-            <button onclick="clearMarkers()">🗑️ Smaž markery</button>
-        </div>
-    </div>
-    
-    <div class="loading" id="loading">🚀 Načítám VR mapu...</div>
-    <div id="vrButton"></div>
+<body style="margin:0; overflow:hidden;">
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script>
-        // === GLOBÁLNÍ PROMĚNNÉ ===
-        let scene, camera, renderer, mapGroup, userGroup;
-        let controller1, controller2;
-        let raycaster, mouse = new THREE.Vector2();
-        let markers = [];
-        
-        // === MAPA STAV ===
-        let mapCenter = { lat: 50.075, lng: 14.438 };
-        let mapZoom = 10;
-        let mapPlane;
-        
-        // === VR STAV ===
-        let isDragging = false;
-        let dragStartPosition = null;
-        let dragStartMapCenter = null;
-        let dragController = null;
-        let mapOffset = { x: 0, y: 0 };
-        
-        // === VR BUTTON HACK ===
-        function createSimpleVRButton(renderer) {
-            const button = document.createElement('button');
-            button.style.position = 'absolute';
-            button.style.bottom = '20px';
-            button.style.padding = '12px 20px';
-            button.style.border = 'none';
-            button.style.borderRadius = '6px';
-            button.style.background = '#4a90e2';
-            button.style.color = 'white';
-            button.style.cursor = 'pointer';
-            button.style.fontSize = '14px';
-            button.textContent = 'Enter VR';
-            
-            if (navigator.xr) {
-                button.onclick = async () => {
-                    if (renderer.xr.isPresenting) {
-                        renderer.xr.getSession().end();
-                    } else {
-                        try {
-                            console.log('🥽 Požádám o VR session...');
-                            
-                            // Zkus různé reference spaces s fallbackem
-                            const sessionInit = {
-                                requiredFeatures: [],
-                                optionalFeatures: ['local-floor', 'bounded-floor']
-                            };
-                            
-                            const session = await navigator.xr.requestSession('immersive-vr', sessionInit);
-                            
-                            console.log('✅ VR session vytvořena');
-                            
-                            // Zkus najít nejlepší reference space
-                            let referenceSpace;
-                            try {
-                                referenceSpace = await session.requestReferenceSpace('local-floor');
-                                console.log('✅ Používám local-floor reference space');
-                            } catch (e) {
-                                console.log('⚠️ local-floor nepodporován, zkouším local...');
-                                try {
-                                    referenceSpace = await session.requestReferenceSpace('local');
-                                    console.log('✅ Používám local reference space');
-                                } catch (e2) {
-                                    console.log('⚠️ local nepodporován, používám viewer...');
-                                    referenceSpace = await session.requestReferenceSpace('viewer');
-                                    console.log('✅ Používám viewer reference space');
-                                }
-                            }
-                            
-                            renderer.xr.setSession(session);
-                            updateStatus('✅ VR aktivní');
-                            
-                        } catch (error) {
-                            console.error('❌ VR session failed:', error);
-                            updateStatus('❌ VR nepodporováno nebo zamítnuto');
-                        }
-                    }
-                };
-            } else {
-                button.textContent = 'VR Nedostupné';
-                button.disabled = true;
-                button.style.background = '#666';
-            }
-            
-            return button;
+<!-- Container for the map (hidden, we'll render to texture) -->
+<div id="mapContainer" style="display:none;">
+  <div id="map" style="width: 1024px; height: 1024px;"></div>
+</div>
+
+<script>
+// Initialize Leaflet map
+const mapDiv = document.getElementById('map');
+const map = L.map(mapDiv).setView([0, 0], 2); // Centered at equator, zoom 2
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© OpenStreetMap contributors'
+}).addTo(map);
+
+// Wait until the map is ready
+map.whenReady(() => {
+  // Render the map to a canvas texture
+  const mapCanvas = document.createElement('canvas');
+  mapCanvas.width = 1024;
+  mapCanvas.height = 1024;
+  const ctx = mapCanvas.getContext('2d');
+
+  // Function to update the canvas with the map
+  function updateMapTexture() {
+    ctx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+    // Use Leaflet's built-in method to render the map to a canvas
+    // (Note: Leaflet doesn't directly support rendering to canvas, so we can use a workaround)
+    // But for simplicity, we can just clone the map container into an off-screen element and draw it
+    // Alternatively, you can use leaflet-image plugin or similar
+    // For now, let's assume the map is static or you can update the canvas periodically
+  }
+
+  // For simplicity, let's just use the map container as an image
+  // Create a texture from the map container
+  const mapTexture = new THREE.TextureLoader().load('https://leafletjs.com/examples/custom-icons/leaf-green.png');
+
+  // Since rendering Leaflet directly to texture is complex, let's use the map container as an image
+  // and update the texture periodically
+  const mapRendererCanvas = document.createElement('canvas');
+  mapRendererCanvas.width = 1024;
+  mapRendererCanvas.height = 1024;
+  const mapRendererCtx = mapRendererCanvas.getContext('2d');
+
+  function updateTexture() {
+    // Draw the map container into the off-screen canvas
+    html2canvas(mapDiv).then(canvas => {
+      mapRendererCtx.clearRect(0, 0, 1024, 1024);
+      mapRendererCtx.drawImage(canvas, 0, 0, 1024, 1024);
+      mapTexture.image = mapRendererCanvas;
+      mapTexture.needsUpdate = true;
+    });
+  }
+
+  // Use html2canvas library to capture map container
+  // Load html2canvas
+  const script = document.createElement('script');
+  script.src = 'https://html2canvas.hertzen.com/dist/html2canvas.min.js';
+  document.head.appendChild(script);
+
+  script.onload = () => {
+    updateTexture(); // initial capture
+  };
+
+  // WebXR/Three.js Setup
+  let camera, scene, renderer;
+  let mapMesh;
+
+  init();
+  animate();
+
+  function init() {
+    // Renderer with WebXR enabled
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    // Create scene and camera
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 1.6, 3); // initial position
+
+    // Create a plane geometry for the map
+    const geometry = new THREE.PlaneGeometry(2, 2); // size of the map plane
+    const material = new THREE.MeshBasicMaterial({ map: mapTexture });
+    mapMesh = new THREE.Mesh(geometry, material);
+    scene.add(mapMesh);
+
+    // Set up VR button
+    document.body.appendChild(THREE.XRButton.createButton(renderer));
+
+    // Handle window resize
+    window.addEventListener('resize', onWindowResize, false);
+  }
+
+  function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  // Animation loop
+  function animate() {
+    renderer.setAnimationLoop(render);
+  }
+
+  // Controller handling
+  let controller1, controller2;
+  let controllerGrip1, controllerGrip2;
+
+  function setupControllers() {
+    controller1 = renderer.xr.getController(0);
+    controller2 = renderer.xr.getController(1);
+    scene.add(controller1);
+    scene.add(controller2);
+
+    controllerGrip1 = renderer.xr.getControllerGrip(0);
+    controllerGrip2 = renderer.xr.getControllerGrip(1);
+    scene.add(controllerGrip1);
+    scene.add(controllerGrip2);
+  }
+
+  // Initialize controllers once XR session starts
+  renderer.xr.addEventListener('sessionstart', () => {
+    setupControllers();
+  });
+
+  function render() {
+    // Update map texture periodically or based on input
+    // For simplicity, update on every frame
+    if (typeof html2canvas !== 'undefined') {
+      updateTexture();
+    }
+
+    // Handle controller input for navigation
+    handleControllerInput();
+
+    renderer.render(scene, camera);
+  }
+
+  // Navigation parameters
+  const panSpeed = 0.002; // adjust as needed
+  const zoomSpeed = 0.05;
+
+  function handleControllerInput() {
+    // For each controller, check axes
+    [controller1, controller2].forEach(controller => {
+      if (controller && controller.gamepad) {
+        const axes = controller.gamepad.axes;
+        // axes[0]: thumbstick X (left/right)
+        // axes[1]: thumbstick Y (up/down)
+
+        if (Math.abs(axes[0]) > 0.2 || Math.abs(axes[1]) > 0.2) {
+          // Pan the map
+          const deltaX = -axes[0] * panSpeed;
+          const deltaY = axes[1] * panSpeed;
+
+          // Convert pan to map movement
+          // Since the map is on a plane, move it accordingly
+          mapMesh.position.x += deltaX;
+          mapMesh.position.y += deltaY;
         }
-        
-        // === INICIALIZACE ===
-        function init() {
-            console.log('🚀 Inicializuji jednoduchou VR mapu bez importů...');
-            
-            // Scene
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB);
-            
-            // User group pro VR locomotion
-            userGroup = new THREE.Group();
-            scene.add(userGroup);
-            console.log('✅ userGroup vytvořena:', userGroup);
-            
-            // Camera - mnohem dále od mapy
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
-            camera.position.set(0, 10, 120); // Ještě dále dozadu + výše
-            camera.lookAt(0, 0, 0);
-            userGroup.add(camera);
-            console.log('✅ Camera vytvořena na pozici:', camera.position);
-            
-            // Renderer
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.xr.enabled = true;
-            document.body.appendChild(renderer.domElement);
-            console.log('✅ Renderer vytvořen');
-            
-            // Simple VR Button
-            document.getElementById('vrButton').appendChild(createSimpleVRButton(renderer));
-            
-            // WebXR session event monitoring
-            renderer.xr.addEventListener('sessionstart', () => {
-                console.log('🥽 WebXR session started');
-                updateStatus('🥽 VR session aktivní');
-            });
-            
-            renderer.xr.addEventListener('sessionend', () => {
-                console.log('🥽 WebXR session ended');
-                updateStatus('🥽 VR session ukončena');
-            });
-            
-            setupLighting();
-            createSimpleMap();
-            setupVRControllers();
-            setupDesktopControls();
-            
-            // Animation loop
-            renderer.setAnimationLoop(animate);
-            
-            document.getElementById('loading').style.display = 'none';
-            updateStatus('✅ Jednoduchá mapa připravena');
-        }
-        
-        // === OSVĚTLENÍ ===
-        function setupLighting() {
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
-            scene.add(ambientLight);
-            
-            const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
-            sunLight.position.set(50, 100, 50);
-            scene.add(sunLight);
-        }
-        
-        // === JEDNODUCHÁ MAPA ===
-        function createSimpleMap() {
-            mapGroup = new THREE.Group();
-            scene.add(mapGroup);
-            
-            // Grid podklad (vertikální)
-            const gridHelper = new THREE.GridHelper(100, 20, 0x444444, 0x444444);
-            gridHelper.rotation.x = Math.PI / 2;
-            gridHelper.position.z = -1;
-            mapGroup.add(gridHelper);
-            
-            // Hlavní mapa plane (vertikálně)
-            const geometry = new THREE.PlaneGeometry(50, 50);
-            const material = new THREE.MeshBasicMaterial({ 
-                color: 0x90EE90,
-                transparent: true,
-                opacity: 0.8
-            });
-            
-            mapPlane = new THREE.Mesh(geometry, material);
-            mapPlane.position.z = 0;
-            mapPlane.name = 'mapPlane';
-            mapGroup.add(mapPlane);
-            
-            // Reference objekty pro orientaci
-            addReferenceObjects();
-            
-            loadCenterTile();
-        }
-        
-        function addReferenceObjects() {
-            // Červená koule v centru mapy
-            const centerSphere = new THREE.Mesh(
-                new THREE.SphereGeometry(2, 16, 16),
-                new THREE.MeshBasicMaterial({ color: 0xff0000 })
-            );
-            centerSphere.position.set(0, 0, 2);
-            mapGroup.add(centerSphere);
-            
-            // Bílé rohové markery
-            const corners = [
-                { x: -25, y: -25, z: 1 },
-                { x: 25, y: -25, z: 1 },
-                { x: 25, y: 25, z: 1 },
-                { x: -25, y: 25, z: 1 }
-            ];
-            
-            corners.forEach((corner, i) => {
-                const marker = new THREE.Mesh(
-                    new THREE.BoxGeometry(2, 2, 2),
-                    new THREE.MeshBasicMaterial({ color: 0xffffff })
-                );
-                marker.position.set(corner.x, corner.y, corner.z);
-                mapGroup.add(marker);
-            });
-            
-            console.log('✅ Reference objekty přidány pro orientaci');
-        }
-        
-        function loadCenterTile() {
-            const zoom = Math.floor(mapZoom);
-            const tileX = Math.floor((mapCenter.lng + 180) / 360 * Math.pow(2, zoom));
-            const tileY = Math.floor((1 - Math.log(Math.tan(mapCenter.lat * Math.PI / 180) + 1 / Math.cos(mapCenter.lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
-            
-            // ArcGIS satelitní mapa (nejspolehlivější)
-            const tileUrl = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${tileY}/${tileX}`;
-            
-            updateStatus(`📡 Načítám satelitní tile: ${zoom}/${tileX}/${tileY}`);
-            console.log('🛰️ Tile URL:', tileUrl);
-            
-            const loader = new THREE.TextureLoader();
-            loader.setCrossOrigin('anonymous');
-            
-            loader.load(
-                tileUrl,
-                (texture) => {
-                    mapPlane.material.map = texture;
-                    mapPlane.material.needsUpdate = true;
-                    updateStatus(`✅ Satelitní mapa načtena: ${mapCenter.lat.toFixed(3)}, ${mapCenter.lng.toFixed(3)}`);
-                    console.log('✅ Satelitní tile úspěšně načten!');
-                },
-                (progress) => {
-                    console.log('📡 Loading progress:', (progress.loaded / progress.total * 100).toFixed(1) + '%');
-                },
-                (error) => {
-                    console.warn('❌ Satelitní tile selhal, zkouším OpenStreetMap...');
-                    
-                    // Fallback na OpenStreetMap
-                    const osmUrl = `https://tile.openstreetmap.org/${zoom}/${tileX}/${tileY}.png`;
-                    loader.load(
-                        osmUrl,
-                        (texture) => {
-                            mapPlane.material.map = texture;
-                            mapPlane.material.needsUpdate = true;
-                            updateStatus(`✅ OSM mapa načtena: ${mapCenter.lat.toFixed(3)}, ${mapCenter.lng.toFixed(3)}`);
-                            console.log('✅ OSM fallback úspěšný!');
-                        },
-                        undefined,
-                        (error2) => {
-                            console.error('❌ Všechny tile servery selhaly:', error2);
-                            updateStatus('❌ Nepodařilo se načíst žádnou realnou mapu');
-                        }
-                    );
-                }
-            );
-        }
-        
-        // === VR OVLADAČE (JEDNODUCHÝ) ===
-        function setupVRControllers() {
-            console.log('🎮 Nastavuji jednoduché VR ovladače...');
-            
-            if (!userGroup) {
-                console.error('❌ userGroup is still undefined!');
-                return;
-            }
-            
-            raycaster = new THREE.Raycaster();
-            
-            // Controller 1 (pravý)
-            controller1 = renderer.xr.getController(0);
-            if (controller1) {
-                controller1.addEventListener('selectstart', () => onControllerSelect(0, true));
-                controller1.addEventListener('selectend', () => onControllerSelect(0, false));
-                userGroup.add(controller1);
-                
-                // Laser
-                const geometry = new THREE.BufferGeometry().setFromPoints([
-                    new THREE.Vector3(0, 0, 0),
-                    new THREE.Vector3(0, 0, -1)
-                ]);
-                const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0xff0000 }));
-                line.scale.z = 15;
-                controller1.add(line);
-                
-                console.log('✅ Controller 1 setup');
-            }
-            
-            // Controller 2 (levý)
-            controller2 = renderer.xr.getController(1);
-            if (controller2) {
-                controller2.addEventListener('selectstart', () => onControllerSelect(1, true));
-                controller2.addEventListener('selectend', () => onControllerSelect(1, false));
-                userGroup.add(controller2);
-                
-                // Laser
-                const geometry = new THREE.BufferGeometry().setFromPoints([
-                    new THREE.Vector3(0, 0, 0),
-                    new THREE.Vector3(0, 0, -1)
-                ]);
-                const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00ff00 }));
-                line.scale.z = 15;
-                controller2.add(line);
-                
-                console.log('✅ Controller 2 setup');
-            }
-            
-            console.log('✅ VR Controllers setup dokončen');
-        }
-        
-        // === VR EVENTY ===
-        function onControllerSelect(controllerIndex, pressed) {
-            console.log(`Controller ${controllerIndex} trigger: ${pressed}`);
-            
-            const controller = controllerIndex === 0 ? controller1 : controller2;
-            if (!controller) return;
-            
-            if (pressed) {
-                // Začátek drag
-                isDragging = true;
-                dragController = controller;
-                dragStartPosition = controller.position.clone();
-                dragStartMapCenter = { lat: mapCenter.lat, lng: mapCenter.lng };
-                mapOffset = { x: 0, y: 0 };
-                
-                console.log('🎯 Začátek plynulého drag');
-                updateStatus('🎯 Drag mapa');
-                
-            } else {
-                // Konec drag
-                if (isDragging) {
-                    // Převod offsetu na GPS
-                    const dragToGPS = 0.01;
-                    mapCenter.lng -= mapOffset.x * dragToGPS;
-                    mapCenter.lat += mapOffset.y * dragToGPS;
-                    
-                    // Clamp coordinates
-                    mapCenter.lat = Math.max(-85, Math.min(85, mapCenter.lat));
-                    mapCenter.lng = Math.max(-180, Math.min(180, mapCenter.lng));
-                    
-                    // Reset pozice
-                    mapGroup.position.x = 0;
-                    mapGroup.position.y = 0;
-                    mapOffset = { x: 0, y: 0 };
-                    
-                    isDragging = false;
-                    dragController = null;
-                    dragStartPosition = null;
-                    dragStartMapCenter = null;
-                    
-                    console.log('🎯 Konec drag - načítám nový tile');
-                    loadCenterTile();
-                }
-            }
-        }
-        
-        // === VR INPUT ===
-        function updateVRInput() {
-            if (!renderer.xr.isPresenting) return;
-            
-            const session = renderer.xr.getSession();
-            if (!session || !session.inputSources) return;
-            
-            // Plynulý drag
-            if (isDragging && dragController && dragStartPosition && dragStartMapCenter) {
-                const currentPosition = dragController.position.clone();
-                const deltaPosition = currentPosition.sub(dragStartPosition);
-                
-                const dragSensitivity = 30;
-                mapOffset.x = deltaPosition.x * dragSensitivity;
-                mapOffset.y = deltaPosition.y * dragSensitivity;
-                
-                mapGroup.position.x = mapOffset.x;
-                mapGroup.position.y = mapOffset.y;
-                
-                console.log(`🎯 Drag offset: ${mapOffset.x.toFixed(2)}, ${mapOffset.y.toFixed(2)}`);
-            }
-            
-            // Joysticky pro všechny input sources
-            for (let i = 0; i < session.inputSources.length; i++) {
-                const inputSource = session.inputSources[i];
-                if (!inputSource || !inputSource.gamepad) continue;
-                
-                const gamepad = inputSource.gamepad;
-                
-                if (gamepad.axes && gamepad.axes.length >= 4) {
-                    const leftX = gamepad.axes[0];   // Levý joystick X
-                    const leftY = gamepad.axes[1];   // Levý joystick Y  
-                    const rightX = gamepad.axes[2];  // Pravý joystick X
-                    const rightY = gamepad.axes[3];  // Pravý joystick Y
-                    
-                    // LEVÝ JOYSTICK = CAMERA/USER LOCOMOTION (3D pohyb)
-                    if (Math.abs(leftX) > 0.1 || Math.abs(leftY) > 0.1) {
-                        const moveSpeed = 2.0; // Zvýšená rychlost
-                        
-                        // Dopředu/dozadu podle směru kamery
-                        const forward = new THREE.Vector3(0, 0, -1);
-                        forward.applyQuaternion(camera.quaternion);
-                        forward.y = 0; // Pohyb jen v horizontální rovině
-                        forward.normalize();
-                        
-                        // Vlevo/vpravo
-                        const right = new THREE.Vector3(1, 0, 0);
-                        right.applyQuaternion(camera.quaternion);
-                        right.y = 0;
-                        right.normalize();
-                        
-                        // Aplikuj pohyb na userGroup
-                        const movement = new THREE.Vector3();
-                        movement.add(forward.clone().multiplyScalar(leftY * moveSpeed)); // Y = dopředu/dozadu
-                        movement.add(right.clone().multiplyScalar(leftX * moveSpeed));   // X = vlevo/vpravo
-                        
-                        userGroup.position.add(movement);
-                        
-                        console.log(`🚶 VR Locomotion: joystick(${leftX.toFixed(2)}, ${leftY.toFixed(2)}) -> userGroup(${userGroup.position.x.toFixed(1)}, ${userGroup.position.y.toFixed(1)}, ${userGroup.position.z.toFixed(1)})`);
-                    }
-                    
-                    // PRAVÝ JOYSTICK Y = ZOOM
-                    if (Math.abs(rightY) > 0.1) {
-                        const zoomSpeed = 0.08;
-                        mapZoom += rightY * zoomSpeed;
-                        mapZoom = Math.max(1, Math.min(18, mapZoom));
-                        
-                        console.log(`🔍 Zoom: ${mapZoom.toFixed(1)}`);
-                        
-                        if (Math.random() < 0.1) {
-                            loadCenterTile();
-                        }
-                    }
-                    
-                    // PRAVÝ JOYSTICK X = ROTACE MAPY
-                    if (Math.abs(rightX) > 0.1) {
-                        const rotSpeed = 0.02;
-                        mapGroup.rotation.z += rightX * rotSpeed;
-                        console.log(`🔄 Rotace mapy: ${(mapGroup.rotation.z * 180 / Math.PI).toFixed(1)}°`);
-                    }
-                }
-            }
-        }
-        
-        // === DESKTOP OVLÁDÁNÍ ===
-        function setupDesktopControls() {
-            const keys = {};
-            
-            document.addEventListener('keydown', (e) => {
-                keys[e.key.toLowerCase()] = true;
-            });
-            
-            document.addEventListener('keyup', (e) => {
-                keys[e.key.toLowerCase()] = false;
-            });
-            
-            function updateDesktopMovement() {
-                const moveSpeed = 0.01;
-                const cameraSpeed = 2.0; // Pro pohyb kamery
-                
-                // WASD = posun mapy (GPS)
-                if (keys['w']) {
-                    mapCenter.lat += moveSpeed;
-                    loadCenterTile();
-                }
-                if (keys['s']) {
-                    mapCenter.lat -= moveSpeed;
-                    loadCenterTile();
-                }
-                if (keys['a']) {
-                    mapCenter.lng -= moveSpeed;
-                    loadCenterTile();
-                }
-                if (keys['d']) {
-                    mapCenter.lng += moveSpeed;
-                    loadCenterTile();
-                }
-                
-                // Q/E = zoom
-                if (keys['q'] && mapZoom < 18) {
-                    mapZoom += 0.1;
-                    loadCenterTile();
-                }
-                if (keys['e'] && mapZoom > 1) {
-                    mapZoom -= 0.1;
-                    loadCenterTile();
-                }
-                
-                // Arrow keys = pohyb kamery v prostoru (pro testování)
-                if (keys['arrowup']) {
-                    userGroup.position.z -= cameraSpeed;
-                    console.log(`📷 Camera Z: ${userGroup.position.z.toFixed(1)}`);
-                }
-                if (keys['arrowdown']) {
-                    userGroup.position.z += cameraSpeed;
-                    console.log(`📷 Camera Z: ${userGroup.position.z.toFixed(1)}`);
-                }
-                if (keys['arrowleft']) {
-                    userGroup.position.x -= cameraSpeed;
-                    console.log(`📷 Camera X: ${userGroup.position.x.toFixed(1)}`);
-                }
-                if (keys['arrowright']) {
-                    userGroup.position.x += cameraSpeed;
-                    console.log(`📷 Camera X: ${userGroup.position.x.toFixed(1)}`);
-                }
-                
-                // Page Up/Down = výška kamery
-                if (keys['pageup']) {
-                    userGroup.position.y += cameraSpeed;
-                    console.log(`📷 Camera Y: ${userGroup.position.y.toFixed(1)}`);
-                }
-                if (keys['pagedown']) {
-                    userGroup.position.y -= cameraSpeed;
-                    console.log(`📷 Camera Y: ${userGroup.position.y.toFixed(1)}`);
-                }
-                
-                mapCenter.lat = Math.max(-85, Math.min(85, mapCenter.lat));
-                mapCenter.lng = Math.max(-180, Math.min(180, mapCenter.lng));
-                
-                requestAnimationFrame(updateDesktopMovement);
-            }
-            updateDesktopMovement();
-            
-            // Mouse click
-            renderer.domElement.addEventListener('click', onMapClick);
-        }
-        
-        function onMapClick(event) {
-            if (!raycaster) return;
-            
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects([mapPlane]);
-            
-            if (intersects.length > 0) {
-                const point = intersects[0].point;
-                const gps = worldToGPS(point);
-                addMarker(gps.lat, gps.lng, `Desktop Marker ${markers.length + 1}`);
-                updateGPSDisplay(gps.lat, gps.lng);
-                updateStatus(`📍 Desktop marker: ${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}`);
-            }
-        }
-        
-        // === MARKERY ===
-        function addMarker(lat, lng, label, color = 0xff0000) {
-            const worldPos = gpsToWorld(lat, lng);
-            
-            const geometry = new THREE.ConeGeometry(1, 3, 8);
-            const material = new THREE.MeshBasicMaterial({ color: color });
-            const marker = new THREE.Mesh(geometry, material);
-            
-            marker.position.set(worldPos.x, 1.5, worldPos.z);
-            marker.userData = { label, lat, lng };
-            marker.name = 'marker';
-            
-            mapGroup.add(marker);
-            markers.push(marker);
-            
-            console.log(`📍 Marker přidán: ${label} na ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-        }
-        
-        // === KOORDINÁTY ===
-        function gpsToWorld(lat, lng) {
-            const scale = 50 / 180;
-            const x = lng * scale;
-            const z = -lat * scale;
-            return { x, z };
-        }
-        
-        function worldToGPS(worldPos) {
-            const scale = 180 / 50;
-            const lng = worldPos.x * scale;
-            const lat = -worldPos.z * scale;
-            return { lat, lng };
-        }
-        
-        // === UTILITY FUNKCE ===
-        function jumpTo(lat, lng) {
-            mapCenter.lat = lat;
-            mapCenter.lng = lng;
-            loadCenterTile();
-            updateStatus(`✈️ Skok na: ${lat.toFixed(3)}, ${lng.toFixed(3)}`);
-        }
-        
-        function clearMarkers() {
-            markers.forEach(marker => mapGroup.remove(marker));
-            markers = [];
-            updateStatus('🗑️ Markery smazány');
-        }
-        
-        function updateGPSDisplay(lat = mapCenter.lat, lng = mapCenter.lng) {
-            document.getElementById('coords').textContent = `GPS: ${lat.toFixed(3)}, ${lng.toFixed(3)}`;
-        }
-        
-        function updateZoomDisplay() {
-            document.getElementById('zoomInfo').textContent = `Zoom: ${mapZoom.toFixed(1)}`;
-        }
-        
-        function updateStatus(message) {
-            document.getElementById('status').textContent = message;
-            console.log(message);
-        }
-        
-        // === ANIMATION LOOP ===
-        function animate() {
-            updateVRInput();
-            
-            // Animace markerů
-            markers.forEach((marker, i) => {
-                marker.rotation.y += 0.02;
-                marker.position.y = 1.5 + Math.sin(Date.now() * 0.003 + i) * 0.2;
-            });
-            
-            updateGPSDisplay();
-            updateZoomDisplay();
-            
-            renderer.render(scene, camera);
-        }
-        
-        // === RESIZE ===
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-        
-        // === GLOBÁLNÍ FUNKCE ===
-        window.jumpTo = jumpTo;
-        window.clearMarkers = clearMarkers;
-        
-        // === START ===
-        init();
-        console.log('🗺️ Jednoduchá VR mapa připravena bez importů!');
-        
-    </script>
+
+        // Optional: handle zoom with other axes/buttons
+        // For simplicity, no zoom here
+      }
+    });
+  }
+</script>
 </body>
 </html>
