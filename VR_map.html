@@ -274,26 +274,120 @@
             const tileX = Math.floor((mapCenter.lng + 180) / 360 * Math.pow(2, zoom));
             const tileY = Math.floor((1 - Math.log(Math.tan(mapCenter.lat * Math.PI / 180) + 1 / Math.cos(mapCenter.lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
             
-            const tileUrl = `https://tile.openstreetmap.org/${zoom}/${tileX}/${tileY}.png`;
-            
             updateStatus(`📡 Načítám tile: ${zoom}/${tileX}/${tileY}`);
+            
+            // Zkus různé tile servery
+            const tileServers = [
+                `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${tileY}/${tileX}`,
+                `https://tile.openstreetmap.org/${zoom}/${tileX}/${tileY}.png`,
+                `https://cartodb-basemaps-a.global.ssl.fastly.net/light_all/${zoom}/${tileX}/${tileY}.png`
+            ];
             
             const loader = new THREE.TextureLoader();
             loader.setCrossOrigin('anonymous');
             
-            loader.load(
-                tileUrl,
-                (texture) => {
-                    mapPlane.material.map = texture;
-                    mapPlane.material.needsUpdate = true;
-                    updateStatus(`✅ Tile načten: ${mapCenter.lat.toFixed(3)}, ${mapCenter.lng.toFixed(3)}`);
-                },
-                undefined,
-                (error) => {
-                    console.warn('Tile loading failed:', error);
-                    updateStatus('⚠️ Problém s načítáním tile');
+            function tryLoadTile(serverIndex = 0) {
+                if (serverIndex >= tileServers.length) {
+                    // Všechny servery selhaly - použij procedurální texturu
+                    console.log('🎨 Všechny tile servery selhaly, používám procedurální texturu');
+                    loadProceduralTexture();
+                    return;
                 }
-            );
+                
+                const tileUrl = tileServers[serverIndex];
+                console.log(`🌐 Zkouším server ${serverIndex + 1}:`, tileUrl);
+                
+                loader.load(
+                    tileUrl,
+                    (texture) => {
+                        mapPlane.material.map = texture;
+                        mapPlane.material.needsUpdate = true;
+                        updateStatus(`✅ Tile načten ze serveru ${serverIndex + 1}: ${mapCenter.lat.toFixed(3)}, ${mapCenter.lng.toFixed(3)}`);
+                        console.log(`✅ Server ${serverIndex + 1} úspěšný!`);
+                    },
+                    undefined,
+                    (error) => {
+                        console.warn(`❌ Server ${serverIndex + 1} selhal:`, error);
+                        // Zkus další server
+                        tryLoadTile(serverIndex + 1);
+                    }
+                );
+            }
+            
+            tryLoadTile();
+        }
+        
+        function loadProceduralTexture() {
+            updateStatus('🎨 Vytvářím procedurální mapu...');
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+            
+            // Základní podklad podle polohy
+            const latNorm = (mapCenter.lat + 90) / 180; // 0-1
+            const lngNorm = (mapCenter.lng + 180) / 360; // 0-1
+            
+            // Gradient podle GPS pozice
+            const gradient = ctx.createRadialGradient(512, 512, 0, 512, 512, 512);
+            
+            if (latNorm > 0.7) { // Severní oblasti
+                gradient.addColorStop(0, '#E0F6FF'); // Sníh
+                gradient.addColorStop(0.5, '#B8E6B8'); // Tundra
+                gradient.addColorStop(1, '#4A7C59'); // Jehličnany
+            } else if (latNorm > 0.3) { // Mírné pásmo
+                gradient.addColorStop(0, '#90EE90'); // Světle zelená
+                gradient.addColorStop(0.5, '#228B22'); // Zelená
+                gradient.addColorStop(1, '#006400'); // Tmavě zelená
+            } else { // Tropické oblasti
+                gradient.addColorStop(0, '#F4A460'); // Písek
+                gradient.addColorStop(0.5, '#DAA520'); // Savana
+                gradient.addColorStop(1, '#8B4513'); // Poušť
+            }
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 1024, 1024);
+            
+            // Přidej "města" podle zoom úrovně
+            if (mapZoom > 8) {
+                ctx.fillStyle = '#FF6B6B';
+                for (let i = 0; i < 5; i++) {
+                    const x = Math.random() * 1024;
+                    const y = Math.random() * 1024;
+                    const size = 8 + Math.random() * 12;
+                    
+                    ctx.beginPath();
+                    ctx.arc(x, y, size, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+            
+            // Přidej "silnice"
+            if (mapZoom > 6) {
+                ctx.strokeStyle = '#A0A0A0';
+                ctx.lineWidth = 2;
+                
+                for (let i = 0; i < 8; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(Math.random() * 1024, Math.random() * 1024);
+                    ctx.lineTo(Math.random() * 1024, Math.random() * 1024);
+                    ctx.stroke();
+                }
+            }
+            
+            // GPS souřadnice v rohu
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '16px Arial';
+            ctx.fillText(`${mapCenter.lat.toFixed(2)}, ${mapCenter.lng.toFixed(2)}`, 10, 30);
+            ctx.fillText(`Zoom: ${mapZoom.toFixed(1)}`, 10, 50);
+            
+            // Aplikuj texturu
+            const texture = new THREE.CanvasTexture(canvas);
+            mapPlane.material.map = texture;
+            mapPlane.material.needsUpdate = true;
+            
+            updateStatus(`✅ Procedurální mapa vytvořena pro ${mapCenter.lat.toFixed(3)}, ${mapCenter.lng.toFixed(3)}`);
         }
         
         // === VR OVLADAČE (JEDNODUCHÝ) ===
