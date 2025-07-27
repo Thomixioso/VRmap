@@ -1,803 +1,750 @@
-<!DOCTYPE html>
-<html lang="cs">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VR Živá Mapa - Funkční verze</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            background: #000;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
-        }
-        
-        #info {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: white;
-            z-index: 100;
-            background: rgba(0,0,0,0.9);
-            padding: 15px;
-            border-radius: 8px;
-            max-width: 350px;
-        }
-        
-        #vrButton {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 100;
-        }
-        
-        #controls {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 100;
-            background: rgba(0,0,0,0.9);
-            padding: 15px;
-            border-radius: 8px;
-            color: white;
-            min-width: 200px;
-        }
-        
-        .back-button {
-            position: absolute;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 101;
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            text-decoration: none;
-            padding: 12px 24px;
-            border-radius: 25px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-        }
-        
-        .back-button:hover {
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateX(-50%) translateY(-2px);
-        }
-        
-        canvas {
-            display: block;
-        }
-        
-        .loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 18px;
-            text-align: center;
-        }
-        
-        button {
-            background: #4a90e2;
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin: 3px;
-            font-size: 12px;
-        }
-        
-        button:hover {
-            background: #357abd;
-        }
-    </style>
-</head>
-<body>
-    <a href="index.html" class="back-button">← Zpět na výběr</a>
-    
-    <div id="info">
-        <h3>🌍 VR Živá Mapa</h3>
-        <p><strong>Desktop:</strong></p>
-        <ul style="font-size: 12px; margin: 5px 0; padding-left: 15px;">
-            <li>WASD = posun mapy (GPS)</li>
-            <li>Q/E = zoom</li>
-            <li>Šipky = chůze kolem canvasu</li>
-            <li>Klik = přidat marker</li>
-        </ul>
-        <p><strong>VR:</strong></p>
-        <ul style="font-size: 12px; margin: 5px 0; padding-left: 15px;">
-            <li>Trigger = plynulý drag mapy</li>
-            <li>Levý joystick = realistická chůze</li>
-            <li>Pravý joystick Y = zoom</li>
-            <li>Pravý joystick X = vzdálenost od canvasu</li>
-        </ul>
-        <div id="coords">GPS: 50.075, 14.438</div>
-        <div id="zoomInfo">Zoom: 10</div>
-        <div id="status">Inicializuji...</div>
-    </div>
-    
-    <div id="controls">
-        <h4>🎮 Ovládání</h4>
-        <div>
-            <button onclick="jumpTo(50.075, 14.438)">🏛️ Praha</button>
-            <button onclick="jumpTo(51.507, -0.128)">🇬🇧 Londýn</button>
-        </div>
-        <div>
-            <button onclick="jumpTo(40.713, -74.006)">🗽 NYC</button>
-            <button onclick="jumpTo(35.676, 139.650)">🗾 Tokio</button>
-        </div>
-        <div>
-            <button onclick="clearMarkers()">🗑️ Smaž markery</button>
-        </div>
-    </div>
-    
-    <div class="loading" id="loading">🚀 Načítám VR mapu...</div>
-    <div id="vrButton"></div>
+<!doctype html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script>
-        // === GLOBÁLNÍ PROMĚNNÉ ===
-        let scene, camera, renderer, mapGroup, userGroup;
-        let controller1, controller2;
-        let raycaster, mouse = new THREE.Vector2();
-        let markers = [];
-        
-        // === MAPA STAV ===
-        let mapCenter = { lat: 50.075, lng: 14.438 };
-        let mapZoom = 10;
-        let mapPlane;
-        
-        // === VR STAV ===
-        let isDragging = false;
-        let dragStartPosition = null;
-        let dragStartMapCenter = null;
-        let dragController = null;
-        let mapOffset = { x: 0, y: 0 };
-        
-        // === VR BUTTON HACK ===
-        function createSimpleVRButton(renderer) {
-            const button = document.createElement('button');
-            button.style.position = 'absolute';
-            button.style.bottom = '20px';
-            button.style.padding = '12px 20px';
-            button.style.border = 'none';
-            button.style.borderRadius = '6px';
-            button.style.background = '#4a90e2';
-            button.style.color = 'white';
-            button.style.cursor = 'pointer';
-            button.style.fontSize = '14px';
-            button.textContent = 'Enter VR';
-            
-            if (navigator.xr) {
-                button.onclick = async () => {
-                    if (renderer.xr.isPresenting) {
-                        renderer.xr.getSession().end();
-                    } else {
-                        try {
-                            console.log('🥽 Požádám o VR session...');
-                            
-                            // Zkus různé reference spaces s fallbackem
-                            const sessionInit = {
-                                requiredFeatures: [],
-                                optionalFeatures: ['local-floor', 'bounded-floor']
-                            };
-                            
-                            const session = await navigator.xr.requestSession('immersive-vr', sessionInit);
-                            
-                            console.log('✅ VR session vytvořena');
-                            
-                            // Zkus najít nejlepší reference space
-                            let referenceSpace;
-                            try {
-                                referenceSpace = await session.requestReferenceSpace('local-floor');
-                                console.log('✅ Používám local-floor reference space');
-                            } catch (e) {
-                                console.log('⚠️ local-floor nepodporován, zkouším local...');
-                                try {
-                                    referenceSpace = await session.requestReferenceSpace('local');
-                                    console.log('✅ Používám local reference space');
-                                } catch (e2) {
-                                    console.log('⚠️ local nepodporován, používám viewer...');
-                                    referenceSpace = await session.requestReferenceSpace('viewer');
-                                    console.log('✅ Používám viewer reference space');
-                                }
+        <title>Babylon.js sample code</title>
+
+        <!-- Babylon.js -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
+        <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
+        <script src="https://cdn.babylonjs.com/recast.js"></script>
+        <script src="https://cdn.babylonjs.com/ammo.js"></script>
+        <script src="https://cdn.babylonjs.com/havok/HavokPhysics_umd.js"></script>
+        <script src="https://cdn.babylonjs.com/cannon.js"></script>
+        <script src="https://cdn.babylonjs.com/Oimo.js"></script>
+        <script src="https://cdn.babylonjs.com/earcut.min.js"></script>
+        <script src="https://cdn.babylonjs.com/babylon.js"></script>
+        <script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+        <script src="https://cdn.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
+        <script src="https://cdn.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
+        <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+        <script src="https://cdn.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+        <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+        <script src="https://cdn.babylonjs.com/addons/babylonjs.addons.min.js"></script>
+        <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+
+        <style>
+            html,
+            body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+
+            #canvasZone {
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
+        <script>
+                    var canvas = document.getElementById("renderCanvas");
+
+                    var startRenderLoop = function (engine, canvas) {
+                        engine.runRenderLoop(function () {
+                            if (sceneToRender && sceneToRender.activeCamera) {
+                                sceneToRender.render();
                             }
-                            
-                            renderer.xr.setSession(session);
-                            updateStatus('✅ VR aktivní');
-                            
-                        } catch (error) {
-                            console.error('❌ VR session failed:', error);
-                            updateStatus('❌ VR nepodporováno nebo zamítnuto');
-                        }
+                        });
                     }
-                };
-            } else {
-                button.textContent = 'VR Nedostupné';
-                button.disabled = true;
-                button.style.background = '#666';
+
+                    var engine = null;
+        var scene = null;
+        var sceneToRender = null;
+        var createDefaultEngine = function() { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true,  disableWebGL2Support: false}); };
+        var createScene = async function () {
+    // load lil-gui for some sample HTML
+    // https://lil-gui.georgealways.com
+    await loadScript("https://cdn.jsdelivr.net/npm/lil-gui@0.19");
+    const GUI = lil.GUI;
+
+    // gui code borrowed from three.js examples
+    // https://github.com/mrdoob/three.js/blob/master/examples/webxr_vr_sandbox.html
+    const parameters = {
+        radius: 0.6,
+        tube: 0.2,
+        tubularSegments: 150,
+        radialSegments: 20,
+        p: 2,
+        q: 3,
+        thickness: 0.5
+    };
+    function onChange() {
+        console.log("GUI changed.");
+    }
+    const gui = new GUI({ width: 300 });
+    gui.add(parameters, 'radius', 0.0, 1.0).onChange(onChange);
+    gui.add(parameters, 'tube', 0.0, 1.0).onChange(onChange);
+    gui.add(parameters, 'tubularSegments', 10, 150, 1).onChange(onChange);
+    gui.add(parameters, 'radialSegments', 2, 20, 1).onChange(onChange);
+    gui.add(parameters, 'p', 1, 10, 1).onChange(onChange);
+    gui.add(parameters, 'q', 0, 10, 1).onChange(onChange);
+    gui.add(parameters, 'thickness', 0, 1).onChange(onChange);
+    gui.domElement.style.visibility = 'hidden';
+
+    // This creates a basic Babylon Scene object (non-mesh)
+    var scene = new BABYLON.Scene(engine);
+
+    // This creates and positions a free camera (non-mesh)
+    var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 5, -10), scene);
+
+    // This targets the camera to scene origin
+    camera.setTarget(BABYLON.Vector3.Zero());
+
+    // This attaches the camera to the canvas
+    camera.attachControl(canvas, true);
+
+    // This creates a light, aiming 0,1,0 - to the sky (non-mesh)
+    var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+
+    // Default intensity is 1. Let's dim the light a small amount
+    light.intensity = 0.7;
+
+    // create a texture from our dummy GUI above
+    new HtmlMesh(gui.domElement, scene);
+
+    // XR
+    const xrHelper = await scene.createDefaultXRExperienceAsync();
+
+    return scene;
+};
+
+// HtmlTexture converts a HTML DOM element into a texture using html2canvas
+class HtmlTexture extends BABYLON.DynamicTexture {
+    constructor(domElement, scene) {
+        super("HtmlTexture", html2canvas(domElement), scene);
+        this.domElement = domElement;
+
+        // Create an observer on the DOM, and run html2canvas update in the next loop
+        const observer = new MutationObserver(() => {
+
+            if (!this.scheduleUpdate) {
+                // ideally should use xr.requestAnimationFrame, here setTimeout to avoid passing the renderer
+                this.scheduleUpdate = setTimeout(() => this.update(), 16);
             }
-            
-            return button;
-        }
-        
-        // === INICIALIZACE ===
-        function init() {
-            console.log('🚀 Inicializuji jednoduchou VR mapu bez importů...');
-            
-            // Scene
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB);
-            
-            // User group pro VR locomotion
-            userGroup = new THREE.Group();
-            scene.add(userGroup);
-            console.log('✅ userGroup vytvořena:', userGroup);
-            
-            // Camera v lidském měřítku - 15m od canvasu
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
-            camera.position.set(0, 1.7, 15); // Výška očí 1.7m, 15m od canvasu
-            camera.lookAt(0, 1.7, 0); // Díváme se na střed canvasu ve výšce očí
-            userGroup.add(camera);
-            console.log('✅ Camera v lidském měřítku na pozici:', camera.position);
-            
-            // Renderer
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.xr.enabled = true;
-            document.body.appendChild(renderer.domElement);
-            console.log('✅ Renderer vytvořen');
-            
-            // Simple VR Button
-            document.getElementById('vrButton').appendChild(createSimpleVRButton(renderer));
-            
-            // WebXR session event monitoring
-            renderer.xr.addEventListener('sessionstart', () => {
-                console.log('🥽 WebXR session started');
-                updateStatus('🥽 VR session aktivní');
-            });
-            
-            renderer.xr.addEventListener('sessionend', () => {
-                console.log('🥽 WebXR session ended');
-                updateStatus('🥽 VR session ukončena');
-            });
-            
-            setupLighting();
-            createSimpleMap();
-            setupVRControllers();
-            setupDesktopControls();
-            
-            // Animation loop
-            renderer.setAnimationLoop(animate);
-            
-            document.getElementById('loading').style.display = 'none';
-            updateStatus('✅ Jednoduchá mapa připravena');
-        }
-        
-        // === OSVĚTLENÍ ===
-        function setupLighting() {
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
-            scene.add(ambientLight);
-            
-            const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
-            sunLight.position.set(50, 100, 50);
-            scene.add(sunLight);
-        }
-        
-        // === MAPA V REÁLNÉM MĚŘÍTKU ===
-        function createSimpleMap() {
-            mapGroup = new THREE.Group();
-            scene.add(mapGroup);
-            
-            // Grid podklad v lidském měřítku (10x10m)
-            const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x444444);
-            gridHelper.rotation.x = Math.PI / 2; // Vertikálně
-            gridHelper.position.set(0, 1.7, -0.1); // Ve výšce očí, mírně za canvasem
-            mapGroup.add(gridHelper);
-            
-            // Hlavní canvas 10x10 metrů
-            const geometry = new THREE.PlaneGeometry(10, 10); // 10x10 metrů
-            const material = new THREE.MeshBasicMaterial({ 
-                color: 0x90EE90,
-                transparent: true,
-                opacity: 0.9
-            });
-            
-            mapPlane = new THREE.Mesh(geometry, material);
-            mapPlane.position.set(0, 1.7, 0); // Střed ve výšce očí, přímo před kamerou
-            mapPlane.name = 'mapPlane';
-            mapGroup.add(mapPlane);
-            
-            // Rám kolem canvasu
-            addCanvasFrame();
-            
-            // Podlaha pro orientaci
-            addFloor();
-            
-            loadCenterTile();
-            
-            console.log('✅ 10x10m canvas vytvořen 15m od kamery');
-        }
-        
-        function addCanvasFrame() {
-            // Černý rám kolem 10x10m canvasu
-            const frameThickness = 0.1;
-            const frameDepth = 0.05;
-            
-            // 4 strany rámu
-            const frameGeometry = new THREE.BoxGeometry(10.2, frameThickness, frameDepth);
-            const frameMaterial = new THREE.MeshBasicMaterial({ color: 0x222222 });
-            
-            // Horní rám
-            const topFrame = new THREE.Mesh(frameGeometry, frameMaterial);
-            topFrame.position.set(0, 1.7 + 5.1, 0.025);
-            mapGroup.add(topFrame);
-            
-            // Spodní rám
-            const bottomFrame = new THREE.Mesh(frameGeometry, frameMaterial);
-            bottomFrame.position.set(0, 1.7 - 5.1, 0.025);
-            mapGroup.add(bottomFrame);
-            
-            // Levý a pravý rám
-            const sideFrameGeometry = new THREE.BoxGeometry(frameThickness, 10.2, frameDepth);
-            
-            const leftFrame = new THREE.Mesh(sideFrameGeometry, frameMaterial);
-            leftFrame.position.set(-5.1, 1.7, 0.025);
-            mapGroup.add(leftFrame);
-            
-            const rightFrame = new THREE.Mesh(sideFrameGeometry, frameMaterial);
-            rightFrame.position.set(5.1, 1.7, 0.025);
-            mapGroup.add(rightFrame);
-            
-            console.log('✅ Rám kolem canvasu přidán');
-        }
-        
-        function addFloor() {
-            // Jednoduchá podlaha pro orientaci
-            const floorGeometry = new THREE.PlaneGeometry(30, 30);
-            const floorMaterial = new THREE.MeshBasicMaterial({ 
-                color: 0x333333,
-                transparent: true,
-                opacity: 0.3
-            });
-            
-            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-            floor.rotation.x = -Math.PI / 2; // Horizontálně
-            floor.position.y = 0;
-            scene.add(floor);
-            
-            console.log('✅ Podlaha přidána');
-        }
-        
-        function loadCenterTile() {
-            const zoom = Math.floor(mapZoom);
-            const tileX = Math.floor((mapCenter.lng + 180) / 360 * Math.pow(2, zoom));
-            const tileY = Math.floor((1 - Math.log(Math.tan(mapCenter.lat * Math.PI / 180) + 1 / Math.cos(mapCenter.lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
-            
-            // ArcGIS satelitní mapa (nejspolehlivější)
-            const tileUrl = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${zoom}/${tileY}/${tileX}`;
-            
-            updateStatus(`📡 Načítám satelitní tile: ${zoom}/${tileX}/${tileY}`);
-            console.log('🛰️ Tile URL:', tileUrl);
-            
-            const loader = new THREE.TextureLoader();
-            loader.setCrossOrigin('anonymous');
-            
-            loader.load(
-                tileUrl,
-                (texture) => {
-                    mapPlane.material.map = texture;
-                    mapPlane.material.needsUpdate = true;
-                    updateStatus(`✅ Satelitní mapa načtena: ${mapCenter.lat.toFixed(3)}, ${mapCenter.lng.toFixed(3)}`);
-                    console.log('✅ Satelitní tile úspěšně načten!');
-                },
-                (progress) => {
-                    console.log('📡 Loading progress:', (progress.loaded / progress.total * 100).toFixed(1) + '%');
-                },
-                (error) => {
-                    console.warn('❌ Satelitní tile selhal, zkouším OpenStreetMap...');
-                    
-                    // Fallback na OpenStreetMap
-                    const osmUrl = `https://tile.openstreetmap.org/${zoom}/${tileX}/${tileY}.png`;
-                    loader.load(
-                        osmUrl,
-                        (texture) => {
-                            mapPlane.material.map = texture;
-                            mapPlane.material.needsUpdate = true;
-                            updateStatus(`✅ OSM mapa načtena: ${mapCenter.lat.toFixed(3)}, ${mapCenter.lng.toFixed(3)}`);
-                            console.log('✅ OSM fallback úspěšný!');
-                        },
-                        undefined,
-                        (error2) => {
-                            console.error('❌ Všechny tile servery selhaly:', error2);
-                            updateStatus('❌ Nepodařilo se načíst žádnou realnou mapu');
-                        }
-                    );
-                }
-            );
-        }
-        
-        // === VR OVLADAČE (JEDNODUCHÝ) ===
-        function setupVRControllers() {
-            console.log('🎮 Nastavuji jednoduché VR ovladače...');
-            
-            if (!userGroup) {
-                console.error('❌ userGroup is still undefined!');
-                return;
-            }
-            
-            raycaster = new THREE.Raycaster();
-            
-            // Controller 1 (pravý)
-            controller1 = renderer.xr.getController(0);
-            if (controller1) {
-                controller1.addEventListener('selectstart', () => onControllerSelect(0, true));
-                controller1.addEventListener('selectend', () => onControllerSelect(0, false));
-                userGroup.add(controller1);
-                
-                // Laser
-                const geometry = new THREE.BufferGeometry().setFromPoints([
-                    new THREE.Vector3(0, 0, 0),
-                    new THREE.Vector3(0, 0, -1)
-                ]);
-                const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0xff0000 }));
-                line.scale.z = 15;
-                controller1.add(line);
-                
-                console.log('✅ Controller 1 setup');
-            }
-            
-            // Controller 2 (levý)
-            controller2 = renderer.xr.getController(1);
-            if (controller2) {
-                controller2.addEventListener('selectstart', () => onControllerSelect(1, true));
-                controller2.addEventListener('selectend', () => onControllerSelect(1, false));
-                userGroup.add(controller2);
-                
-                // Laser
-                const geometry = new THREE.BufferGeometry().setFromPoints([
-                    new THREE.Vector3(0, 0, 0),
-                    new THREE.Vector3(0, 0, -1)
-                ]);
-                const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0x00ff00 }));
-                line.scale.z = 15;
-                controller2.add(line);
-                
-                console.log('✅ Controller 2 setup');
-            }
-            
-            console.log('✅ VR Controllers setup dokončen');
-        }
-        
-        // === VR EVENTY ===
-        function onControllerSelect(controllerIndex, pressed) {
-            console.log(`Controller ${controllerIndex} trigger: ${pressed}`);
-            
-            const controller = controllerIndex === 0 ? controller1 : controller2;
-            if (!controller) return;
-            
-            if (pressed) {
-                // Začátek drag
-                isDragging = true;
-                dragController = controller;
-                dragStartPosition = controller.position.clone();
-                dragStartMapCenter = { lat: mapCenter.lat, lng: mapCenter.lng };
-                mapOffset = { x: 0, y: 0 };
-                
-                console.log('🎯 Začátek plynulého drag');
-                updateStatus('🎯 Drag mapa');
-                
-            } else {
-                // Konec drag
-                if (isDragging) {
-                    // Převod offsetu na GPS
-                    const dragToGPS = 0.01;
-                    mapCenter.lng -= mapOffset.x * dragToGPS;
-                    mapCenter.lat += mapOffset.y * dragToGPS;
-                    
-                    // Clamp coordinates
-                    mapCenter.lat = Math.max(-85, Math.min(85, mapCenter.lat));
-                    mapCenter.lng = Math.max(-180, Math.min(180, mapCenter.lng));
-                    
-                    // Reset pozice
-                    mapGroup.position.x = 0;
-                    mapGroup.position.y = 0;
-                    mapOffset = { x: 0, y: 0 };
-                    
-                    isDragging = false;
-                    dragController = null;
-                    dragStartPosition = null;
-                    dragStartMapCenter = null;
-                    
-                    console.log('🎯 Konec drag - načítám nový tile');
-                    loadCenterTile();
-                }
-            }
-        }
-        
-        // === VR INPUT PRO REÁLNÉ MĚŘÍTKO ===
-        function updateVRInput() {
-            if (!renderer.xr.isPresenting) return;
-            
-            const session = renderer.xr.getSession();
-            if (!session || !session.inputSources) return;
-            
-            // Plynulý drag
-            if (isDragging && dragController && dragStartPosition && dragStartMapCenter) {
-                const currentPosition = dragController.position.clone();
-                const deltaPosition = currentPosition.sub(dragStartPosition);
-                
-                const dragSensitivity = 5; // Menší citlivost pro 10x10m canvas
-                mapOffset.x = deltaPosition.x * dragSensitivity;
-                mapOffset.y = deltaPosition.y * dragSensitivity;
-                
-                mapGroup.position.x = mapOffset.x;
-                mapGroup.position.y = mapOffset.y;
-                
-                console.log(`🎯 Drag offset: ${mapOffset.x.toFixed(2)}, ${mapOffset.y.toFixed(2)}`);
-            }
-            
-            // Joysticky pro všechny input sources
-            for (let i = 0; i < session.inputSources.length; i++) {
-                const inputSource = session.inputSources[i];
-                if (!inputSource || !inputSource.gamepad) continue;
-                
-                const gamepad = inputSource.gamepad;
-                
-                if (gamepad.axes && gamepad.axes.length >= 4) {
-                    const leftX = gamepad.axes[0];   // Levý joystick X
-                    const leftY = gamepad.axes[1];   // Levý joystick Y  
-                    const rightX = gamepad.axes[2];  // Pravý joystick X
-                    const rightY = gamepad.axes[3];  // Pravý joystick Y
-                    
-                    // LEVÝ JOYSTICK = REALISTICKÝ POHYB V PROSTORU
-                    if (Math.abs(leftX) > 0.1 || Math.abs(leftY) > 0.1) {
-                        const walkSpeed = 0.05; // Realistická rychlost chůze ~ 5cm/frame = 3m/s
-                        
-                        // Dopředu/dozadu podle směru kamery
-                        const forward = new THREE.Vector3(0, 0, -1);
-                        forward.applyQuaternion(camera.quaternion);
-                        forward.y = 0; // Pohyb jen horizontálně
-                        forward.normalize();
-                        
-                        // Vlevo/vpravo
-                        const right = new THREE.Vector3(1, 0, 0);
-                        right.applyQuaternion(camera.quaternion);
-                        right.y = 0;
-                        right.normalize();
-                        
-                        // Aplikuj realistický pohyb
-                        const movement = new THREE.Vector3();
-                        movement.add(forward.clone().multiplyScalar(leftY * walkSpeed)); // Y = dopředu/dozadu
-                        movement.add(right.clone().multiplyScalar(leftX * walkSpeed));   // X = vlevo/vpravo
-                        
-                        userGroup.position.add(movement);
-                        
-                        // Omez pohyb - nesmíme jít moc daleko od canvasu
-                        userGroup.position.x = Math.max(-10, Math.min(10, userGroup.position.x));
-                        userGroup.position.z = Math.max(5, Math.min(25, userGroup.position.z)); // 5-25m od canvasu
-                        
-                        console.log(`🚶 Realistický pohyb: joystick(${leftX.toFixed(2)}, ${leftY.toFixed(2)}) -> pozice(${userGroup.position.x.toFixed(1)}m, ${userGroup.position.z.toFixed(1)}m)`);
-                    }
-                    
-                    // PRAVÝ JOYSTICK Y = ZOOM
-                    if (Math.abs(rightY) > 0.1) {
-                        const zoomSpeed = 0.05;
-                        mapZoom += rightY * zoomSpeed;
-                        mapZoom = Math.max(1, Math.min(18, mapZoom));
-                        
-                        console.log(`🔍 Zoom: ${mapZoom.toFixed(1)}`);
-                        
-                        if (Math.random() < 0.1) {
-                            loadCenterTile();
-                        }
-                    }
-                    
-                    // PRAVÝ JOYSTICK X = POHYB BLÍŽ/DÁL OD CANVASU
-                    if (Math.abs(rightX) > 0.1) {
-                        const approachSpeed = 0.05;
-                        userGroup.position.z -= rightX * approachSpeed; // Záporné X = blíž
-                        
-                        // Omez vzdálenost 5-25m od canvasu
-                        userGroup.position.z = Math.max(5, Math.min(25, userGroup.position.z));
-                        
-                        console.log(`↔️ Vzdálenost od canvasu: ${userGroup.position.z.toFixed(1)}m`);
-                    }
-                }
-            }
-        }
-        
-        // === DESKTOP OVLÁDÁNÍ PRO REÁLNÉ MĚŘÍTKO ===
-        function setupDesktopControls() {
-            const keys = {};
-            
-            document.addEventListener('keydown', (e) => {
-                keys[e.key.toLowerCase()] = true;
-            });
-            
-            document.addEventListener('keyup', (e) => {
-                keys[e.key.toLowerCase()] = false;
-            });
-            
-            function updateDesktopMovement() {
-                const mapMoveSpeed = 0.01; // Posun GPS
-                const walkSpeed = 0.1; // Realistická rychlost chůze
-                
-                // WASD = posun mapy (GPS)
-                if (keys['w']) {
-                    mapCenter.lat += mapMoveSpeed;
-                    loadCenterTile();
-                }
-                if (keys['s']) {
-                    mapCenter.lat -= mapMoveSpeed;
-                    loadCenterTile();
-                }
-                if (keys['a']) {
-                    mapCenter.lng -= mapMoveSpeed;
-                    loadCenterTile();
-                }
-                if (keys['d']) {
-                    mapCenter.lng += mapMoveSpeed;
-                    loadCenterTile();
-                }
-                
-                // Q/E = zoom
-                if (keys['q'] && mapZoom < 18) {
-                    mapZoom += 0.1;
-                    loadCenterTile();
-                }
-                if (keys['e'] && mapZoom > 1) {
-                    mapZoom -= 0.1;
-                    loadCenterTile();
-                }
-                
-                // Šipky = realistický pohyb kamery (jako chůze)
-                if (keys['arrowup']) {
-                    userGroup.position.z -= walkSpeed; // Blíž k canvasu
-                    userGroup.position.z = Math.max(5, userGroup.position.z);
-                    console.log(`📷 Vzdálenost od canvasu: ${userGroup.position.z.toFixed(1)}m`);
-                }
-                if (keys['arrowdown']) {
-                    userGroup.position.z += walkSpeed; // Dál od canvasu
-                    userGroup.position.z = Math.min(25, userGroup.position.z);
-                    console.log(`📷 Vzdálenost od canvasu: ${userGroup.position.z.toFixed(1)}m`);
-                }
-                if (keys['arrowleft']) {
-                    userGroup.position.x -= walkSpeed; // Vlevo
-                    userGroup.position.x = Math.max(-10, userGroup.position.x);
-                    console.log(`📷 Pozice X: ${userGroup.position.x.toFixed(1)}m`);
-                }
-                if (keys['arrowright']) {
-                    userGroup.position.x += walkSpeed; // Vpravo
-                    userGroup.position.x = Math.min(10, userGroup.position.x);
-                    console.log(`📷 Pozice X: ${userGroup.position.x.toFixed(1)}m`);
-                }
-                
-                mapCenter.lat = Math.max(-85, Math.min(85, mapCenter.lat));
-                mapCenter.lng = Math.max(-180, Math.min(180, mapCenter.lng));
-                
-                requestAnimationFrame(updateDesktopMovement);
-            }
-            updateDesktopMovement();
-            
-            // Mouse click
-            renderer.domElement.addEventListener('click', onMapClick);
-        }
-        
-        function onMapClick(event) {
-            if (!raycaster) return;
-            
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects([mapPlane]);
-            
-            if (intersects.length > 0) {
-                const point = intersects[0].point;
-                const gps = worldToGPSForCanvas(point);
-                addMarker(gps.lat, gps.lng, `Desktop Marker ${markers.length + 1}`);
-                updateGPSDisplay(gps.lat, gps.lng);
-                updateStatus(`📍 Desktop marker: ${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}`);
-            }
-        }
-        
-        // === MARKERY ===
-        function addMarker(lat, lng, label, color = 0xff0000) {
-            const worldPos = gpsToWorld(lat, lng);
-            
-            const geometry = new THREE.ConeGeometry(1, 3, 8);
-            const material = new THREE.MeshBasicMaterial({ color: color });
-            const marker = new THREE.Mesh(geometry, material);
-            
-            marker.position.set(worldPos.x, 1.5, worldPos.z);
-            marker.userData = { label, lat, lng };
-            marker.name = 'marker';
-            
-            mapGroup.add(marker);
-            markers.push(marker);
-            
-            console.log(`📍 Marker přidán: ${label} na ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
-        }
-        
-        // === KOORDINÁTY ===
-        function gpsToWorld(lat, lng) {
-            const scale = 50 / 180;
-            const x = lng * scale;
-            const z = -lat * scale;
-            return { x, z };
-        }
-        
-        function worldToGPS(worldPos) {
-            const scale = 180 / 50;
-            const lng = worldPos.x * scale;
-            const lat = -worldPos.z * scale;
-            return { lat, lng };
-        }
-        
-        // === UTILITY FUNKCE ===
-        function jumpTo(lat, lng) {
-            mapCenter.lat = lat;
-            mapCenter.lng = lng;
-            loadCenterTile();
-            updateStatus(`✈️ Skok na: ${lat.toFixed(3)}, ${lng.toFixed(3)}`);
-        }
-        
-        function clearMarkers() {
-            markers.forEach(marker => mapGroup.remove(marker));
-            markers = [];
-            updateStatus('🗑️ Markery smazány');
-        }
-        
-        function updateGPSDisplay(lat = mapCenter.lat, lng = mapCenter.lng) {
-            document.getElementById('coords').textContent = `GPS: ${lat.toFixed(3)}, ${lng.toFixed(3)}`;
-        }
-        
-        function updateZoomDisplay() {
-            document.getElementById('zoomInfo').textContent = `Zoom: ${mapZoom.toFixed(1)}`;
-        }
-        
-        function updateStatus(message) {
-            document.getElementById('status').textContent = message;
-            console.log(message);
-        }
-        
-        // === ANIMATION LOOP ===
-        function animate() {
-            updateVRInput();
-            
-            // Animace markerů
-            markers.forEach((marker, i) => {
-                marker.rotation.y += 0.02;
-                marker.position.y = 1.5 + Math.sin(Date.now() * 0.003 + i) * 0.2;
-            });
-            
-            updateGPSDisplay();
-            updateZoomDisplay();
-            
-            renderer.render(scene, camera);
-        }
-        
-        // === RESIZE ===
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+
         });
+
+        const config = { attributes: true, childList: true, subtree: true, characterData: true };
+        observer.observe(domElement, config);
+
+        this.observer = observer;
+    }
+
+    get width() {
+        return this._canvas.width;
+    }
+
+    get height() {
+        return this._canvas.height;
+    }
+
+    update() {
+        html2canvas(this.domElement);
+        super.update()
+        this.scheduleUpdate = null;
+    }
+}
+
+// creates a plane mesh and material with an attached HtmlTexture
+// handles events for HTML interactions
+class HtmlMesh { // TODO: derive from mesh class?
+    constructor(domElement, scene) {
+        this.domElement = domElement;
+
+        // create HTML texture
+        this.texture = new HtmlTexture(domElement, scene);
+        this.texture.hasAlpha = true;
+
+        // create plane
+        this.mesh = BABYLON.MeshBuilder.CreatePlane("plane", { height: 5, width: 5 });
+        this.material = new BABYLON.StandardMaterial("Mat", scene);
+
+        // create material
+        this.material.diffuseTexture = this.texture;
+        this.mesh.material = this.material;
+
+        // remember to update or you will get NOTHING :)
+        this.texture.update();
+
+        // setup actions
+        this.mesh.actionManager = new BABYLON.ActionManager(scene);
+
+        // mousedown event on OnPickDownTrigger action
+        this.mesh.actionManager.registerAction(
+            new BABYLON.ExecuteCodeAction(
+                {
+                    trigger: BABYLON.ActionManager.OnPickDownTrigger,
+                },
+                (evt) => {
+                    const htmlCoords = evt.additionalData.getTextureCoordinates();
+                    // XXX: y coordinates are inverted between browser and 3D
+                    htmlevent(this.domElement, "mousedown", htmlCoords.x, 1 - htmlCoords.y);
+                },
+            )
+        );
+
+        // mouseup event on OnPickUpTrigger action
+        this.mesh.actionManager.registerAction(
+            new BABYLON.ExecuteCodeAction(
+                {
+                    trigger: BABYLON.ActionManager.OnPickUpTrigger,
+                },
+                (evt) => {
+                    const htmlCoords = evt.additionalData.getTextureCoordinates();
+                    // XXX: y coordinates are inverted between browser and 3D
+                    htmlevent(this.domElement, "mouseup", htmlCoords.x, 1 - htmlCoords.y);
+                },
+            )
+        );
+
+        // click event on OnPickTrigger action
+        this.mesh.actionManager.registerAction(
+            new BABYLON.ExecuteCodeAction(
+                {
+                    trigger: BABYLON.ActionManager.OnPickTrigger,
+                },
+                (evt) => {
+                    const htmlCoords = evt.additionalData.getTextureCoordinates();
+                    // XXX: y coordinates are inverted between browser and 3D
+                    htmlevent(this.domElement, "click", htmlCoords.x, 1 - htmlCoords.y);
+                },
+            )
+        );
+
+        // mousemove event on OnPointerOverTrigger action
+        this.mesh.actionManager.registerAction(
+            new BABYLON.ExecuteCodeAction(
+                {
+                    trigger: BABYLON.ActionManager.OnPointerOverTrigger,
+                },
+                (evt) => {
+                    // XXX: additionalData is structured different for mousemove
+                    const htmlCoords = evt.additionalData.pickResult.getTextureCoordinates();
+                    // XXX: y coordinates are inverted between browser and 3D
+                    htmlevent(this.domElement, "mousemove", htmlCoords.x, 1 - htmlCoords.y);
+                },
+            )
+        );
+
+        // if you set AbstractMesh.pointerOverDisableMeshTesting to
+        // true, this trigger will be triggered every time you move the
+        // mouse and you are still over the mesh 
+        this.mesh.pointerOverDisableMeshTesting = true;
+    }
+}
+
+// loads a js module
+// from https://www.educative.io/answers/how-to-dynamically-load-a-js-file-in-javascript
+const loadScript = (FILE_URL, async = true, type = "text/javascript") => {
+    return new Promise((resolve, reject) => {
+        try {
+            const scriptEle = document.createElement("script");
+            scriptEle.type = type;
+            scriptEle.async = async;
+            scriptEle.src =FILE_URL;
+
+            scriptEle.addEventListener("load", (ev) => {
+                resolve({ status: true });
+            });
+
+            scriptEle.addEventListener("error", (ev) => {
+                reject({
+                    status: false,
+                    message: `Failed to load the script ${FILE_URL}`
+                });
+            });
+
+            document.body.appendChild(scriptEle);
+        } catch (error) {
+            reject(error);
+        }
+    });
+};
+
+// borrowed from three.js with very slight modifications
+// https://github.com/mrdoob/three.js/blob/43fbcefc202c176b6fc221c439e8dbdf85788679/examples/jsm/interactive/HTMLMesh.js#L125
+const canvases = new WeakMap();
+function html2canvas(element) {
+
+    // TODO: move to relevant code block below
+    const range = document.createRange();
+
+    function Clipper(context) {
+
+        const clips = [];
+        let isClipping = false;
+
+        function doClip() {
+
+            if (isClipping) {
+
+                isClipping = false;
+                context.restore();
+
+            }
+
+            if (clips.length === 0) return;
+
+            let minX = - Infinity, minY = - Infinity;
+            let maxX = Infinity, maxY = Infinity;
+
+            for (let i = 0; i < clips.length; i++) {
+
+                const clip = clips[i];
+
+                minX = Math.max(minX, clip.x);
+                minY = Math.max(minY, clip.y);
+                maxX = Math.min(maxX, clip.x + clip.width);
+                maxY = Math.min(maxY, clip.y + clip.height);
+
+            }
+
+            context.save();
+            context.beginPath();
+            context.rect(minX, minY, maxX - minX, maxY - minY);
+            context.clip();
+
+            isClipping = true;
+
+        }
+
+        return {
+
+            add: function (clip) {
+
+                clips.push(clip);
+                doClip();
+
+            },
+
+            remove: function () {
+
+                clips.pop();
+                doClip();
+
+            }
+
+        };
+
+    }
+
+    function drawText(style, x, y, string) {
+
+        if (string !== '') {
+
+            if (style.textTransform === 'uppercase') {
+
+                string = string.toUpperCase();
+
+            }
+
+            context.font = style.fontWeight + ' ' + style.fontSize + ' ' + style.fontFamily;
+            context.textBaseline = 'top';
+            context.fillStyle = style.color;
+            context.fillText(string, x, y + parseFloat(style.fontSize) * 0.1);
+
+        }
+
+    }
+
+    function buildRectPath(x, y, w, h, r) {
+
+        if (w < 2 * r) r = w / 2;
+        if (h < 2 * r) r = h / 2;
+
+        context.beginPath();
+        context.moveTo(x + r, y);
+        context.arcTo(x + w, y, x + w, y + h, r);
+        context.arcTo(x + w, y + h, x, y + h, r);
+        context.arcTo(x, y + h, x, y, r);
+        context.arcTo(x, y, x + w, y, r);
+        context.closePath();
+
+    }
+
+    function drawBorder(style, which, x, y, width, height) {
+
+        const borderWidth = style[which + 'Width'];
+        const borderStyle = style[which + 'Style'];
+        const borderColor = style[which + 'Color'];
+
+        if (borderWidth !== '0px' && borderStyle !== 'none' && borderColor !== 'transparent' && borderColor !== 'rgba(0, 0, 0, 0)') {
+
+            context.strokeStyle = borderColor;
+            context.lineWidth = parseFloat(borderWidth);
+            context.beginPath();
+            context.moveTo(x, y);
+            context.lineTo(x + width, y + height);
+            context.stroke();
+
+        }
+
+    }
+
+    function drawElement(element, style) {
+
+        let x = 0, y = 0, width = 0, height = 0;
+
+        if (element.nodeType === Node.TEXT_NODE) {
+
+            // text
+
+            range.selectNode(element);
+
+            const rect = range.getBoundingClientRect();
+
+            x = rect.left - offset.left - 0.5;
+            y = rect.top - offset.top - 0.5;
+            width = rect.width;
+            height = rect.height;
+
+            drawText(style, x, y, element.nodeValue.trim());
+
+        } else if (element.nodeType === Node.COMMENT_NODE) {
+
+            return;
+
+        } else if (element instanceof HTMLCanvasElement) {
+
+            // Canvas element
+            if (element.style.display === 'none') return;
+
+            const rect = element.getBoundingClientRect();
+
+            x = rect.left - offset.left - 0.5;
+            y = rect.top - offset.top - 0.5;
+
+            context.save();
+            const dpr = window.devicePixelRatio;
+            context.scale(1 / dpr, 1 / dpr);
+            context.drawImage(element, x, y);
+            context.restore();
+
+        } else if (element instanceof HTMLImageElement) {
+
+            if (element.style.display === 'none') return;
+
+            const rect = element.getBoundingClientRect();
+
+            x = rect.left - offset.left - 0.5;
+            y = rect.top - offset.top - 0.5;
+            width = rect.width;
+            height = rect.height;
+
+            context.drawImage(element, x, y, width, height);
+
+        } else {
+
+            if (element.style.display === 'none') return;
+
+            const rect = element.getBoundingClientRect();
+
+            x = rect.left - offset.left - 0.5;
+            y = rect.top - offset.top - 0.5;
+            width = rect.width;
+            height = rect.height;
+
+            style = window.getComputedStyle(element);
+
+            // Get the border of the element used for fill and border
+
+            buildRectPath(x, y, width, height, parseFloat(style.borderRadius));
+
+            const backgroundColor = style.backgroundColor;
+
+            if (backgroundColor !== 'transparent' && backgroundColor !== 'rgba(0, 0, 0, 0)') {
+
+                context.fillStyle = backgroundColor;
+                context.fill();
+
+            }
+
+            // If all the borders match then stroke the round rectangle
+
+            const borders = ['borderTop', 'borderLeft', 'borderBottom', 'borderRight'];
+
+            let match = true;
+            let prevBorder = null;
+
+            for (const border of borders) {
+
+                if (prevBorder !== null) {
+
+                    match = (style[border + 'Width'] === style[prevBorder + 'Width']) &&
+                        (style[border + 'Color'] === style[prevBorder + 'Color']) &&
+                        (style[border + 'Style'] === style[prevBorder + 'Style']);
+
+                }
+
+                if (match === false) break;
+
+                prevBorder = border;
+
+            }
+
+            if (match === true) {
+
+                // They all match so stroke the rectangle from before allows for border-radius
+
+                const width = parseFloat(style.borderTopWidth);
+
+                if (style.borderTopWidth !== '0px' && style.borderTopStyle !== 'none' && style.borderTopColor !== 'transparent' && style.borderTopColor !== 'rgba(0, 0, 0, 0)') {
+
+                    context.strokeStyle = style.borderTopColor;
+                    context.lineWidth = width;
+                    context.stroke();
+
+                }
+
+            } else {
+
+                // Otherwise draw individual borders
+
+                drawBorder(style, 'borderTop', x, y, width, 0);
+                drawBorder(style, 'borderLeft', x, y, 0, height);
+                drawBorder(style, 'borderBottom', x, y + height, width, 0);
+                drawBorder(style, 'borderRight', x + width, y, 0, height);
+
+            }
+
+            if (element instanceof HTMLInputElement) {
+
+                let accentColor = style.accentColor;
+
+                if (accentColor === undefined || accentColor === 'auto') accentColor = style.color;
+
+                // TODO
+                // color.set(accentColor);
+
+                // const luminance = Math.sqrt(0.299 * (color.r ** 2) +
+                // 0.587 * (color.g ** 2) + 0.114 * (color.b ** 2));
+                const luminance = 0;
+                const accentTextColor = luminance < 0.5 ? 'white' : '#111111';
+
+                if (element.type === 'radio') {
+
+                    buildRectPath(x, y, width, height, height);
+
+                    context.fillStyle = 'white';
+                    context.strokeStyle = accentColor;
+                    context.lineWidth = 1;
+                    context.fill();
+                    context.stroke();
+
+                    if (element.checked) {
+
+                        buildRectPath(x + 2, y + 2, width - 4, height - 4, height);
+
+                        context.fillStyle = accentColor;
+                        context.strokeStyle = accentTextColor;
+                        context.lineWidth = 2;
+                        context.fill();
+                        context.stroke();
+
+                    }
+
+                }
+
+                if (element.type === 'checkbox') {
+
+                    buildRectPath(x, y, width, height, 2);
+
+                    context.fillStyle = element.checked ? accentColor : 'white';
+                    context.strokeStyle = element.checked ? accentTextColor : accentColor;
+                    context.lineWidth = 1;
+                    context.stroke();
+                    context.fill();
+
+                    if (element.checked) {
+
+                        const currentTextAlign = context.textAlign;
+
+                        context.textAlign = 'center';
+
+                        const properties = {
+                            color: accentTextColor,
+                            fontFamily: style.fontFamily,
+                            fontSize: height + 'px',
+                            fontWeight: 'bold'
+                        };
+
+                        drawText(properties, x + (width / 2), y, '✔');
+
+                        context.textAlign = currentTextAlign;
+
+                    }
+
+                }
+
+                if (element.type === 'range') {
+
+                    const [min, max, value] = ['min', 'max', 'value'].map(property => parseFloat(element[property]));
+                    const position = ((value - min) / (max - min)) * (width - height);
+
+                    buildRectPath(x, y + (height / 4), width, height / 2, height / 4);
+                    context.fillStyle = accentTextColor;
+                    context.strokeStyle = accentColor;
+                    context.lineWidth = 1;
+                    context.fill();
+                    context.stroke();
+
+                    buildRectPath(x, y + (height / 4), position + (height / 2), height / 2, height / 4);
+                    context.fillStyle = accentColor;
+                    context.fill();
+
+                    buildRectPath(x + position, y, height, height, height / 2);
+                    context.fillStyle = accentColor;
+                    context.fill();
+
+                }
+
+                if (element.type === 'color' || element.type === 'text' || element.type === 'number') {
+
+                    clipper.add({ x: x, y: y, width: width, height: height });
+
+                    drawText(style, x + parseInt(style.paddingLeft), y + parseInt(style.paddingTop), element.value);
+
+                    clipper.remove();
+
+                }
+
+            }
+
+        }
+
+        /*
+        // debug
+        context.strokeStyle = '#' + Math.random().toString( 16 ).slice( - 3 );
+        context.strokeRect( x - 0.5, y - 0.5, width + 1, height + 1 );
+        */
+
+        const isClipping = style.overflow === 'auto' || style.overflow === 'hidden';
+
+        if (isClipping) clipper.add({ x: x, y: y, width: width, height: height });
+
+        for (let i = 0; i < element.childNodes.length; i++) {
+
+            drawElement(element.childNodes[i], style);
+
+        }
+
+        if (isClipping) clipper.remove();
+
+    }
+
+    const offset = element.getBoundingClientRect();
+
+    let canvas = canvases.get(element);
+
+    if (canvas === undefined) {
+
+        canvas = document.createElement('canvas');
+        canvas.width = offset.width;
+        canvas.height = offset.height;
+        console.log(`initial size: ${canvas.width}x${canvas.height}`)
+        canvases.set(element, canvas);
+
+    }
+
+    const context = canvas.getContext('2d'/*, { alpha: false }*/);
+
+    const clipper = new Clipper(context);
+
+    // console.time( 'drawElement' );
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+
+    drawElement(element);
+
+    // console.timeEnd( 'drawElement' );
+
+    return canvas;
+}
+
+function htmlevent(element, event, x, y) {
+    const mouseEventInit = {
+        clientX: (x * element.offsetWidth) + element.offsetLeft,
+        clientY: (y * element.offsetHeight) + element.offsetTop,
+        view: element.ownerDocument.defaultView
+    };
+
+    const m = new MouseEvent(event, mouseEventInit);
+    window.dispatchEvent(m);
+
+    const rect = element.getBoundingClientRect();
+
+    x = x * rect.width + rect.left;
+    y = y * rect.height + rect.top;
+
+    function traverse(element) {
+
+        if (element.nodeType !== Node.TEXT_NODE && element.nodeType !== Node.COMMENT_NODE) {
+            const rect = element.getBoundingClientRect();
+
+            if (x > rect.left && x < rect.right && y > rect.top && y < rect.bottom) {
+                element.dispatchEvent(new MouseEvent(event, mouseEventInit));
+
+                if (element instanceof HTMLInputElement && element.type === 'range' && (event === 'mousedown' || event === 'click')) {
+                    const [min, max] = ['min', 'max'].map(property => parseFloat(element[property]));
+
+                    const width = rect.width;
+                    const offsetX = x - rect.x;
+                    const proportion = offsetX / width;
+                    element.value = min + (max - min) * proportion;
+                    element.dispatchEvent(new InputEvent('input', { bubbles: true }));
+                }
+            }
+
+            for (let i = 0; i < element.childNodes.length; i++) {
+                traverse(element.childNodes[i]);
+            }
+        }
+    }
+
+    traverse(element);
+}
+                window.initFunction = async function() {
+                    
+                    
+                    
+                    var asyncEngineCreation = async function() {
+                        try {
+                        return createDefaultEngine();
+                        } catch(e) {
+                        console.log("the available createEngine function failed. Creating the default engine instead");
+                        return createDefaultEngine();
+                        }
+                    }
+
+                    window.engine = await asyncEngineCreation();
+                    
+                    const engineOptions = window.engine.getCreationOptions?.();
+                    if (!engineOptions || engineOptions.audioEngine !== false) {
+                        
+                    }
+        if (!engine) throw 'engine should not be null.';
+        startRenderLoop(engine, canvas);
+        window.scene = createScene();};
+        initFunction().then(() => {scene.then(returnedScene => { sceneToRender = returnedScene; });
         
-        // === GLOBÁLNÍ FUNKCE ===
-        window.jumpTo = jumpTo;
-        window.clearMarkers = clearMarkers;
-        
-        // === START ===
-        init();
-        console.log('🗺️ Jednoduchá VR mapa připravena bez importů!');
-        
-    </script>
-</body>
+                    });
+
+                    // Resize
+                    window.addEventListener("resize", function () {
+                        engine.resize();
+                    });
+        </script>
+    </body>
 </html>
