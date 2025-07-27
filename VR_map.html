@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VR Satelitní Mapa - Meta Quest 3</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            z-index: 100;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 400px;
+        }
+        
+        #vrButton {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+        }
+        
+        .back-button {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 101;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .back-button:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        canvas {
+            display: block;
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 18px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <a href="index.html" class="back-button">← Zpět na výběr</a>
+    
+    <div id="info">
+        <h3>🌍 VR Satelitní Mapa</h3>
+        <p><strong>Desktop:</strong> Drag pro rotaci, kolečko pro zoom</p>
+        <p><strong>VR:</strong> Przyrodní pohyb hlavy a ovladače</p>
+        <p><strong>Kontroly:</strong> Trigger = teleport, Grip = grab world</p>
+        <div id="coords">GPS: 49.75, 15.5</div>
+    </div>
+    
+    <div class="loading" id="loading">🚀 Načítám VR mapu...</div>
+    <div id="vrButton"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script type="module">
+        import { VRButton } from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/webxr/VRButton.js';
+        import { XRControllerModelFactory } from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/webxr/XRControllerModelFactory.js';
+        
+        // === ZÁKLADNÍ SETUP ===
+        let scene, camera, renderer, earth, controls;
+        let controller1, controller2, controllerGrip1, controllerGrip2;
+        let raycaster, intersected = [];
+        let tempMatrix = new THREE.Matrix4();
+        let markers = [];
+        let userPosition = new THREE.Vector3(0, 1.6, 3); // výška očí v VR
+        
+        // === INICIALIZACE ===
+        function init() {
+            console.log('🚀 Inicializuji VR mapu...');
+            
+            // Scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a0a);
+            
+            // Camera - pro VR se automaticky upravuje
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.copy(userPosition);
+            
+            // Renderer s WebXR
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.xr.enabled = true; // 🔥 Klíčové pro VR!
+            document.body.appendChild(renderer.domElement);
+            
+            // VR Button
+            document.getElementById('vrButton').appendChild(VRButton.createButton(renderer));
+            
+            setupLighting();
+            createEarth();
+            setupVRControllers();
+            setupInteractions();
+            
+            // Animation loop pro VR
+            renderer.setAnimationLoop(animate);
+            
+            document.getElementById('loading').style.display = 'none';
+            console.log('✅ VR mapa připravena!');
+        }
+        
+        // === OSVĚTLENÍ ===
+        function setupLighting() {
+            // Ambientní světlo
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
+            
+            // Slunce
+            const sunLight = new THREE.DirectionalLight(0xffffff, 1);
+            sunLight.position.set(5, 5, 5);
+            sunLight.castShadow = true;
+            sunLight.shadow.camera.near = 0.1;
+            sunLight.shadow.camera.far = 50;
+            sunLight.shadow.camera.left = -10;
+            sunLight.shadow.camera.right = 10;
+            sunLight.shadow.camera.top = 10;
+            sunLight.shadow.camera.bottom = -10;
+            scene.add(sunLight);
+        }
+        
+        // === ZEMSKÝ GLÓBUS ===
+        function createEarth() {
+            console.log('🌍 Vytvářím Zemi...');
+            
+            // Geometrie
+            const geometry = new THREE.SphereGeometry(2, 64, 32);
+            
+            // Textura - můžeme použít vaše satelitní tiles
+            const textureLoader = new THREE.TextureLoader();
+            const earthTexture = createProceduralEarthTexture();
+            
+            // Material
+            const material = new THREE.MeshLambertMaterial({
+                map: earthTexture,
+                transparent: false
+            });
+            
+            earth = new THREE.Mesh(geometry, material);
+            earth.receiveShadow = true;
+            earth.position.set(0, 0, -5); // před uživatelem
+            scene.add(earth);
+            
+            // Přidání markerů vzorových měst
+            addSampleMarkers();
+        }
+        
+        // === PROCEDURÁLNÍ TEXTURA ZEMĚ ===
+        function createProceduralEarthTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            
+            // Gradient kontinentů
+            const gradient = ctx.createLinearGradient(0, 0, 1024, 512);
+            gradient.addColorStop(0, '#1e3c72');
+            gradient.addColorStop(0.3, '#2a5298');
+            gradient.addColorStop(0.5, '#1e3c72');
+            gradient.addColorStop(0.7, '#134e5e');
+            gradient.addColorStop(1, '#0f4c75');
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 1024, 512);
+            
+            // Simulace kontinentů
+            ctx.fillStyle = '#2d5016';
+            drawContinent(ctx, 200, 150, 150, 100); // Evropa
+            drawContinent(ctx, 400, 200, 180, 120); // Asie
+            drawContinent(ctx, 100, 300, 120, 80);  // Afrika
+            drawContinent(ctx, 750, 200, 100, 150); // Amerika
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.ClampToEdgeWrapping;
+            return texture;
+        }
+        
+        function drawContinent(ctx, x, y, w, h) {
+            ctx.beginPath();
+            ctx.ellipse(x, y, w, h, 0, 0, 2 * Math.PI);
+            ctx.fill();
+        }
+        
+        // === VR OVLADAČE ===
+        function setupVRControllers() {
+            console.log('🎮 Nastavuji VR ovladače...');
+            
+            const controllerModelFactory = new XRControllerModelFactory();
+            
+            // Controller 1 (pravý)
+            controller1 = renderer.xr.getController(0);
+            controller1.addEventListener('selectstart', onSelectStart);
+            controller1.addEventListener('selectend', onSelectEnd);
+            scene.add(controller1);
+            
+            controllerGrip1 = renderer.xr.getControllerGrip(0);
+            controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+            scene.add(controllerGrip1);
+            
+            // Controller 2 (levý)
+            controller2 = renderer.xr.getController(1);
+            controller2.addEventListener('selectstart', onSelectStart);
+            controller2.addEventListener('selectend', onSelectEnd);
+            scene.add(controller2);
+            
+            controllerGrip2 = renderer.xr.getControllerGrip(1);
+            controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
+            scene.add(controllerGrip2);
+            
+            // Paprsek z ovladače
+            const geometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(0, 0, 0),
+                new THREE.Vector3(0, 0, -1)
+            ]);
+            
+            const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: 0xff0000 }));
+            line.name = 'line';
+            line.scale.z = 5;
+            
+            controller1.add(line.clone());
+            controller2.add(line.clone());
+        }
+        
+        // === INTERAKCE ===
+        function setupInteractions() {
+            raycaster = new THREE.Raycaster();
+            
+            // Desktop controls jako fallback
+            if (!navigator.xr) {
+                setupDesktopControls();
+            }
+        }
+        
+        function setupDesktopControls() {
+            let isMouseDown = false;
+            let mouseX = 0, mouseY = 0;
+            
+            renderer.domElement.addEventListener('mousedown', (e) => {
+                isMouseDown = true;
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+            
+            renderer.domElement.addEventListener('mouseup', () => {
+                isMouseDown = false;
+            });
+            
+            renderer.domElement.addEventListener('mousemove', (e) => {
+                if (!isMouseDown) return;
+                
+                const deltaX = e.clientX - mouseX;
+                const deltaY = e.clientY - mouseY;
+                
+                earth.rotation.y += deltaX * 0.01;
+                earth.rotation.x += deltaY * 0.01;
+                
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+                
+                updateGPSDisplay();
+            });
+            
+            renderer.domElement.addEventListener('wheel', (e) => {
+                const scale = 1 + e.deltaY * 0.001;
+                earth.scale.multiplyScalar(scale);
+                earth.scale.clampScalar(0.5, 5);
+            });
+        }
+        
+        // === VR EVENTS ===
+        function onSelectStart(event) {
+            const controller = event.target;
+            const intersections = getIntersections(controller);
+            
+            if (intersections.length > 0) {
+                const intersection = intersections[0];
+                
+                // Teleportace k místu na Zemi
+                teleportToPoint(intersection.point);
+                
+                // Haptic feedback
+                if (controller.gamepad && controller.gamepad.hapticActuators) {
+                    controller.gamepad.hapticActuators[0].pulse(0.5, 100);
+                }
+            }
+        }
+        
+        function onSelectEnd(event) {
+            // End selection
+        }
+        
+        function getIntersections(controller) {
+            tempMatrix.identity().extractRotation(controller.matrixWorld);
+            raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+            raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+            
+            return raycaster.intersectObjects([earth, ...markers]);
+        }
+        
+        function teleportToPoint(point) {
+            // Převod 3D pozice na GPS souřadnice
+            const spherical = new THREE.Spherical();
+            spherical.setFromVector3(point.clone().normalize());
+            
+            const lat = (Math.PI / 2 - spherical.phi) * 180 / Math.PI;
+            const lng = (spherical.theta - Math.PI) * 180 / Math.PI;
+            
+            console.log(`📍 Teleport na: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+            updateGPSDisplay(lat, lng);
+            
+            // Zoom na místo
+            const targetPosition = point.clone().normalize().multiplyScalar(3.5);
+            camera.position.copy(targetPosition);
+            camera.lookAt(point);
+        }
+        
+        // === MARKERY ===
+        function addSampleMarkers() {
+            const sampleLocations = [
+                {name: "Praha", lat: 50.0755, lng: 14.4378, color: 0xff0000},
+                {name: "Brno", lat: 49.1951, lng: 16.6068, color: 0x00ff00},
+                {name: "Plzeň", lat: 49.7384, lng: 13.3736, color: 0x0000ff},
+                {name: "Ostrava", lat: 49.8175, lng: 18.2625, color: 0xffff00}
+            ];
+            
+            sampleLocations.forEach(location => {
+                addMarker(location.lat, location.lng, location.name, location.color);
+            });
+        }
+        
+        function addMarker(lat, lng, label, color = 0xff0000) {
+            // Převod GPS na 3D pozici na kouli
+            const phi = (90 - lat) * Math.PI / 180;
+            const theta = (lng + 180) * Math.PI / 180;
+            
+            const x = 2.1 * Math.sin(phi) * Math.cos(theta);
+            const y = 2.1 * Math.cos(phi);
+            const z = 2.1 * Math.sin(phi) * Math.sin(theta);
+            
+            // Marker geometrie
+            const geometry = new THREE.SphereGeometry(0.02, 8, 6);
+            const material = new THREE.MeshBasicMaterial({ color: color });
+            const marker = new THREE.Mesh(geometry, material);
+            
+            marker.position.set(x, y, z);
+            marker.userData = { label, lat, lng };
+            
+            earth.add(marker);
+            markers.push(marker);
+            
+            // Text label
+            const textGeometry = createTextGeometry(label);
+            const textMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const textMesh = new THREE.Mesh(textGeometry, textMaterial);
+            textMesh.position.copy(marker.position);
+            textMesh.position.multiplyScalar(1.1);
+            textMesh.scale.set(0.5, 0.5, 0.5);
+            textMesh.lookAt(camera.position);
+            
+            earth.add(textMesh);
+        }
+        
+        function createTextGeometry(text) {
+            // Zjednodušená text geometrie
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = 256;
+            canvas.height = 64;
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '32px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, 128, 40);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const geometry = new THREE.PlaneGeometry(0.5, 0.125);
+            const material = new THREE.MeshBasicMaterial({
+                map: texture,
+                transparent: true,
+                alphaTest: 0.1
+            });
+            
+            return geometry;
+        }
+        
+        // === UTILS ===
+        function updateGPSDisplay(lat = 49.75, lng = 15.5) {
+            document.getElementById('coords').textContent = `GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        }
+        
+        // === ANIMATION LOOP ===
+        function animate() {
+            // Jemná rotace Země
+            earth.rotation.y += 0.001;
+            
+            // Update markerů aby se dívaly na kameru
+            markers.forEach(marker => {
+                // marker.lookAt(camera.position);
+            });
+            
+            renderer.render(scene, camera);
+        }
+        
+        // === RESIZE ===
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        // === START ===
+        init();
+        
+        console.log('🌍 VR Mapa připravena pro Meta Quest 3!');
+        
+    </script>
+</body>
+</html>f

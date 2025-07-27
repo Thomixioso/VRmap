@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌍 Satelitní Mapa - 2D & VR</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            text-align: center;
+            max-width: 900px;
+            padding: 40px;
+        }
+        
+        h1 {
+            font-size: 3.5em;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .subtitle {
+            font-size: 1.2em;
+            margin-bottom: 50px;
+            opacity: 0.9;
+        }
+        
+        .options {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .option {
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 40px 30px;
+            width: 350px;
+            text-decoration: none;
+            color: white;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(255,255,255,0.2);
+            backdrop-filter: blur(10px);
+        }
+        
+        .option:hover {
+            transform: translateY(-10px);
+            background: rgba(255,255,255,0.2);
+            border-color: rgba(255,255,255,0.4);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+        
+        .option-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+            display: block;
+        }
+        
+        .option h2 {
+            font-size: 1.8em;
+            margin-bottom: 15px;
+        }
+        
+        .option p {
+            line-height: 1.6;
+            opacity: 0.9;
+        }
+        
+        .version {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            opacity: 0.6;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌍 Satelitní Mapa</h1>
+        <p class="subtitle">Vyberte způsob prohlížení světa</p>
+        
+        <div class="options">
+            <a href="2d_map.html" class="option">
+                <span class="option-icon">🗺️</span>
+                <h2>Klasická 2D Mapa</h2>
+                <p>Tradiční mapové zobrazení s pokročilými filtry, overlay vrstvami a color correction</p>
+            </a>
+            
+            <a href="VR_map.html" class="option">
+                <span class="option-icon">🥽</span>
+                <h2>VR Mapa</h2>
+                <p>Immersivní VR prostředí pro Meta Quest 3 a další WebXR headsety</p>
+            </a>
+        </div>
+    </div>
+    
+    <div class="version">v1.0 - WebXR Ready</div>
+</body>
+</html>
