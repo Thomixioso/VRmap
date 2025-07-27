@@ -109,10 +109,10 @@
         </ul>
         <p><strong>VR:</strong></p>
         <ul style="font-size: 12px; margin: 5px 0; padding-left: 15px;">
-            <li>Trigger = drag mapa (stiskni a táhni)</li>
-            <li>Levý joystick = zoom in/out</li>
-            <li>Pravý joystick = posun mapy</li>
-            <li>Squeeze = zatím nepoužito</li>
+            <li>Trigger = plynulý drag mapy</li>
+            <li>Levý joystick = pohyb ve VR prostoru</li>
+            <li>Pravý joystick Y = zoom in/out</li>
+            <li>Pravý joystick X = rotace mapy</li>
         </ul>
         <div id="coords">GPS: 50.075, 14.438</div>
         <div id="zoomInfo">Zoom: 10</div>
@@ -143,7 +143,7 @@
         import { XRControllerModelFactory } from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/webxr/XRControllerModelFactory.js';
         
         // === NASTAVENÍ ===
-        let scene, camera, renderer, mapGroup;
+        let scene, camera, renderer, mapGroup, userGroup;
         let controller1, controller2, controllerGrip1, controllerGrip2;
         let raycaster, mouse = new THREE.Vector2();
         let markers = [];
@@ -164,6 +164,7 @@
         let dragStartPosition = null;
         let dragStartMapCenter = null;
         let dragController = null;
+        let mapOffset = { x: 0, y: 0 }; // Pro plynulý drag
         
         // === INICIALIZACE ===
         function init() {
@@ -283,11 +284,11 @@
             controller1.addEventListener('selectend', () => onControllerSelect(0, false));
             controller1.addEventListener('squeezestart', () => onControllerSqueeze(0, true));
             controller1.addEventListener('squeezeend', () => onControllerSqueeze(0, false));
-            scene.add(controller1);
+            userGroup.add(controller1);
             
             controllerGrip1 = renderer.xr.getControllerGrip(0);
             controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
-            scene.add(controllerGrip1);
+            userGroup.add(controllerGrip1);
             
             // Controller 1 (levý obvykle)  
             controller2 = renderer.xr.getController(1);
@@ -295,11 +296,11 @@
             controller2.addEventListener('selectend', () => onControllerSelect(1, false));
             controller2.addEventListener('squeezestart', () => onControllerSqueeze(1, true));
             controller2.addEventListener('squeezeend', () => onControllerSqueeze(1, false));
-            scene.add(controller2);
+            userGroup.add(controller2);
             
             controllerGrip2 = renderer.xr.getControllerGrip(1);
             controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
-            scene.add(controllerGrip2);
+            userGroup.add(controllerGrip2);
             
             // Přidej laser pointery
             addLaserToController(controller1);
@@ -332,20 +333,35 @@
                 dragController = controller;
                 dragStartPosition = controller.position.clone();
                 dragStartMapCenter = { lat: mapCenter.lat, lng: mapCenter.lng };
+                mapOffset = { x: 0, y: 0 }; // Reset offset
                 
-                console.log('🎯 Začátek drag');
-                updateStatus('🎯 Drag mapa');
+                console.log('🎯 Začátek plynulého drag');
+                updateStatus('🎯 Drag mapa - plynule');
                 
             } else {
                 // Konec drag
                 if (isDragging) {
+                    // Převod vizuálního offsetu na skutečnou změnu mapCenter
+                    const dragToGPS = 0.01; // Conversion factor
+                    mapCenter.lng -= mapOffset.x * dragToGPS;
+                    mapCenter.lat += mapOffset.y * dragToGPS;
+                    
+                    // Clamp coordinates
+                    mapCenter.lat = Math.max(-85, Math.min(85, mapCenter.lat));
+                    mapCenter.lng = Math.max(-180, Math.min(180, mapCenter.lng));
+                    
+                    // Reset vizuální pozice
+                    mapGroup.position.x = 0;
+                    mapGroup.position.y = 0;
+                    mapOffset = { x: 0, y: 0 };
+                    
                     isDragging = false;
                     dragController = null;
                     dragStartPosition = null;
                     dragStartMapCenter = null;
                     
-                    console.log('🎯 Konec drag');
-                    updateStatus('✅ Drag ukončen');
+                    console.log('🎯 Konec drag - načítám nový tile');
+                    updateStatus('✅ Drag ukončen - loading');
                     
                     // Načti nový tile po drag
                     loadCenterTile();
@@ -375,24 +391,21 @@
             const session = renderer.xr.getSession();
             if (!session || !session.inputSources) return;
             
-            // Sleduj drag během držení trigger
+            // Sleduj drag během držení trigger - PLYNULÝ DRAG
             if (isDragging && dragController && dragStartPosition && dragStartMapCenter) {
                 const currentPosition = dragController.position.clone();
                 const deltaPosition = currentPosition.sub(dragStartPosition);
                 
-                // Převod VR pohybu na posun mapy
-                const dragSensitivity = 0.5;
-                const deltaLng = deltaPosition.x * dragSensitivity;
-                const deltaLat = deltaPosition.y * dragSensitivity;
+                // Převod VR pohybu na offset mapy (OKAMŽITÝ vizuální feedback)
+                const dragSensitivity = 30; // Zvýšená citlivost
+                mapOffset.x = deltaPosition.x * dragSensitivity;
+                mapOffset.y = deltaPosition.y * dragSensitivity;
                 
-                mapCenter.lng = dragStartMapCenter.lng - deltaLng;
-                mapCenter.lat = dragStartMapCenter.lat + deltaLat;
+                // Aplikuj offset na mapGroup pro okamžitý vizuální efekt
+                mapGroup.position.x = mapOffset.x;
+                mapGroup.position.y = mapOffset.y;
                 
-                // Clamp coordinates
-                mapCenter.lat = Math.max(-85, Math.min(85, mapCenter.lat));
-                mapCenter.lng = Math.max(-180, Math.min(180, mapCenter.lng));
-                
-                console.log(`🎯 Drag: ${deltaPosition.x.toFixed(2)}, ${deltaPosition.y.toFixed(2)}`);
+                console.log(`🎯 Plynulý drag: ${deltaPosition.x.toFixed(3)}, ${deltaPosition.y.toFixed(3)}`);
             }
             
             // Projdi všechny input sources pro joysticky
@@ -409,13 +422,33 @@
                     const rightThumbstickX = gamepad.axes[2];  // Pravý X  
                     const rightThumbstickY = gamepad.axes[3];  // Pravý Y
                     
-                    // LEVÝ JOYSTICK = ZOOM
-                    if (Math.abs(leftThumbstickY) > 0.1) {
-                        const zoomSpeed = 0.05;
-                        mapZoom += leftThumbstickY * zoomSpeed; // Nahoru = zoom in
+                    // LEVÝ JOYSTICK = LOCOMOTION (pohyb ve VR prostoru)
+                    if (Math.abs(leftThumbstickX) > 0.1 || Math.abs(leftThumbstickY) > 0.1) {
+                        const moveSpeed = 0.5; // Rychlost pohybu
+                        
+                        // Převod thumbstick pohybu na world space pohyb
+                        const forward = new THREE.Vector3(0, 0, -1);
+                        const right = new THREE.Vector3(1, 0, 0);
+                        
+                        // Aplikuj rotaci headset pro správný směr
+                        forward.applyQuaternion(userGroup.quaternion);
+                        right.applyQuaternion(userGroup.quaternion);
+                        
+                        // Pohyb dopředu/dozadu
+                        userGroup.position.add(forward.multiplyScalar(leftThumbstickY * moveSpeed));
+                        // Pohyb vlevo/vpravo  
+                        userGroup.position.add(right.multiplyScalar(leftThumbstickX * moveSpeed));
+                        
+                        console.log(`🚶 Locomotion: ${leftThumbstickX.toFixed(2)}, ${leftThumbstickY.toFixed(2)}`);
+                    }
+                    
+                    // PRAVÝ JOYSTICK = ZOOM
+                    if (Math.abs(rightThumbstickY) > 0.1) {
+                        const zoomSpeed = 0.08;
+                        mapZoom += rightThumbstickY * zoomSpeed; // Nahoru = zoom in
                         mapZoom = Math.max(1, Math.min(18, mapZoom));
                         
-                        console.log(`🔍 Levý joystick zoom: ${mapZoom.toFixed(1)}`);
+                        console.log(`🔍 Pravý joystick zoom: ${mapZoom.toFixed(1)}`);
                         
                         // Reload tile při zoom změně
                         if (Math.random() < 0.1) {
@@ -423,22 +456,11 @@
                         }
                     }
                     
-                    // PRAVÝ JOYSTICK = POSUN (pouze když nedraguju)
-                    if (!isDragging && (Math.abs(rightThumbstickX) > 0.1 || Math.abs(rightThumbstickY) > 0.1)) {
-                        const moveSpeed = 0.02;
-                        mapCenter.lng += rightThumbstickX * moveSpeed;
-                        mapCenter.lat -= rightThumbstickY * moveSpeed; // Inverted Y
-                        
-                        // Clamp coordinates
-                        mapCenter.lat = Math.max(-85, Math.min(85, mapCenter.lat));
-                        mapCenter.lng = Math.max(-180, Math.min(180, mapCenter.lng));
-                        
-                        console.log(`➡️ Pravý joystick posun: ${rightThumbstickX.toFixed(2)}, ${rightThumbstickY.toFixed(2)}`);
-                        
-                        // Reload tile při posunu
-                        if (Math.random() < 0.05) {
-                            loadCenterTile();
-                        }
+                    // PRAVÝ JOYSTICK X = ROTACE MAPY (bonus)
+                    if (Math.abs(rightThumbstickX) > 0.1) {
+                        const rotSpeed = 0.02;
+                        mapGroup.rotation.z += rightThumbstickX * rotSpeed;
+                        console.log(`🔄 Rotace mapy: ${(mapGroup.rotation.z * 180 / Math.PI).toFixed(1)}°`);
                     }
                 }
             }
@@ -526,7 +548,8 @@
             marker.userData = { label, lat, lng };
             marker.name = 'marker';
             
-            scene.add(marker);
+            // Přidej marker do mapGroup aby se pohyboval s mapou
+            mapGroup.add(marker);
             markers.push(marker);
             
             console.log(`📍 Marker přidán: ${label} na ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
@@ -557,7 +580,7 @@
         }
         
         function clearMarkers() {
-            markers.forEach(marker => scene.remove(marker));
+            markers.forEach(marker => mapGroup.remove(marker));
             markers = [];
             updateStatus('🗑️ Markery smazány');
         }
