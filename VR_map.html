@@ -275,38 +275,58 @@
         function setupVRControllers() {
             console.log('🎮 Nastavuji VR ovladače...');
             
+            // Debug - zkontroluj že userGroup existuje
+            if (!userGroup) {
+                console.error('❌ userGroup is undefined!');
+                return;
+            }
+            
             const controllerModelFactory = new XRControllerModelFactory();
             raycaster = new THREE.Raycaster();
             
             // Controller 0 (pravý obvykle)
             controller1 = renderer.xr.getController(0);
-            controller1.addEventListener('selectstart', () => onControllerSelect(0, true));
-            controller1.addEventListener('selectend', () => onControllerSelect(0, false));
-            controller1.addEventListener('squeezestart', () => onControllerSqueeze(0, true));
-            controller1.addEventListener('squeezeend', () => onControllerSqueeze(0, false));
-            userGroup.add(controller1);
+            if (controller1) {
+                controller1.addEventListener('selectstart', () => onControllerSelect(0, true));
+                controller1.addEventListener('selectend', () => onControllerSelect(0, false));
+                controller1.addEventListener('squeezestart', () => onControllerSqueeze(0, true));
+                controller1.addEventListener('squeezeend', () => onControllerSqueeze(0, false));
+                userGroup.add(controller1);
+                console.log('✅ Controller 1 přidán');
+            }
             
             controllerGrip1 = renderer.xr.getControllerGrip(0);
-            controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
-            userGroup.add(controllerGrip1);
+            if (controllerGrip1) {
+                controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+                userGroup.add(controllerGrip1);
+                console.log('✅ ControllerGrip 1 přidán');
+            }
             
             // Controller 1 (levý obvykle)  
             controller2 = renderer.xr.getController(1);
-            controller2.addEventListener('selectstart', () => onControllerSelect(1, true));
-            controller2.addEventListener('selectend', () => onControllerSelect(1, false));
-            controller2.addEventListener('squeezestart', () => onControllerSqueeze(1, true));
-            controller2.addEventListener('squeezeend', () => onControllerSqueeze(1, false));
-            userGroup.add(controller2);
+            if (controller2) {
+                controller2.addEventListener('selectstart', () => onControllerSelect(1, true));
+                controller2.addEventListener('selectend', () => onControllerSelect(1, false));
+                controller2.addEventListener('squeezestart', () => onControllerSqueeze(1, true));
+                controller2.addEventListener('squeezeend', () => onControllerSqueeze(1, false));
+                userGroup.add(controller2);
+                console.log('✅ Controller 2 přidán');
+            }
             
             controllerGrip2 = renderer.xr.getControllerGrip(1);
-            controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
-            userGroup.add(controllerGrip2);
+            if (controllerGrip2) {
+                controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
+                userGroup.add(controllerGrip2);
+                console.log('✅ ControllerGrip 2 přidán');
+            }
             
             // Přidej laser pointery
-            addLaserToController(controller1);
-            addLaserToController(controller2);
+            if (controller1) addLaserToController(controller1);
+            if (controller2) addLaserToController(controller2);
             
-            controllers = [controller1, controller2];
+            controllers = [controller1, controller2].filter(c => c); // Remove nulls
+            
+            console.log(`✅ VR Controllers setup dokončen: ${controllers.length} ovladačů`);
         }
         
         function addLaserToController(controller) {
