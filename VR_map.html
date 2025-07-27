@@ -1,127 +1,97 @@
 <!doctype html>
 <html>
-<head>
-    <meta charset="utf-8" />
-    <title>Interaktivní 2D mapa světa ve VR</title>
-    <!-- Babylon.js knihovna -->
-    <script src="https://cdn.babylonjs.com/babylon.js"></script>
-    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
-    <style>
-        html, body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            width: 100%;
-            height: 100%;
-        }
-        #renderCanvas {
-            width: 100%;
-            height: 100%;
-            touch-action: none;
-        }
-        /* Styl pro mapu */
-        #mapContainer {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            width: 800px; /* zachováme velikost kanvasu */
-            height: 400px;
-            background: rgba(44, 62, 80, 0.8);
-            border-radius: 10px;
-            padding: 10px;
-            z-index: 10;
-        }
-        #mapCanvas {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
-        .continent {
-            position: absolute;
-            border: 2px solid #fff;
-            border-radius: 50%;
-            cursor: pointer;
-            background: rgba(255, 255, 255, 0.3);
-            /* Pozice a velikost nastavíme přes JavaScript */
-        }
-    </style>
-</head>
-<body>
-    <div id="mapContainer">
-        <canvas id="mapCanvas"></canvas>
-    </div>
-    <canvas id="renderCanvas"></canvas>
-    <script>
-        // Inicializace Babylon.js
-        const canvas = document.getElementById("renderCanvas");
-        const engine = new BABYLON.Engine(canvas, true);
-        const scene = new BABYLON.Scene(engine);
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <title>Leaflet Map</title>
+        
+        <!-- Leaflet CSS -->
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+              integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+              crossorigin=""/>
+        
+        <!-- Leaflet JavaScript -->
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+                integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+                crossorigin=""></script>
 
-        // Kamera a světla
-        const camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI/2, Math.PI/4, 50, BABYLON.Vector3.Zero(), scene);
-        camera.attachControl(canvas, true);
-        const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
-
-        // Vytvoření základního VR zážitku (pokud je potřeba)
-        const vrHelper = scene.createDefaultVRExperience();
-
-        // Funkce pro vytvoření mapy
-        function createMap() {
-            const mapCanvas = document.getElementById("mapCanvas");
-            const ctx = mapCanvas.getContext("2d");
-            mapCanvas.width = 800;
-            mapCanvas.height = 400;
-
-            // Vykreslení základní mapy (např. jednoduchý obdélník s kontinentálními tvary)
-            // Pro zjednodušení zde vykreslíme jen několik tvarů reprezentujících kontinenty
-            ctx.fillStyle = "#228B22"; // zelená pro kontinenty
-            ctx.beginPath();
-            ctx.moveTo(100, 150);
-            ctx.lineTo(200, 100);
-            ctx.lineTo(300, 150);
-            ctx.lineTo(250, 250);
-            ctx.lineTo(150, 250);
-            ctx.closePath();
-            ctx.fill();
-
-            ctx.beginPath();
-            ctx.arc(600, 200, 50, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Přidáme interaktivní oblasti (kontinenty) jako klikatelné elementy
-            // V tomto jednoduchém příkladu jsou to pouze tvary, které třeba odlišit
-            // nebo můžeme přidat detaily s pomocí souřadnic
-        }
-
-        createMap();
-
-        // Přidání event listeneru pro kliknutí na mapu
-        document.getElementById("mapCanvas").addEventListener("click", function(e) {
-            const rect = e.target.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-
-            // Zde můžete přidat detekci, na kterou oblast bylo kliknuto
-            // Například pomocí jednoduché kontroly souřadnic
-            if (x >= 100 && x <= 300 && y >= 100 && y <= 250) {
-                alert("Kliknuto na kontinent 1");
-                // Například změnit barvu nebo posunout kameru
-            } else if (Math.hypot(x - 600, y - 200) <= 50) {
-                alert("Kliknuto na kontinent 2");
+        <style>
+            html,
+            body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
             }
-        });
 
-        // Vytvoření 3D scény
-        const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 50, height: 50}, scene);
+            #mapContainer {
+                width: 100%;
+                height: 100%;
+            }
 
-        // Animace
-        engine.runRenderLoop(function () {
-            scene.render();
-        });
+            #map {
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="mapContainer">
+            <div id="map"></div>
+        </div>
+        
+        <script>
+            // Inicializace mapy
+            var map = L.map('map').setView([50.0755, 14.4378], 10); // Praha jako výchozí pozice
 
-        window.addEventListener("resize", function () {
-            engine.resize();
-        });
-    </script>
-</body>
+            // Přidání tile layer (OpenStreetMap)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19,
+                minZoom: 1
+            }).addTo(map);
+
+            // Alternativně můžete použít jiné tile servery:
+            
+            // Satelitní snímky (Esri)
+            /*
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+            }).addTo(map);
+            */
+
+            // Terrain mapa
+            /*
+            L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                maxZoom: 17,
+                attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+            }).addTo(map);
+            */
+
+            // Přidání ukázkového markeru
+            var marker = L.marker([50.0755, 14.4378]).addTo(map)
+                .bindPopup('Praha, Česká republika')
+                .openPopup();
+
+            // Přidání další funkcionality
+            map.on('click', function(e) {
+                console.log('Kliknuto na pozici: ' + e.latlng.toString());
+                
+
+
+
+                // Přidat nový marker na kliknuté místo
+                L.marker(e.latlng).addTo(map)
+                    .bindPopup('Nový bod na ' + e.latlng.toString())
+                    .openPopup();
+            });
+        </script>
+    </body>
 </html>
+
+
+
+
+
+
+                   
