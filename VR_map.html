@@ -187,6 +187,34 @@
                 }
             }
 
+
+
+
+
+async enterVR() {
+    try {
+        // Vytvoření VR canvas
+        this.vrCanvas = document.createElement('canvas');
+        this.vrCanvas.id = 'vrCanvas';
+        this.vrCanvas.style.display = 'block';
+        document.body.appendChild(this.vrCanvas);
+
+        // Babylon.js engine a scéna
+        this.vrEngine = new BABYLON.Engine(this.vrCanvas, true);
+        this.vrScene = new BABYLON.Scene(this.vrEngine);
+
+        // OPRAVENO: Správná kamera pro VR
+        const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI/2, Math.PI/2.5, 10, BABYLON.Vector3.Zero(), this.vrScene);
+        camera.attachToCanvas(this.vrCanvas, true);
+        camera.setTarget(new BABYLON.Vector3(0, 2, 2)); // Zaměření na mapu
+
+        // Osvětlení
+        new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), this.vrScene);
+
+
+
+
+            
             async enterVR() {
                 try {
                     // Vytvoření VR canvas
@@ -200,11 +228,13 @@
                     this.vrScene = new BABYLON.Scene(this.vrEngine);
 
                     // OPRAVENO: Správná inicializace kamery
-                    const camera = new BABYLON.FreeCamera("camera", new BABYLON.Vector3(0, 2, -5), this.vrScene);
-                    camera.setTarget(BABYLON.Vector3.Zero());
-                    
-                    // Připojení kamery k canvas - OPRAVENO
+                    const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI/2, Math.PI/2.5, 10, BABYLON.Vector3.Zero(), this.vrScene);
                     camera.attachToCanvas(this.vrCanvas, true);
+                    camera.setTarget(new BABYLON.Vector3(0, 2, 2)); // Zaměření na mapu
+                                        
+                    
+                    
+                    
 
                     // Osvětlení
                     new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), this.vrScene);
