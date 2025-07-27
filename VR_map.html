@@ -195,7 +195,8 @@
 
 
 
-            
+
+
             async enterVR() {
                 try {
                     // Vytvoření VR canvas
@@ -208,19 +209,13 @@
                     this.vrEngine = new BABYLON.Engine(this.vrCanvas, true);
                     this.vrScene = new BABYLON.Scene(this.vrEngine);
 
-                    // OPRAVENO: Správná inicializace kamery
-                    const camera = new BABYLON.ArcRotateCamera("camera", -Math.PI/2, Math.PI/2.5, 10, BABYLON.Vector3.Zero(), this.vrScene);
-                    camera.attachToCanvas(this.vrCanvas, true);
-                    camera.setTarget(new BABYLON.Vector3(0, 2, 2)); // Zaměření na mapu
-                                        
-                    
-                    
-                    
+                    // OPRAVENO: Jednoduchá kamera bez problémových metod
+                    const camera = new BABYLON.ArcRotateCamera("camera", 0, 0, 10, BABYLON.Vector3.Zero(), this.vrScene);
+                    camera.setPosition(new BABYLON.Vector3(0, 5, -10));
+                    this.vrScene.activeCamera = camera;
 
                     // Osvětlení
                     new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), this.vrScene);
-
-
 
                     // Podlaha
                     const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 20, height: 20}, this.vrScene);
@@ -270,6 +265,19 @@
                     this.exitVR();
                 }
             }
+
+
+
+
+
+
+
+
+
+
+
+
+            
 
             async createVRMap() {
                 try {
