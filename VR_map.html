@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VR Mapa</title>
+    <title>Jednoduchá VR Mapa</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -11,8 +11,6 @@
     <!-- Babylon.js -->
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
-    <script src="https://cdn.babylonjs.com/WebXR/babylon.webxr.js"></script>
-    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     
     <style>
         body, html {
@@ -45,48 +43,16 @@
             right: 15px;
             z-index: 1001;
             padding: 12px 24px;
-            background: linear-gradient(45deg, #007cff, #0051cc);
+            background: #007cff;
             color: white;
             border: none;
             border-radius: 8px;
             cursor: pointer;
             font-weight: bold;
-            box-shadow: 0 4px 15px rgba(0, 124, 255, 0.3);
-        }
-        
-        .vr-button:hover {
-            transform: translateY(-2px);
         }
         
         .vr-hidden {
             display: none !important;
-        }
-        
-        .map-controls {
-            position: fixed;
-            top: 15px;
-            left: 15px;
-            z-index: 1000;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 10px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-        }
-        
-        .control-button {
-            display: block;
-            width: 100%;
-            padding: 8px 16px;
-            margin: 5px 0;
-            background: #007cff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-        
-        .control-button:hover {
-            background: #0056cc;
         }
     </style>
 </head>
@@ -94,408 +60,219 @@
     <!-- Mapa -->
     <div id="map"></div>
     
-    <!-- 2D ovládací panel -->
-    <div class="map-controls">
-        <button class="control-button" onclick="map.zoomIn()">🔍 Zoom In</button>
-        <button class="control-button" onclick="map.zoomOut()">🔍 Zoom Out</button>
-        <button class="control-button" onclick="toggleSatellite()">🛰️ Satellite</button>
-        <button class="control-button" onclick="addMarker()">📍 Add Marker</button>
-    </div>
-
-
+    <!-- VR Button -->
+    <button class="vr-button" onclick="toggleVR()">🥽 Enter VR</button>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        // Základní mapa
-        let map, satelliteLayer, streetLayer;
+        let map;
         let isVRMode = false;
-        let vrHandler = null;
+        let vrEngine = null;
+        let vrScene = null;
+        let vrCanvas = null;
+        let xrExperience = null;
+        let htmlMesh = null;
 
         // Inicializace mapy
         function initMap() {
-            map = L.map('map').setView([50.0755, 14.4378], 10); // Praha
+            map = L.map('map').setView([50.0755, 14.4378], 6); // Praha
             
-            // Základní vrstvy
-            streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
-            
-            satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: '© Esri'
-            });
         }
 
-        // Mapové funkce
-        function toggleSatellite() {
-            if (map.hasLayer(satelliteLayer)) {
-                map.removeLayer(satelliteLayer);
-                map.addLayer(streetLayer);
+        // HtmlTexture class z index.html
+        class HtmlTexture extends BABYLON.DynamicTexture {
+            constructor(domElement, scene) {
+                super("HtmlTexture", html2canvas(domElement), scene);
+                this.domElement = domElement;
+
+                const observer = new MutationObserver(() => {
+                    if (!this.scheduleUpdate) {
+                        this.scheduleUpdate = setTimeout(() => this.update(), 16);
+                    }
+                });
+
+                const config = { attributes: true, childList: true, subtree: true, characterData: true };
+                observer.observe(domElement, config);
+                this.observer = observer;
+            }
+
+            update() {
+                html2canvas(this.domElement);
+                super.update();
+                this.scheduleUpdate = null;
+            }
+        }
+
+        // HtmlMesh class z index.html
+        class HtmlMesh {
+            constructor(domElement, scene) {
+                this.domElement = domElement;
+                this.texture = new HtmlTexture(domElement, scene);
+                this.texture.hasAlpha = true;
+
+                this.mesh = BABYLON.MeshBuilder.CreatePlane("plane", { height: 5, width: 8 });
+                this.material = new BABYLON.StandardMaterial("Mat", scene);
+                this.material.diffuseTexture = this.texture;
+                this.mesh.material = this.material;
+                this.mesh.position = new BABYLON.Vector3(0, 2, 2);
+                
+                this.texture.update();
+            }
+        }
+
+        // html2canvas funkce z index.html (zjednodušená)
+        const canvases = new WeakMap();
+        function html2canvas(element) {
+            const offset = element.getBoundingClientRect();
+            let canvas = canvases.get(element);
+
+            if (canvas === undefined) {
+                canvas = document.createElement('canvas');
+                canvas.width = offset.width;
+                canvas.height = offset.height;
+                canvases.set(element, canvas);
+            }
+
+            const context = canvas.getContext('2d');
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Základní vykreslení - jen screenshot elementu
+            try {
+                const rect = element.getBoundingClientRect();
+                context.fillStyle = '#f0f0f0';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                context.fillStyle = '#333';
+                context.font = '16px Arial';
+                context.fillText('Leaflet Map', 20, 30);
+            } catch (e) {
+                console.warn('html2canvas simplified version');
+            }
+
+            return canvas;
+        }
+
+        async function toggleVR() {
+            if (!isVRMode) {
+                await enterVR();
             } else {
-                map.removeLayer(streetLayer);
-                map.addLayer(satelliteLayer);
-            }
-            updateVRMap();
-        }
-
-        function addMarker() {
-            const center = map.getCenter();
-            L.marker([center.lat, center.lng])
-                .addTo(map)
-                .bindPopup(`Marker at ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`)
-                .openPopup();
-            updateVRMap();
-        }
-
-        function updateVRMap() {
-            if (vrHandler && isVRMode) {
-                vrHandler.updateVRMap();
+                exitVR();
             }
         }
 
-        // VR System
-        class VRMapHandler {
-            constructor() {
-                this.vrScene = null;
-                this.vrEngine = null;
-                this.vrCanvas = null;
-                this.mapTexture = null;
-                this.mapPlane = null;
-                this.xrExperience = null;
-                this.init();
-            }
+        async function enterVR() {
+            try {
+                // Vytvoření VR canvas
+                vrCanvas = document.createElement('canvas');
+                vrCanvas.id = 'vrCanvas';
+                vrCanvas.style.display = 'block';
+                document.body.appendChild(vrCanvas);
 
-            init() {
-                this.createVRButton();
-            }
+                // Babylon.js engine a scéna
+                vrEngine = new BABYLON.Engine(vrCanvas, true);
+                vrScene = new BABYLON.Scene(vrEngine);
 
-            createVRButton() {
-                
-                const vrButton = document.createElement('button');
-                vrButton.className = 'vr-button';
-                
-                vrButton.innerHTML = '🥽 Enter VR';
-                vrButton.onclick = () => this.toggleVR();
-                document.body.appendChild(vrButton);
-                this.vrButton = vrButton;
-            }
+                // Kamera
+                const camera = new BABYLON.ArcRotateCamera("camera", 0, 0, 10, BABYLON.Vector3.Zero(), vrScene);
+                camera.setPosition(new BABYLON.Vector3(0, 5, -10));
+                vrScene.activeCamera = camera;
 
-            async toggleVR() {
-                if (!isVRMode) {
-                    await this.enterVR();
-                } else {
-                    this.exitVR();
-                }
-            }
+                // Osvětlení
+                new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), vrScene);
 
+                // Podlaha
+                const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 20, height: 20}, vrScene);
+                const groundMat = new BABYLON.StandardMaterial("groundMat", vrScene);
+                groundMat.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.3);
+                ground.material = groundMat;
 
+                // Převod mapy na VR pomocí HtmlMesh
+                const mapElement = document.getElementById('map');
+                htmlMesh = new HtmlMesh(mapElement, vrScene);
 
-
-
-
-
-
-
-
-            async enterVR() {
-                try {
-                    // Vytvoření VR canvas
-                    this.vrCanvas = document.createElement('canvas');
-                    this.vrCanvas.id = 'vrCanvas';
-                    this.vrCanvas.style.display = 'block';
-                    document.body.appendChild(this.vrCanvas);
-
-                    // Babylon.js engine a scéna
-                    this.vrEngine = new BABYLON.Engine(this.vrCanvas, true);
-                    this.vrScene = new BABYLON.Scene(this.vrEngine);
-
-                    // Kamera
-                    const camera = new BABYLON.ArcRotateCamera("camera", 0, 0, 10, BABYLON.Vector3.Zero(), this.vrScene);
-                    camera.setPosition(new BABYLON.Vector3(0, 5, -10));
-                    this.vrScene.activeCamera = camera;
-
-                    // Osvětlení
-                    new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), this.vrScene);
-
-                    // Podlaha
-                    const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 20, height: 20}, this.vrScene);
-                    const groundMat = new BABYLON.StandardMaterial("groundMat", this.vrScene);
-                    groundMat.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.3);
-                    ground.material = groundMat;
-
-                    // Převod mapy na VR
-                    await this.createVRMap();
-
-                    // VR ovládání
-                    this.setupVRControls();
-
-                    // Spustit render loop
-                    this.vrEngine.runRenderLoop(() => {
-                        this.vrScene.render();
-                    });
-
-                    // WebXR - OPRAVENO: Automatický vstup do VR
-                    try {
-                        this.xrExperience = await this.vrScene.createDefaultXRExperienceAsync({
-                            floorMeshes: [ground],
-                            optionalFeatures: ["hand-tracking"]
-                        });
-
-                        // KLÍČOVÉ: Automaticky vstoupit do VR
-                        if (this.xrExperience.baseExperience) {
-                            await this.xrExperience.baseExperience.enterXRAsync("immersive-vr", "local-floor");
-                            console.log("Vstoupeno do VR headsetu");
-                        }
-
-                    } catch (xrError) {
-                        console.warn("WebXR vstup selhal:", xrError);
-                        alert("VR headset není připojen nebo WebXR není podporováno");
-                    }
-
-                    // Resize handler
-                    this.resizeHandler = () => this.vrEngine.resize();
-                    window.addEventListener("resize", this.resizeHandler);
-
-                    // Skrytí 2D mapy
-                    document.getElementById('map').classList.add('vr-hidden');
-                    document.querySelector('.map-controls').classList.add('vr-hidden');
-                    
-                    // Změna tlačítka
-                    this.vrButton.innerHTML = '🚪 Exit VR';
-                    isVRMode = true;
-
-                    console.log("VR režim úspěšně spuštěn");
-
-                } catch (err) {
-                    console.error("VR chyba:", err);
-                    alert('Nepodařilo se spustit VR: ' + err.message);
-                    this.exitVR();
-                }
-            }
-
-            
-
-
-
-
-
-
-
-
-
-            
-
-            async createVRMap() {
-                try {
-                    // Počkat na načtení mapy
-                    await new Promise(resolve => {
-                        if (map._loaded) {
-                            resolve();
-                        } else {
-                            map.whenReady(resolve);
-                        }
-                    });
-
-                    // Krátké čekání pro vykreslení
-                    await new Promise(resolve => setTimeout(resolve, 500));
-
-                    // Vytvořit snapshot mapy
-                    const mapElement = document.getElementById('map');
-                    const canvasMap = await html2canvas(mapElement, {
-                        useCORS: true,
-                        allowTaint: true
-                    });
-
-                    // Vytvořit texturu v Babylon.js
-                    const textureSize = {
-                        width: Math.min(canvasMap.width, 1024),
-                        height: Math.min(canvasMap.height, 1024)
-                    };
-
-                    this.mapTexture = new BABYLON.DynamicTexture("mapTexture", textureSize, this.vrScene);
-                    const ctx = this.mapTexture.getContext();
-                    ctx.drawImage(canvasMap, 0, 0, textureSize.width, textureSize.height);
-                    this.mapTexture.update();
-
-                    // Vytvořit rovinu s mapou
-                    this.mapPlane = BABYLON.MeshBuilder.CreatePlane("mapPlane", { 
-                        width: 6, 
-                        height: 4 
-                    }, this.vrScene);
-                    
-                    const mat = new BABYLON.StandardMaterial("mapMat", this.vrScene);
-                    mat.diffuseTexture = this.mapTexture;
-                    mat.emissiveTexture = this.mapTexture;
-                    mat.emissiveColor = new BABYLON.Color3(0.3, 0.3, 0.3);
-                    this.mapPlane.material = mat;
-                    this.mapPlane.position = new BABYLON.Vector3(0, 2, 2);
-                    this.mapPlane.rotation.x = -Math.PI / 12; // Mírný náklon
-
-                    console.log("VR mapa vytvořena");
-
-                } catch (err) {
-                    console.error("Chyba při vytváření VR mapy:", err);
-                    throw err;
-                }
-            }
-
-            setupVRControls() {
-                // Jednoduché ovládání myší/dotykem
-                this.vrScene.onPointerObservable.add((pointerInfo) => {
-                    if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERDOWN) {
-                        if (pointerInfo.pickInfo.hit && pointerInfo.pickInfo.pickedMesh === this.mapPlane) {
-                            this.placeVRMarker(pointerInfo.pickInfo.pickedPoint);
-                        }
-                    }
+                // Spustit render loop
+                vrEngine.runRenderLoop(() => {
+                    vrScene.render();
                 });
 
-                // Klávesové zkratky
-                window.addEventListener('keydown', (event) => {
-                    if (!isVRMode) return;
-                    
-                    switch(event.key) {
-                        case 'Escape':
-                            this.exitVR();
-                            break;
-                        case '+':
-                        case '=':
-                            map.zoomIn();
-                            this.updateVRMap();
-                            break;
-                        case '-':
-                            map.zoomOut();
-                            this.updateVRMap();
-                            break;
-                    }
-                });
-            }
-
-            placeVRMarker(position) {
-                // Vytvořit marker ve VR prostoru
-                const sphere = BABYLON.MeshBuilder.CreateSphere("vrMarker", { diameter: 0.1 }, this.vrScene);
-                sphere.position = position.clone();
-                sphere.position.y += 0.05;
-                
-                const mat = new BABYLON.StandardMaterial("markerMat", this.vrScene);
-                mat.diffuseColor = new BABYLON.Color3(1, 0, 0);
-                mat.emissiveColor = new BABYLON.Color3(0.5, 0, 0);
-                sphere.material = mat;
-
-                // Animace
-                BABYLON.Animation.CreateAndStartAnimation("pulse", sphere, "scaling", 30, 60,
-                    new BABYLON.Vector3(1, 1, 1), new BABYLON.Vector3(1.2, 1.2, 1.2), 
-                    BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
-
-                console.log("VR marker umístěn na pozici:", position);
-            }
-
-            async updateVRMap() {
-                if (!this.mapTexture || !isVRMode) return;
-
+                // WebXR
                 try {
-                    const mapElement = document.getElementById('map');
-                    const canvasMap = await html2canvas(mapElement, {
-                        useCORS: true,
-                        allowTaint: true,
-                        scale: 0.8 // Nižší kvalita pro rychlost
+                    xrExperience = await vrScene.createDefaultXRExperienceAsync({
+                        floorMeshes: [ground]
                     });
-
-                    const ctx = this.mapTexture.getContext();
-                    const textureSize = { width: ctx.canvas.width, height: ctx.canvas.height };
-                    
-                    ctx.clearRect(0, 0, textureSize.width, textureSize.height);
-                    ctx.drawImage(canvasMap, 0, 0, textureSize.width, textureSize.height);
-                    this.mapTexture.update();
-
-                    console.log("VR mapa aktualizována");
-
-                } catch (err) {
-                    console.warn("Nepodařilo se aktualizovat VR mapu:", err);
+                    console.log("VR experience vytvořen");
+                } catch (xrError) {
+                    console.warn("WebXR není dostupný:", xrError);
                 }
-            }
 
-            exitVR() {
-                try {
+                // Resize handler
+                window.addEventListener("resize", () => vrEngine.resize());
 
-                    // Ukončit XR session
-                    if (this.xrExperience) {
-                        this.xrExperience.baseExperience.exitXRAsync();
-                        this.xrExperience = null;
-                    }
-                    
-                    // Zastavit render loop
-                    if (this.vrEngine) {
-                        this.vrEngine.dispose();
-                        this.vrEngine = null;
-                    }
+                // Skrytí 2D mapy
+                document.getElementById('map').classList.add('vr-hidden');
+                document.querySelector('.vr-button').innerHTML = '🚪 Exit VR';
+                isVRMode = true;
 
-                    // Vyčistit scénu
-                    if (this.vrScene) {
-                        this.vrScene.dispose();
-                        this.vrScene = null;
-                    }
+                console.log("VR režim spuštěn");
 
-                    // Odstranit canvas
-                    if (this.vrCanvas) {
-                        this.vrCanvas.remove();
-                        this.vrCanvas = null;
-                    }
-
-                    // Odstranit resize handler
-                    if (this.resizeHandler) {
-                        window.removeEventListener("resize", this.resizeHandler);
-                        this.resizeHandler = null;
-                    }
-
-                    // Obnovit 2D mapu
-                    document.getElementById('map').classList.remove('vr-hidden');
-                    document.querySelector('.map-controls').classList.remove('vr-hidden');
-                    
-                    // Reset tlačítka
-                    this.vrButton.innerHTML = '🥽 Enter VR';
-                    isVRMode = false;
-
-                    console.log("VR režim ukončen");
-
-                } catch (err) {
-                    console.error('Chyba při ukončení VR:', err);
-                    // Force reset
-                    isVRMode = false;
-                    this.vrButton.innerHTML = '🥽 Enter VR';
-                }
+            } catch (err) {
+                console.error("VR chyba:", err);
+                exitVR();
             }
         }
 
-        // Inicializace po načtení stránky
+        function exitVR() {
+            try {
+                if (xrExperience) {
+                    xrExperience.dispose();
+                    xrExperience = null;
+                }
+                
+                if (vrEngine) {
+                    vrEngine.dispose();
+                    vrEngine = null;
+                }
+
+                if (vrScene) {
+                    vrScene.dispose();
+                    vrScene = null;
+                }
+
+                if (vrCanvas) {
+                    vrCanvas.remove();
+                    vrCanvas = null;
+                }
+
+                // Obnovit 2D mapu
+                document.getElementById('map').classList.remove('vr-hidden');
+                document.querySelector('.vr-button').innerHTML = '🥽 Enter VR';
+                isVRMode = false;
+
+                console.log("VR režim ukončen");
+
+            } catch (err) {
+                console.error('Chyba při ukončení VR:', err);
+                isVRMode = false;
+                document.querySelector('.vr-button').innerHTML = '🥽 Enter VR';
+            }
+        }
+
+        // Inicializace
         window.addEventListener('load', () => {
-            console.log("Inicializace aplikace...");
-            
             initMap();
-            vrHandler = new VRMapHandler();
-            
             console.log("Aplikace připravena");
         });
 
-        // Cleanup při zavření stránky
+        // Cleanup
         window.addEventListener('beforeunload', () => {
-            if (vrHandler && isVRMode) {
-                vrHandler.exitVR();
-            }
-        });
-
-        // Error handling
-        window.addEventListener('error', (event) => {
-            console.error('Globální chyba:', event.error);
-            if (isVRMode && vrHandler) {
-                alert('Nastala chyba ve VR režimu. Ukončuji VR...');
-                vrHandler.exitVR();
+            if (isVRMode) {
+                exitVR();
             }
         });
     </script>
 </body>
 </html>
-
-                        
-                                                           
-                        
