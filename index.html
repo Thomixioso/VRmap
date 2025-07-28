@@ -1,25 +1,21 @@
 <!DOCTYPE html>
-<html>
+<html lang="cs">
 <head>
     <meta charset="utf-8">
-    <title>VR 180 Viewer</title>
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VR 180 Stereo Viewer</title>
     <style>
         body {
             margin: 0;
+            padding: 20px;
             font-family: Arial, sans-serif;
+            background: #000;
+            color: white;
+            text-align: center;
         }
         
         #ui {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            z-index: 1000;
-            text-align: center;
-            background: rgba(0,0,0,0.8);
-            padding: 20px;
-            border-radius: 10px;
+            margin-bottom: 20px;
         }
         
         button {
@@ -37,109 +33,164 @@
             background: #45a049;
         }
         
-        #vrButton {
-            background: #2196F3;
+        #vrContainer {
+            display: none;
+            width: 100vw;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            background: #000;
         }
         
-        #vrButton:hover {
-            background: #0b7dda;
+        stereo-img {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .visible {
+            display: block !important;
         }
         
         .hidden {
-            display: none;
+            display: none !important;
+        }
+        
+        h1 {
+            margin-bottom: 30px;
+        }
+        
+        .info {
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
         }
     </style>
 </head>
 <body>
     <div id="ui">
-        <h2 style="color: white; margin-top: 0;">VR 180° Viewer</h2>
-        <button id="showVR">Ukázat VR Obrázek</button>
-        <br>
-        <button id="vrButton" class="hidden">Vstoupit do VR</button>
+        <h1>VR 180° Stereo Viewer</h1>
+        
+        <div class="info">
+            <p>Tato stránka zobrazí VR 180° stereo obrázek. Klikněte na tlačítko níže pro zobrazení.</p>
+            <p>V Meta Quest headsetu použijte VR tlačítko pro vstup do immersivního režimu.</p>
+        </div>
+        
+        <button id="showVRBtn">Ukázat VR Obrázek</button>
+        <button id="backBtn" class="hidden">Zpět</button>
     </div>
 
-    <a-scene id="scene" class="hidden" embedded style="height: 100vh;" vr-mode-ui="enabled: true">
-        <a-assets>
-            <!-- Nahraďte tento URL za váš vlastní 180° stereo obrázek -->
-            <img id="vrImage" src="https://raw.githubusercontent.com/Thomixioso/VRmap/main/Castles/generated/Le_Castillet_generated.jpg" crossorigin="anonymous">
-        </a-assets>
-        
-        <!-- 180° stereo sky pro VR -->
-        <a-sky 
-            id="vrSky"
-            src="#vrImage" 
-            rotation="0 -90 0"
-            geometry="primitive: sphere; radius: 100; phiStart: 0; phiLength: 180; thetaStart: 0; thetaLength: 360"
-            material="side: back">
-        </a-sky>
-        
-        <!-- Základní osvětlení -->
-        <a-light type="ambient" color="#404040"></a-light>
-        
-        <!-- Kamery pro stereo 180° -->
-        <a-entity id="cameraRig" position="0 1.6 0">
-            <a-camera look-controls wasd-controls>
-                <a-cursor color="white" opacity="0.5"></a-cursor>
-            </a-camera>
-        </a-entity>
-    </a-scene>
+    <div id="vrContainer">
+        <!-- Stereo img komponenta - nahraďte src za váš vlastní VR obrázek -->
+        <stereo-img 
+            id="stereoImg"
+            src="https://raw.githubusercontent.com/Thomixioso/VRmap/main/Castles/generated/Le_Castillet_generated.jpg"
+            type="vr"
+            angle="180">
+        </stereo-img>
+    </div>
 
+    <!-- Načtení stereo-img modulu -->
+    <script type="module" src="https://stereo-img.steren.fr/stereo-img.js"></script>
+    
     <script>
-        const showVRBtn = document.getElementById('showVR');
-        const vrButton = document.getElementById('vrButton');
+        const showVRBtn = document.getElementById('showVRBtn');
+        const backBtn = document.getElementById('backBtn');
         const ui = document.getElementById('ui');
-        const scene = document.getElementById('scene');
+        const vrContainer = document.getElementById('vrContainer');
         
-        // Zobrazit VR scénu
+        // Zobrazit VR obrázek
         showVRBtn.addEventListener('click', function() {
-            scene.classList.remove('hidden');
-            showVRBtn.style.display = 'none';
-            vrButton.classList.remove('hidden');
-        });
-        
-        // Vstoupit do VR módu
-        vrButton.addEventListener('click', function() {
-            scene.enterVR();
             ui.classList.add('hidden');
+            vrContainer.classList.add('visible');
+            backBtn.classList.remove('hidden');
+            backBtn.style.position = 'fixed';
+            backBtn.style.top = '20px';
+            backBtn.style.left = '20px';
+            backBtn.style.zIndex = '1000';
         });
         
+     
 
-
-
-
-
-
-
-        // Zobrazit UI při opuštění VR
-        scene.addEventListener('exit-vr', function() {
+        // Zpět na hlavní menu
+        backBtn.addEventListener('click', function() {
             ui.classList.remove('hidden');
+            vrContainer.classList.remove('visible');
+            backBtn.classList.add('hidden');
         });
         
-        // Upravit rotaci pro Meta Quest
-        scene.addEventListener('loaded', function() {
-            const sky = document.getElementById('vrSky');
-            // Optimalizace pro Meta Quest headset
-            sky.setAttribute('rotation', '0 0 0');
+        // Klávesové ovládání
+        document.addEventListener('keydown', function(event) {
+            // ESC klávesa pro návrat zpět
+            if (event.key === 'Escape') {
+                if (!ui.classList.contains('hidden')) {
+                    ui.classList.remove('hidden');
+                    vrContainer.classList.remove('visible');
+                    backBtn.classList.add('hidden');
+                }
+            }
+            
+            // Enter pro zobrazení VR
+            if (event.key === 'Enter' && ui.classList.contains('hidden') === false) {
+                showVRBtn.click();
+            }
         });
         
-        // Detekce VR podpory
-        if (!AFRAME.utils.device.checkHeadsetConnected()) {
-            console.log('VR headset není detekován, ale A-Frame bude fungovat i v prohlížeči');
+        // Touch ovládání pro Meta Quest
+        let touchStartY = 0;
+        let touchStartX = 0;
+        
+        document.addEventListener('touchstart', function(e) {
+            touchStartY = e.touches[0].clientY;
+            touchStartX = e.touches[0].clientX;
+        });
+        
+        document.addEventListener('touchend', function(e) {
+            if (!vrContainer.classList.contains('visible')) return;
+            
+            const touchEndY = e.changedTouches[0].clientY;
+            const touchEndX = e.changedTouches[0].clientX;
+            const diffY = touchStartY - touchEndY;
+            const diffX = touchStartX - touchEndX;
+            
+            // Swipe dolů pro návrat
+            if (diffY < -50 && Math.abs(diffX) < 100) {
+                backBtn.click();
+            }
+        });
+        
+        // Detekce VR módu
+        if ('xr' in navigator) {
+            console.log('WebXR je podporováno - Meta Quest ready!');
+        } else {
+            console.log('WebXR není podporováno, ale stereo-img bude fungovat');
         }
         
-        // Přidání touch ovládání pro mobilní zařízení
-        document.addEventListener('touchstart', function(e) {
-            e.preventDefault();
+        // Optimalizace pro Meta Quest Browser
+        window.addEventListener('load', function() {
+            // Nastavení pro fullscreen na Meta Quest
+            const stereoImg = document.getElementById('stereoImg');
+            
+            // Přidání atributů pro lepší VR zážitek
+            stereoImg.setAttribute('controls', 'true');
+            stereoImg.setAttribute('gyroscope', 'true');
+            
+            console.log('VR 180° Stereo Viewer načten - připraven pro Meta Quest');
+        });
+        
+        // Prevence scrollování
+        document.body.addEventListener('touchmove', function(e) {
+            if (vrContainer.classList.contains('visible')) {
+                e.preventDefault();
+            }
         }, { passive: false });
     </script>
 </body>
 </html>
 
-
-
-
-
-
-
-
-      
+        
