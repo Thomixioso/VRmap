@@ -160,7 +160,7 @@
         }).setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
         
         // Use your GitHub offline tiles - corrected URL format
-        const githubTileLayer = L.tileLayer('https://raw.githubusercontent.com/Thomixioso/VRmap/main/tiles_topo_labeled/{z}/{x}/{y}.png', {
+        const githubTileLayer = L.tileLayer('https://github.com/Thomixioso/VRmap/raw/main/tiles_topo_labeled/{z}/{x}/{y}.png', {
             maxZoom: 18,
             minZoom: 0,
             attribution: 'Custom Offline Tiles',
@@ -212,8 +212,8 @@
     // Function to create offline tile canvas overlay
     function createOfflineTileCanvas() {
         const mapCanvas = document.createElement('canvas');
-        mapCanvas.width = 300;
-        mapCanvas.height = 300;
+        mapCanvas.width = 280;
+        mapCanvas.height = 200;
         mapCanvas.style.position = 'absolute';
         mapCanvas.style.top = '0';
         mapCanvas.style.left = '0';
@@ -477,19 +477,19 @@ function addBackgroundTexture(htmlMesh, scene) {
     }
 }
 
-// Setup VR controller interactions for pan and zoom
+// Setup VR controller interactions for map navigation
 function setupVRControls(xrHelper, parameters, updateTextureTransform) {
     let isDragging = false;
     let lastControllerPosition = null;
     let dragStartPosition = { offsetX: parameters.textureOffsetX, offsetY: parameters.textureOffsetY };
-    let isMapDragging = false;
+    let isMapDragging = true; // Default to map dragging mode
     let mapDragStart = { lat: parameters.mapLat, lng: parameters.mapLng };
     
     xrHelper.input.onControllerAddedObservable.add((controller) => {
         controller.onMotionControllerInitObservable.add((motionController) => {
             console.log("VR Controller connected:", motionController.handedness);
             
-            // Handle trigger press for dragging
+            // Handle trigger press for map navigation
             const triggerComponent = motionController.getComponent("xr-standard-trigger");
             if (triggerComponent) {
                 triggerComponent.onButtonStateChangedObservable.add((component) => {
@@ -505,18 +505,17 @@ function setupVRControls(xrHelper, parameters, updateTextureTransform) {
                             lat: parameters.mapLat, 
                             lng: parameters.mapLng 
                         };
-                        console.log("Started dragging");
+                        console.log("Started map navigation");
                     } else {
                         // Stop dragging
                         isDragging = false;
-                        isMapDragging = false;
                         lastControllerPosition = null;
-                        console.log("Stopped dragging");
+                        console.log("Stopped map navigation");
                     }
                 });
             }
             
-            // Handle squeeze for zoom
+            // Handle squeeze for texture zoom out
             const squeezeComponent = motionController.getComponent("xr-standard-squeeze");
             if (squeezeComponent) {
                 squeezeComponent.onButtonStateChangedObservable.add((component) => {
@@ -529,12 +528,12 @@ function setupVRControls(xrHelper, parameters, updateTextureTransform) {
                 });
             }
             
-            // Handle thumbstick for zoom control
+            // Handle thumbstick for map zoom
             const thumbstickComponent = motionController.getComponent("xr-standard-thumbstick");
             if (thumbstickComponent) {
                 thumbstickComponent.onAxisValueChangedObservable.add((axes) => {
+                    // Use thumbstick Y axis for texture zoom
                     if (Math.abs(axes.y) > 0.5) {
-                        // Use thumbstick Y axis for texture zoom
                         const zoomSpeed = 0.02;
                         if (axes.y > 0.5) {
                             parameters.textureScale = Math.min(3.0, parameters.textureScale + zoomSpeed);
@@ -551,7 +550,9 @@ function setupVRControls(xrHelper, parameters, updateTextureTransform) {
                         } else if (axes.x < -0.5) {
                             parameters.mapZoom = Math.max(0, parameters.mapZoom - 0.1);
                         }
-                        window.leafletMap.setZoom(Math.round(parameters.mapZoom));
+                        const newZoom = Math.round(parameters.mapZoom);
+                        window.leafletMap.setZoom(newZoom);
+                        console.log("Map zoom changed to:", newZoom);
                     }
                 });
             }
@@ -573,19 +574,38 @@ function setupVRControls(xrHelper, parameters, updateTextureTransform) {
                         parameters.mapZoom = 1;
                         if (window.leafletMap) {
                             window.leafletMap.setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
+                            if (window.mapMarker) {
+                                window.mapMarker.setLatLng([parameters.mapLat, parameters.mapLng]);
+                            }
                         }
-                        console.log("Reset texture and map");
+                        console.log("Reset map to Prague and texture");
                     }
                 });
             }
             
-            // Handle B/Y button for switching between texture and map dragging
+            // Handle B/Y button for switching to texture dragging mode
             const bButtonComponent = motionController.getComponent("b-button") || motionController.getComponent("y-button");
             if (bButtonComponent) {
                 bButtonComponent.onButtonStateChangedObservable.add((component) => {
                     if (component.pressed) {
                         isMapDragging = !isMapDragging;
-                        console.log("Switched dragging mode:", isMapDragging ? "Map" : "Texture");
+                        console.log("Switched dragging mode:", isMapDragging ? "Map Navigation" : "Texture Pan");
+                    }
+                });
+            }
+            
+            // Handle menu button for map interactions
+            const menuComponent = motionController.getComponent("xr-standard-menu");
+            if (menuComponent) {
+                menuComponent.onButtonStateChangedObservable.add((component) => {
+                    if (component.pressed && window.leafletMap) {
+                        // Add a marker at current center
+                        const center = window.leafletMap.getCenter();
+                        L.marker([center.lat, center.lng])
+                            .addTo(window.leafletMap)
+                            .bindPopup(`VR Marker<br/>Lat: ${center.lat.toFixed(4)}<br/>Lng: ${center.lng.toFixed(4)}`)
+                            .openPopup();
+                        console.log("Added VR marker at:", center);
                     }
                 });
             }
@@ -602,15 +622,16 @@ function setupVRControls(xrHelper, parameters, updateTextureTransform) {
                 const deltaY = currentPosition.y - lastControllerPosition.y;
                 
                 if (isMapDragging && window.leafletMap) {
-                    // Apply movement to map
-                    const mapSensitivity = 10.0;
-                    parameters.mapLat = mapDragStart.lat - (deltaY * mapSensitivity);
-                    parameters.mapLng = mapDragStart.lng + (deltaX * mapSensitivity);
+                    // Apply movement to map with appropriate sensitivity
+                    const mapSensitivity = 15.0; // Increased for better responsiveness
+                    const newLat = mapDragStart.lat - (deltaY * mapSensitivity);
+                    const newLng = mapDragStart.lng + (deltaX * mapSensitivity);
                     
-                    // Clamp values
-                    parameters.mapLat = Math.max(-90, Math.min(90, parameters.mapLat));
-                    parameters.mapLng = Math.max(-180, Math.min(180, parameters.mapLng));
+                    // Clamp values to valid ranges
+                    parameters.mapLat = Math.max(-85, Math.min(85, newLat)); // Leaflet limit
+                    parameters.mapLng = Math.max(-180, Math.min(180, newLng));
                     
+                    // Update map view
                     window.leafletMap.setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
                     if (window.mapMarker) {
                         window.mapMarker.setLatLng([parameters.mapLat, parameters.mapLng]);
@@ -998,33 +1019,101 @@ function html2canvas(element) {
 
             style = window.getComputedStyle(element);
 
-            // Special handling for Leaflet map container
-            if (element.classList && (element.classList.contains('leaflet-container') || element.id === 'mapContainer')) {
-                // Find our offline tile canvas
-                const mapCanvas = element.querySelector('canvas');
-                if (mapCanvas) {
-                    try {
-                        // Draw the offline tile canvas directly
-                        context.drawImage(mapCanvas, x, y, width, height);
-                    } catch (e) {
-                        console.log('Could not draw offline tile canvas:', e);
-                        // Fallback to simple colored rectangle
-                        context.fillStyle = '#4a90e2';
-                        context.fillRect(x, y, width, height);
-                        context.fillStyle = 'white';
-                        context.font = '12px Arial';
-                        context.textAlign = 'center';
-                        context.fillText('Offline Map', x + width/2, y + height/2);
-                    }
-                } else {
-                    // Fallback if no canvas found
-                    context.fillStyle = '#4a90e2';
-                    context.fillRect(x, y, width, height);
-                    context.fillStyle = 'white';
-                    context.font = '12px Arial';
-                    context.textAlign = 'center';
-                    context.fillText('Loading Tiles...', x + width/2, y + height/2);
+            // Special handling for full map container
+            if (element.id === 'fullMapContainer' || element.classList.contains('leaflet-container')) {
+                // Try to capture the leaflet map directly
+                const leafletPanes = element.querySelectorAll('.leaflet-pane');
+                
+                // Draw map background first
+                context.fillStyle = '#f0f8ff';
+                context.fillRect(x, y, width, height);
+                
+                // Try to draw tile layers
+                const tilePane = element.querySelector('.leaflet-tile-pane');
+                if (tilePane) {
+                    const tiles = tilePane.querySelectorAll('img');
+                    tiles.forEach(tile => {
+                        if (tile.complete && tile.naturalWidth > 0) {
+                            try {
+                                const tileRect = tile.getBoundingClientRect();
+                                const tileX = tileRect.left - offset.left - 0.5;
+                                const tileY = tileRect.top - offset.top - 0.5;
+                                context.drawImage(tile, tileX, tileY, tileRect.width, tileRect.height);
+                            } catch (e) {
+                                console.log('Could not draw map tile:', e);
+                            }
+                        }
+                    });
                 }
+                
+                // Try to draw markers
+                const markerPane = element.querySelector('.leaflet-marker-pane');
+                if (markerPane) {
+                    const markers = markerPane.querySelectorAll('img');
+                    markers.forEach(marker => {
+                        if (marker.complete && marker.naturalWidth > 0) {
+                            try {
+                                const markerRect = marker.getBoundingClientRect();
+                                const markerX = markerRect.left - offset.left - 0.5;
+                                const markerY = markerRect.top - offset.top - 0.5;
+                                context.drawImage(marker, markerX, markerY, markerRect.width, markerRect.height);
+                            } catch (e) {
+                                console.log('Could not draw marker:', e);
+                            }
+                        }
+                    });
+                }
+                
+                // Draw zoom controls
+                const zoomControl = element.querySelector('.leaflet-control-zoom');
+                if (zoomControl) {
+                    const controlRect = zoomControl.getBoundingClientRect();
+                    const controlX = controlRect.left - offset.left - 0.5;
+                    const controlY = controlRect.top - offset.top - 0.5;
+                    
+                    context.fillStyle = 'rgba(255,255,255,0.9)';
+                    context.fillRect(controlX, controlY, controlRect.width, controlRect.height);
+                    context.strokeStyle = '#ccc';
+                    context.strokeRect(controlX, controlY, controlRect.width, controlRect.height);
+                    
+                    // Draw + and - symbols
+                    context.fillStyle = '#333';
+                    context.font = '16px Arial';
+                    context.textAlign = 'center';
+                    context.fillText('+', controlX + controlRect.width/2, controlY + 15);
+                    context.fillText('−', controlX + controlRect.width/2, controlY + 35);
+                }
+                
+                // Draw custom info control
+                const customControl = element.querySelector('.custom-control');
+                if (customControl) {
+                    const infoRect = customControl.getBoundingClientRect();
+                    const infoX = infoRect.left - offset.left - 0.5;
+                    const infoY = infoRect.top - offset.top - 0.5;
+                    
+                    context.fillStyle = 'rgba(255,255,255,0.9)';
+                    context.fillRect(infoX, infoY, infoRect.width, infoRect.height);
+                    context.strokeStyle = '#ccc';
+                    context.strokeRect(infoX, infoY, infoRect.width, infoRect.height);
+                    
+                    // Add coordinate text
+                    context.fillStyle = '#333';
+                    context.font = '10px monospace';
+                    context.textAlign = 'left';
+                    const coords = customControl.textContent || 'Loading...';
+                    const lines = coords.split('\n');
+                    lines.forEach((line, i) => {
+                        context.fillText(line.trim(), infoX + 5, infoY + 12 + i * 12);
+                    });
+                }
+                
+                // If nothing was drawn, add fallback
+                context.fillStyle = 'rgba(0,0,0,0.1)';
+                context.fillRect(x + 10, y + height - 30, 100, 20);
+                context.fillStyle = 'white';
+                context.font = '10px Arial';
+                context.textAlign = 'left';
+                context.fillText('Leaflet Map', x + 15, y + height - 15);
                 
                 return; // Skip normal element processing
             }
