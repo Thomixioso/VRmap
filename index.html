@@ -768,37 +768,51 @@
                 window.addEventListener('resize', () => this.resize());
             }
             
-            async checkVRSupport() {
-                // A-Frame automaticky detekuje VR podporu
+            checkVRSupport() {
+                // Jednodušší A-Frame detekce bez async/await
                 const vrButton = document.getElementById('vrHeadsetButton');
                 
-                // Čekáme na inicializaci A-Frame
+                // Čekáme na načtení A-Frame
                 setTimeout(() => {
-                    if (this.aframeScene.sceneEl && this.aframeScene.sceneEl.is('vr-mode-ui')) {
+                    if (window.AFRAME) {
                         vrButton.style.display = 'block';
                         vrButton.style.background = 'rgba(34, 139, 34, 0.8)';
                         vrButton.textContent = '🥽 VR Headset';
+                        console.log('✅ A-Frame načten, VR dostupné');
                     } else {
-                        vrButton.textContent = '🥽 VR Headset';
-                        vrButton.style.background = 'rgba(74, 144, 226, 0.8)';
+                        vrButton.textContent = '🥽 VR nedostupné';
+                        vrButton.style.background = 'rgba(139, 69, 19, 0.8)';
+                        console.log('❌ A-Frame se nenačetl');
                     }
-                }, 1000);
+                }, 2000);
             }
             
             enterVRMode() {
-                if (this.aframeScene && this.aframeScene.sceneEl) {
+                if (!window.AFRAME) {
+                    alert('A-Frame se nenačetl. Zkuste obnovit stránku.');
+                    return;
+                }
+                
+                try {
                     // Přepnutí do A-Frame módu
                     this.canvas.style.display = 'none';
                     this.aframeScene.classList.add('active');
                     
-                    // Spuštění VR módu
+                    // Počkáme na inicializaci scény
                     setTimeout(() => {
-                        this.aframeScene.sceneEl.enterVR();
-                    }, 500);
+                        if (this.aframeScene.sceneEl) {
+                            // Spuštění VR módu
+                            this.aframeScene.sceneEl.enterVR();
+                            console.log('✅ VR mód spuštěn přes A-Frame');
+                        } else {
+                            console.error('❌ A-Frame scéna není inicializována');
+                            alert('A-Frame scéna není připravena. Zkuste to za chvíli.');
+                        }
+                    }, 1000);
                     
-                    console.log('✅ VR mód spuštěn přes A-Frame');
-                } else {
-                    alert('A-Frame VR není dostupný');
+                } catch (error) {
+                    console.error('Chyba při spouštění VR:', error);
+                    alert('Chyba při spouštění VR módu: ' + error.message);
                 }
             }
             
@@ -945,38 +959,20 @@
             }
             
             setupStereoMapping() {
-                // Přidáme custom shader pro stereo mapping
+                // Zjednodušená implementace bez custom shaderů
                 if (this.vrSphere && window.AFRAME) {
-                    AFRAME.registerShader('stereo180', {
-                        schema: {
-                            src: {type: 'map'},
-                            eye: {type: 'string', default: 'left'}
-                        },
+                    try {
+                        // Základní materiál pro stereo zobrazení
+                        this.vrSphere.setAttribute('material', {
+                            src: '#vrStereoImage',
+                            side: 'back',
+                            shader: 'flat'
+                        });
                         
-                        fragmentShader: `
-                            uniform sampler2D src;
-                            uniform float eye;
-                            varying vec2 vUv;
-                            
-                            void main() {
-                                vec2 uv = vUv;
-                                // Pro stereo obrázek - levá polovina pro levé oko, pravá pro pravé
-                                if (eye > 0.5) {
-                                    uv.x = uv.x * 0.5 + 0.5; // Pravá polovina
-                                } else {
-                                    uv.x = uv.x * 0.5; // Levá polovina
-                                }
-                                gl_FragColor = texture2D(src, uv);
-                            }
-                        `
-                    });
-                    
-                    // Aplikujeme stereo shader
-                    this.vrSphere.setAttribute('material', {
-                        shader: 'stereo180',
-                        src: '#vrStereoImage',
-                        eye: 'left' // Můžeme přepínat mezi 'left' a 'right'
-                    });
+                        console.log('✅ Stereo materiál nastaven');
+                    } catch (error) {
+                        console.error('Chyba při nastavování stereo mappingu:', error);
+                    }
                 }
             }
             
