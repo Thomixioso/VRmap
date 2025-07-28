@@ -1,68 +1,145 @@
 <!DOCTYPE html>
-<html lang="cs">
+<html>
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Mapa + VR</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
-<script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
-<style>
-  body { margin: 0; height: 100vh; overflow: hidden; }
-  #map { height: 100%; width: 100%; }
-  #vrScene {
-    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: #000;
-  }
-  #exitVrBtn {
-    display: none; position: fixed; top: 10px; right: 10px; z-index: 10000;
-    padding: 10px 20px; background: #fff; border: none; cursor: pointer; font-size: 16px;
-  }
-</style>
+    <meta charset="utf-8">
+    <title>VR 180 Viewer</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        
+        #ui {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            text-align: center;
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        #vrButton {
+            background: #2196F3;
+        }
+        
+        #vrButton:hover {
+            background: #0b7dda;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
 </head>
 <body>
+    <div id="ui">
+        <h2 style="color: white; margin-top: 0;">VR 180° Viewer</h2>
+        <button id="showVR">Ukázat VR Obrázek</button>
+        <br>
+        <button id="vrButton" class="hidden">Vstoupit do VR</button>
+    </div>
 
-<div id="map"></div>
+    <a-scene id="scene" class="hidden" embedded style="height: 100vh;" vr-mode-ui="enabled: true">
+        <a-assets>
+            <!-- Nahraďte tento URL za váš vlastní 180° stereo obrázek -->
+            <img id="vrImage" src="https://cdn.aframe.io/360-image-gallery-boilerplate/img/sechelt.jpg" crossorigin="anonymous">
+        </a-assets>
+        
+        <!-- 180° stereo sky pro VR -->
+        <a-sky 
+            id="vrSky"
+            src="#vrImage" 
+            rotation="0 -90 0"
+            geometry="primitive: sphere; radius: 100; phiStart: 0; phiLength: 180; thetaStart: 0; thetaLength: 360"
+            material="side: back">
+        </a-sky>
+        
+        <!-- Základní osvětlení -->
+        <a-light type="ambient" color="#404040"></a-light>
+        
+        <!-- Kamery pro stereo 180° -->
+        <a-entity id="cameraRig" position="0 1.6 0">
+            <a-camera look-controls wasd-controls>
+                <a-cursor color="white" opacity="0.5"></a-cursor>
+            </a-camera>
+        </a-entity>
+    </a-scene>
 
-<a-scene embedded id="vrScene" style="display:none;">
-  <a-entity camera look-controls position="0 1.6 0"></a-entity>
-  <a-sky id="stereoSky" color="#222"></a-sky>
-</a-scene>
-<button id="exitVrBtn">Zpět na mapu</button>
+    <script>
+        const showVRBtn = document.getElementById('showVR');
+        const vrButton = document.getElementById('vrButton');
+        const ui = document.getElementById('ui');
+        const scene = document.getElementById('scene');
+        
+        // Zobrazit VR scénu
+        showVRBtn.addEventListener('click', function() {
+            scene.classList.remove('hidden');
+            showVRBtn.style.display = 'none';
+            vrButton.classList.remove('hidden');
+        });
+        
+        // Vstoupit do VR módu
+        vrButton.addEventListener('click', function() {
+            scene.enterVR();
+            ui.classList.add('hidden');
+        });
+        
 
-<script>
-  // Map
-  var map = L.map('map').setView([49.939, 14.188], 15);
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Satelitní mapa | &copy; Esri'
-  }).addTo(map);
 
-  // Jednoduchý marker
-  var marker = L.marker([49.939, 14.188]).addTo(map);
-  marker.bindPopup('Klikni pro VR');
 
-  // Po kliknutí na marker
-  marker.on('click', function() {
-    startVR();
-  });
 
-  function startVR() {
-    document.getElementById('map').style.display = 'none';
-    document.getElementById('vrScene').style.display = 'block';
-    document.getElementById('exitVrBtn').style.display = 'block';
 
-    var sky = document.querySelector('#stereoSky');
-    // Použij svůj stereo obrázek (side-by-side)
-    var stereoImageUrl = 'https://raw.githubusercontent.com/Thomixioso/VRmap/main/Castles/generated/Le_Castillet_generated.jpg';
 
-    sky.setAttribute('material', 'shader: flat; side: double; src: ' + stereoImageUrl);
-  }
 
-  document.getElementById('exitVrBtn').onclick = function() {
-    document.getElementById('map').style.display = 'block';
-    document.getElementById('vrScene').style.display = 'none';
-    document.getElementById('exitVrBtn').style.display = 'none';
-  };
-</script>
-
+        // Zobrazit UI při opuštění VR
+        scene.addEventListener('exit-vr', function() {
+            ui.classList.remove('hidden');
+        });
+        
+        // Upravit rotaci pro Meta Quest
+        scene.addEventListener('loaded', function() {
+            const sky = document.getElementById('vrSky');
+            // Optimalizace pro Meta Quest headset
+            sky.setAttribute('rotation', '0 0 0');
+        });
+        
+        // Detekce VR podpory
+        if (!AFRAME.utils.device.checkHeadsetConnected()) {
+            console.log('VR headset není detekován, ale A-Frame bude fungovat i v prohlížeči');
+        }
+        
+        // Přidání touch ovládání pro mobilní zařízení
+        document.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+        }, { passive: false });
+    </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+      
