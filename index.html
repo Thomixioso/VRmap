@@ -3,26 +3,19 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Mapa + Stereo VR</title>
+<title>Mapa + VR</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
-<!-- A-Frame knihovna -->
 <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
 <style>
   body { margin: 0; height: 100vh; overflow: hidden; }
   #map { height: 100%; width: 100%; }
-  /* VR režim přes celý obrazovku */
   #vrScene {
-    display: none;
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    z-index: 9999; background: #000;
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: #000;
   }
-  /* Tlačítko pro ukončení VR */
   #exitVrBtn {
-    position: fixed; top: 10px; right: 10px;
-    z-index: 10000;
-    padding: 10px 20px;
-    background: #fff; border: none; cursor: pointer; font-size: 16px;
+    display: none; position: fixed; top: 10px; right: 10px; z-index: 10000;
+    padding: 10px 20px; background: #fff; border: none; cursor: pointer; font-size: 16px;
   }
 </style>
 </head>
@@ -30,53 +23,40 @@
 
 <div id="map"></div>
 
-<!-- VR Scene (A-Frame) -->
 <a-scene embedded id="vrScene" style="display:none;">
   <a-entity camera look-controls position="0 1.6 0"></a-entity>
-  <!-- Stereo obrázek jako skybox -->
   <a-sky id="stereoSky" color="#222"></a-sky>
 </a-scene>
-
-<!-- Tlačítko pro ukončení VR -->
-<button id="exitVrBtn" style="display:none;">Zpět na mapu</button>
+<button id="exitVrBtn">Zpět na mapu</button>
 
 <script>
-  // Inicializace mapy
+  // Map
   var map = L.map('map').setView([49.939, 14.188], 15);
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Satelitní mapa | &copy; Esri'
   }).addTo(map);
 
-  // Marker
-  var castleIcon = L.divIcon({ className: 'castle-marker', iconSize: [20, 20] });
-  var marker = L.marker([49.939, 14.188], { icon: castleIcon }).addTo(map);
-  marker.bindPopup('Hrad Karlštejn - klikni pro VR');
+  // Jednoduchý marker
+  var marker = L.marker([49.939, 14.188]).addTo(map);
+  marker.bindPopup('Klikni pro VR');
 
-  // Funkce pro přepnutí do VR režimu
+  // Po kliknutí na marker
   marker.on('click', function() {
     startVR();
   });
 
-  // Funkce pro spuštění VR režimu
   function startVR() {
     document.getElementById('map').style.display = 'none';
     document.getElementById('vrScene').style.display = 'block';
     document.getElementById('exitVrBtn').style.display = 'block';
 
-    // Nastav stereo obrázek jako skybox
     var sky = document.querySelector('#stereoSky');
+    // Použij svůj stereo obrázek (side-by-side)
+    var stereoImageUrl = 'https://upload.wikimedia.org/wikipedia/commons/7/7d/Karlstejn_stereo.jpg';
 
-    // Sem vlož stereo obrázek
-    // Použij správnou stereo verzi obrázku (side-by-side nebo anaglyph)
-    // Tady je ukázka s side-by-side stereo obrázkem (např. z Wikimedia nebo vlastní)
-    var stereoImageUrl = 'https://raw.githubusercontent.com/Thomixioso/VRmap/main/Castles/generated/Le_Castillet_generated.jpg';
-
-    // Nastav obrázek jako "src" do sky
-    // Pokud máš stereo obrázek ve formátu side-by-side, můžeš jej nastavit přímo
     sky.setAttribute('material', 'shader: flat; side: double; src: ' + stereoImageUrl);
   }
 
-  // Funkce pro návrat zpět na mapu
   document.getElementById('exitVrBtn').onclick = function() {
     document.getElementById('map').style.display = 'block';
     document.getElementById('vrScene').style.display = 'none';
