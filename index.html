@@ -3,92 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>360° Fotografie a Stereo Viewer</title>
-    
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
-    <!-- WebXR Polyfill -->
-    <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.js"></script>
-    
+    <title>Jednoduchý Příklad: Mapa s Castle Markerem a Stereo Obrázkem</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        body { margin: 0; height: 100vh; overflow: hidden; }
+        #map { height: 100vh; width: 100%; }
+
+        /* Custom castle marker z tvého kódu */
+        .castle-marker {
+            width: 20px;
+            height: 20px;
+            background: #8B4513;
+            border: 2px solid #D2691E;
+            border-radius: 50%;
+            position: relative;
+        }
+        .castle-marker::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 8px solid #8B4513; /* Dědí barvu */
         }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 30px;
-        }
-
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-
-        .header p {
-            font-size: 1.1rem;
-            opacity: 0.9;
-        }
-
-        .controls {
-            display: flex;
-            justify-content: center;
-            gap: 15px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-
-        .btn {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            padding: 12px 24px;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-        }
-
-        .btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-            border-color: rgba(255, 255, 255, 0.5);
-            transform: translateY(-2px);
-        }
-
-        .btn.active {
-            background: rgba(255, 255, 255, 0.9);
-            color: #333;
-            border-color: white;
-        }
-
-        #map {
-            height: 500px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            overflow: hidden;
-        }
-
-        /* Modal Styles */
-        .modal {
+        /* VR Modal z tvého kódu, upravený pro jednoduchost */
+        .vr-modal {
             display: none;
             position: fixed;
             z-index: 10000;
@@ -98,771 +43,61 @@
             height: 100%;
             background-color: rgba(0, 0, 0, 0.95);
         }
-
-        .modal-content {
-            position: relative;
+        .vr-modal-content {
             width: 100%;
             height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
         }
-
-        .close {
+        .vr-close {
             position: absolute;
             top: 20px;
             right: 30px;
-            color: white;
+            color: #fff;
             font-size: 40px;
-            font-weight: bold;
             cursor: pointer;
-            z-index: 10001;
         }
-
-
-
-
-
-
-        .close:hover {
-            color: #ccc;
-        }
-
-        /* 360° Photo Styles */
-        .photo-360 {
-            width: 100%;
-            height: 100vh;
-            object-fit: cover;
-        }
-
-        /* Stereo Photo Styles */
-        .stereo-container {
-            width: 100%;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-        }
-
-        .stereo-image {
-            max-width: 90%;
-            max-height: 90%;
-            object-fit: contain;
-        }
-
-        /* VR Controls */
-        .vr-controls {
-            position: absolute;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 15px;
-            z-index: 10002;
-        }
-
-        .vr-enter-button {
-            background: linear-gradient(135deg, #4a90e2, #357abd);
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 25px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 15px rgba(74, 144, 226, 0.4);
-        }
-
-        .vr-enter-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(74, 144, 226, 0.6);
-        }
-
-        .vr-enter-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            background: #666;
-        }
-
-        .vr-info {
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-size: 14px;
-            backdrop-filter: blur(10px);
-        }
-
-        /* VR Mode Styles */
-        .vr-mode {
-            width: 100vw;
-            height: 100vh;
-            background: #000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .vr-stereo-view {
-            width: 100%;
-            height: 100%;
-            display: flex;
-        }
-
-        .vr-eye {
-            width: 50%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-
-        .vr-eye img {
-            width: 100%;
-            height: auto;
-            object-fit: cover;
-        }
-
-        /* Loading Styles */
-        .loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 18px;
-            z-index: 10003;
-        }
-
-        .spinner {
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top: 4px solid white;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        /* Responsive */
-        @media (max-width: 768px) {
-            .container {
-                padding: 10px;
-            }
-            
-            .header h1 {
-                font-size: 2rem;
-            }
-            
-            #map {
-                height: 400px;
-            }
-            
-            .controls {
-                gap: 10px;
-            }
-
-
-
-
-
-
-
-            
-            .btn {
-                padding: 10px 20px;
-                font-size: 12px;
-            }
-            
-            .vr-enter-button {
-                padding: 12px 24px;
-                font-size: 14px;
-            }
+        .stereo-img { /* Opravil jsem to na třídu pro <img> */
+            max-width: 80%;
+            max-height: 80%;
+            border: 2px solid #fff;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>360° Fotografie a Stereo Viewer</h1>
-            <p>Klikněte na marker pro zobrazení fotografie nebo stereo obrázku</p>
-        </div>
+    <div id="map"></div>
 
-        <div class="controls">
-            <button class="btn active" onclick="showAll()">Zobrazit vše</button>
-            <button class="btn" onclick="filterByType('360')">Pouze 360°</button>
-            <button class="btn" onclick="filterByType('stereo')">Pouze Stereo</button>
-        </div>
-
-        <div id="map"></div>
-    </div>
-
-    <!-- Modal pro zobrazení obrázků -->
-    <div id="imageModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeModal()">&times;</span>
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                Načítání...
-            </div>
-            <div id="modalImageContainer"></div>
-            <div class="vr-controls" id="vrControls" style="display: none;">
-                <div class="vr-info" id="vrInfo">VR Ready</div>
-                <button class="vr-enter-button" id="vrButton" onclick="toggleVR()">Vstoupit do VR</button>
-            </div>
+    <!-- VR Modal -->
+    <div id="vrModal" class="vr-modal">
+        <div class="vr-modal-content">
+            <span class="vr-close" onclick="closeModal()">&times;</span>
+            <img class="stereo-img" src="https://upload.wikimedia.org/wikipedia/commons/7/7d/Karlstejn_stereo.jpg" alt="Stereo obrázek hradu Karlštejn">
         </div>
     </div>
-
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script>
-        let map;
-        let markers = [];
-        let currentMarkers = [];
-        let currentImageData = null;
-        let isVRMode = false;
-        let isVRSupported = false;
+        // Inicializace mapy (satelitní vrstva z OpenStreetMap)
+        var map = L.map('map').setView([49.939, 14.188], 15); // Pozice hradu Karlštejn
 
-        // VR Manager Class
-        class VRManager {
-            constructor() {
-                this.xrSession = null;
-                this.isVRActive = false;
-                this.checkVRSupport();
-            }
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Satelitní mapa | &copy; Esri'
+        }).addTo(map);
 
-            async checkVRSupport() {
-                if ('xr' in navigator && navigator.xr) {
-                    try {
-                        isVRSupported = await navigator.xr.isSessionSupported('immersive-vr');
-                        console.log('VR Support:', isVRSupported);
-                    } catch (error) {
-                        console.log('VR check failed:', error);
-                        isVRSupported = false;
-                    }
-                } else {
-                    console.log('WebXR not available');
-                    isVRSupported = false;
-                }
-            }
+        // Jeden castle marker
+        var castleIcon = L.divIcon({ className: 'castle-marker', iconSize: [20, 20] });
+        var marker = L.marker([49.939, 14.188], { icon: castleIcon }).addTo(map);
+        marker.bindPopup('Hrad Karlštejn - Klikni pro stereo obrázek');
 
-            async requestVRSession() {
-                if (!isVRSupported) {
-                    // Fallback - pokusí se automaticky vstoupit do fullscreen VR módu
-                    this.enterFullscreenVR();
-                    return false;
-                }
+        // Otevření modalu při kliku na marker
+        marker.on('click', function() {
+            document.getElementById('vrModal').style.display = 'block';
+        });
 
-                try {
-                    this.xrSession = await navigator.xr.requestSession('immersive-vr', {
-                        requiredFeatures: ['local']
-                    });
-                    
-                    this.xrSession.addEventListener('end', () => {
-                        this.exitVR();
-                    });
-
-                    this.isVRActive = true;
-                    return true;
-                } catch (error) {
-                    console.error('VR session request failed:', error);
-                    // Fallback na fullscreen mód
-                    this.enterFullscreenVR();
-                    return false;
-                }
-            }
-
-            enterFullscreenVR() {
-                // Automaticky vstoupí do fullscreen módu a zobrazí stereo view
-                const modal = document.getElementById('imageModal');
-                const container = document.getElementById('modalImageContainer');
-
-
-
-
-
-
-
-
-
-
-
-                
-                if (modal.requestFullscreen) {
-                    modal.requestFullscreen();
-                } else if (modal.webkitRequestFullscreen) {
-                    modal.webkitRequestFullscreen();
-                } else if (modal.mozRequestFullScreen) {
-                    modal.mozRequestFullScreen();
-                } else if (modal.msRequestFullscreen) {
-                    modal.msRequestFullscreen();
-                }
-
-                // Přepnout do VR módu
-                this.isVRActive = true;
-                this.showVRStereoView();
-                
-                // Aktualizovat tlačítko
-                const vrButton = document.getElementById('vrButton');
-                vrButton.textContent = 'Ukončit VR';
-                vrButton.style.background = 'linear-gradient(135deg, #e74c3c, #c0392b)';
-            }
-
-            showVRStereoView() {
-                const container = document.getElementById('modalImageContainer');
-                
-                if (currentImageData && currentImageData.type === 'stereo') {
-                    container.innerHTML = `
-                        <div class="vr-mode">
-                            <div class="vr-stereo-view">
-                                <div class="vr-eye">
-                                    <img src="${currentImageData.image}" alt="Levé oko">
-                                </div>
-                                <div class="vr-eye">
-                                    <img src="${currentImageData.image}" alt="Pravé oko">
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }
-            }
-
-            exitVR() {
-                this.isVRActive = false;
-                
-                // Ukončit fullscreen
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                } else if (document.mozCancelFullScreen) {
-                    document.mozCancelFullScreen();
-                } else if (document.msExitFullscreen) {
-                    document.msExitFullscreen();
-                }
-
-                // Obnovit normální zobrazení
-                this.showNormalView();
-                
-                // Aktualizovat tlačítko
-                const vrButton = document.getElementById('vrButton');
-                vrButton.textContent = 'Vstoupit do VR';
-                vrButton.style.background = 'linear-gradient(135deg, #4a90e2, #357abd)';
-            }
-
-            showNormalView() {
-                if (currentImageData) {
-                    displayImage(currentImageData);
-                }
-            }
-        }
-
-        // Inicializace VR manageru
-        const vrManager = new VRManager();
-
-        // Inicializace mapy
-        function initMap() {
-            map = L.map('map').setView([49.75, 15.5], 8);
-
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(map);
-
-            loadMarkers();
-        }
-
-        // Načtení markerů z JSON
-        async function loadMarkers() {
-            try {
-                const response = await fetch('data.json');
-                const data = await response.json();
-                markers = data.markers || [];
-                showAll();
-            } catch (error) {
-                console.error('Chyba při načítání dat:', error);
-                alert('Nepodařilo se načíst data. Zkontrolujte prosím soubor data.json.');
-            }
-        }
-
-        // Vytvoření markeru na mapě
-        function createMarker(markerData) {
-            const icon = L.divIcon({
-                html: `<div style="
-                    background: ${markerData.type === '360' ? '#4CAF50' : '#2196F3'};
-                    width: 20px;
-                    height: 20px;
-                    border-radius: 50%;
-                    border: 3px
-
-
-
-
-                    solid white;
-                    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-                "></div>`,
-                className: 'custom-marker',
-                iconSize: [20, 20],
-                iconAnchor: [10, 10]
-            });
-
-            const marker = L.marker([markerData.lat, markerData.lng], { icon: icon })
-                .addTo(map)
-                .bindPopup(`
-                    <div style="text-align: center;">
-                        <strong>${markerData.title}</strong><br>
-                        <small>Typ: ${markerData.type === '360' ? '360° fotografie' : 'Stereo obrázek'}</small><br>
-                        <button onclick="openImage(${markers.indexOf(markerData)})" style="
-                            margin-top: 10px;
-                            padding: 8px 16px;
-                            background: #007cba;
-                            color: white;
-                            border: none;
-                            border-radius: 4px;
-                            cursor: pointer;
-                        ">Zobrazit</button>
-                    </div>
-                `);
-
-            marker.on('click', () => {
-                openImage(markers.indexOf(markerData));
-            });
-
-            return marker;
-        }
-
-        // Zobrazení všech markerů
-        function showAll() {
-            clearMarkers();
-            currentMarkers = markers.map(marker => createMarker(marker));
-            updateActiveButton(0);
-        }
-
-        // Filtrování podle typu
-        function filterByType(type) {
-            clearMarkers();
-            const filteredMarkers = markers.filter(marker => marker.type === type);
-            currentMarkers = filteredMarkers.map(marker => createMarker(marker));
-            updateActiveButton(type === '360' ? 1 : 2);
-        }
-
-        // Vymazání markerů
-        function clearMarkers() {
-            currentMarkers.forEach(marker => map.removeLayer(marker));
-            currentMarkers = [];
-        }
-
-        // Aktualizace aktivního tlačítka
-        function updateActiveButton(index) {
-            const buttons = document.querySelectorAll('.btn');
-            buttons.forEach((btn, i) => {
-                btn.classList.toggle('active', i === index);
-            });
-        }
-
-        // Otevření obrázku v modalu
-        function openImage(markerIndex) {
-            const markerData = markers[markerIndex];
-            currentImageData = markerData;
-            
-            const modal = document.getElementById('imageModal');
-            const loading = document.getElementById('loading');
-            const container = document.getElementById('modalImageContainer');
-            const vrControls = document.getElementById('vrControls');
-
-            // Zobrazit modal a loading
-            modal.style.display = 'block';
-            loading.style.display = 'block';
-            container.innerHTML = '';
-            vrControls.style.display = 'none';
-
-            // Preload obrázku
-            const img = new Image();
-            img.onload = () => {
-                loading.style.display = 'none';
-                displayImage(markerData);
-                
-                // Zobrazit VR kontroly pouze pro stereo obrázky
-                if (markerData.type === 'stereo') {
-                    vrControls.style.display = 'flex';
-                    updateVRInfo();
-                    
-                    // Automaticky vstoupit do VR módu
-                    setTimeout(() => {
-                        if (!isVRMode) {
-                            toggleVR();
-                        }
-                    }, 500);
-                }
-            };
-            img.onerror = () => {
-                loading.style.display = 'none';
-                container.innerHTML = '<div style="color: white; text-align: center; padding: 50px;">Nepodařilo se načíst obrázek</div>';
-            };
-            img.src = markerData.image;
-        }
-
-        // Zobrazení obrázku
-        function displayImage(markerData) {
-
-
-
-
-
-            const container = document.getElementById('modalImageContainer');
-            
-            if (markerData.type === '360') {
-                container.innerHTML = `
-                    <img src="${markerData.image}" alt="${markerData.title}" class="photo-360">
-                `;
-            } else if (markerData.type === 'stereo') {
-                if (isVRMode) {
-                    // VR mód - stereo zobrazení
-                    container.innerHTML = `
-                        <div class="vr-mode">
-                            <div class="vr-stereo-view">
-                                <div class="vr-eye">
-                                    <img src="${markerData.image}" alt="Levé oko" style="transform: translateX(25%);">
-                                </div>
-                                <div class="vr-eye">
-                                    <img src="${markerData.image}" alt="Pravé oko" style="transform: translateX(-25%);">
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    // Normální mód
-                    container.innerHTML = `
-                        <div class="stereo-container">
-                            <img src="${markerData.image}" alt="${markerData.title}" class="stereo-image">
-                        </div>
-                    `;
-                }
-            }
-        }
-
-        // Přepnutí VR módu
-        async function toggleVR() {
-            if (!currentImageData || currentImageData.type !== 'stereo') {
-                return;
-            }
-
-            if (!isVRMode) {
-                // Vstup do VR
-                isVRMode = true;
-                
-                // Pokusit se o WebXR session
-                const vrSessionStarted = await vrManager.requestVRSession();
-                
-                if (!vrSessionStarted) {
-                    // Fallback - použít fullscreen s stereo view
-                    vrManager.enterFullscreenVR();
-                }
-                
-                // Aktualizovat zobrazení
-                displayImage(currentImageData);
-                
-            } else {
-                // Výstup z VR
-                isVRMode = false;
-                vrManager.exitVR();
-            }
-            
-            updateVRInfo();
-        }
-
-        // Aktualizace VR informací
-        function updateVRInfo() {
-            const vrInfo = document.getElementById('vrInfo');
-            const vrButton = document.getElementById('vrButton');
-            
-            if (isVRMode) {
-                vrInfo.textContent = 'VR Aktivní';
-                vrButton.textContent = 'Ukončit VR';
-                vrButton.style.background = 'linear-gradient(135deg, #e74c3c, #c0392b)';
-            } else {
-                if (isVRSupported) {
-                    vrInfo.textContent = 'VR Ready';
-                } else {
-                    vrInfo.textContent = 'VR (Fullscreen)';
-                }
-                vrButton.textContent = 'Vstoupit do VR';
-                vrButton.style.background = 'linear-gradient(135deg, #4a90e2, #357abd)';
-            }
-        }
-
-        // Zavření modalu
+        // Funkce pro zavření modalu
         function closeModal() {
-            const modal = document.getElementById('imageModal');
-            modal.style.display = 'none';
-            
-            // Ukončit VR pokud je aktivní
-            if (isVRMode) {
-                isVRMode = false;
-                vrManager.exitVR();
-            }
-            
-            currentImageData = null;
+            document.getElementById('vrModal').style.display = 'none';
         }
-
-        // Event listenery
-        document.addEventListener('DOMContentLoaded', () => {
-            initMap();
-        });
-
-        // Zavření modalu při kliknutí mimo obrázek
-        window.onclick = function(event) {
-            const modal = document.getElementById('imageModal');
-            if (event.target === modal) {
-                closeModal();
-            }
-        }
-
-        // Klavesové zkratky
-        document.addEventListener('keydown', (event) => {
-
-
-
-            if (event.key === 'Escape') {
-                closeModal();
-            } else if (event.key === ' ' || event.key === 'Enter') {
-                if (currentImageData && currentImageData.type === 'stereo') {
-                    event.preventDefault();
-                    toggleVR();
-                }
-            }
-        });
-
-        // Fullscreen event listenery
-        document.addEventListener('fullscreenchange', handleFullscreenChange);
-        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-        document.addEventListener('mozfullscreenchange', handleFullscreenChange);
-        document.addEventListener('MSFullscreenChange', handleFullscreenChange);
-
-        function handleFullscreenChange() {
-            const isFullscreen = !!(document.fullscreenElement || 
-                                   document.webkitFullscreenElement || 
-                                   document.mozFullScreenElement || 
-                                   document.msFullscreenElement);
-            
-            if (!isFullscreen && isVRMode) {
-                // Uživatel ukončil fullscreen - ukončit i VR mód
-                isVRMode = false;
-                vrManager.isVRActive = false;
-                updateVRInfo();
-                
-                if (currentImageData) {
-                    displayImage(currentImageData);
-                }
-            }
-        }
-
-        // Orientace zařízení pro mobily
-        window.addEventListener('orientationchange', () => {
-            setTimeout(() => {
-                if (map) {
-                    map.invalidateSize();
-                }
-                if (isVRMode && currentImageData) {
-                    displayImage(currentImageData);
-                }
-            }, 100);
-        });
-
-        // Resize handler
-        window.addEventListener('resize', () => {
-            if (map) {
-                map.invalidateSize();
-            }
-        });
-
-        // Touch events pro stereo obrázky na mobilu
-        let touchStartX = 0;
-        let touchStartY = 0;
-
-        document.addEventListener('touchstart', (e) => {
-            touchStartX = e.touches[0].clientX;
-            touchStartY = e.touches[0].clientY;
-        });
-
-        document.addEventListener('touchend', (e) => {
-            if (!currentImageData || currentImageData.type !== 'stereo') return;
-            
-            const touchEndX = e.changedTouches[0].clientX;
-            const touchEndY = e.changedTouches[0].clientY;
-            
-            const deltaX = touchEndX - touchStartX;
-            const deltaY = touchEndY - touchStartY;
-            
-            // Dvojité klepnutí pro VR
-            if (Math.abs(deltaX) < 10 && Math.abs(deltaY) < 10) {
-                const currentTime = new Date().getTime();
-                const tapLength = currentTime - (window.lastTap || 0);
-                
-                if (tapLength < 500 && tapLength > 0) {
-                    e.preventDefault();
-                    toggleVR();
-                }
-                
-                window.lastTap = currentTime;
-            }
-        });
-
-        // Detekce VR headsetu
-        window.addEventListener('vrdisplayconnect', () => {
-            console.log('VR display connected');
-            vrManager.checkVRSupport();
-        });
-
-        window.addEventListener('vrdisplaydisconnect', () => {
-            console.log('VR display disconnected');
-            if (isVRMode) {
-                toggleVR();
-            }
-        });
-
-        // Preload obrázků pro lepší výkon
-        function preloadImages() {
-            markers.forEach(marker => {
-                const img = new Image();
-                img.src = marker.image;
-            });
-        }
-
-        // Spustit preload po načtení dat
-        setTimeout(preloadImages, 1000);
-
     </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-                
-            
-                    
-                
-            
-        
