@@ -12,7 +12,6 @@
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
     <script src="https://cdn.babylonjs.com/WebXR/babylon.webxr.js"></script>
-    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     
     <style>
         body, html {
@@ -79,61 +78,68 @@
 
         // Inicializace mapy
         function initMap() {
-            map = L.map('map', {
-                preferCanvas: true // Canvas místo WebGL
-            }).setView([50.0755, 14.4378], 6);
+            map = L.map('map').setView([50.0755, 14.4378], 6);
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
         }
 
-        // HtmlTexture class
-        class HtmlTexture extends BABYLON.DynamicTexture {
-            constructor(domElement, scene) {
-                super("HtmlTexture", {width: 1024, height: 1024}, scene);
-                this.domElement = domElement;
-                setTimeout(() => this.updateTexture(), 2000); // Čekání na načtení mapy
+        // Jednoduchá textura místo html2canvas
+        class SimpleMapTexture extends BABYLON.DynamicTexture {
+            constructor(scene) {
+                super("MapTexture", {width: 1024, height: 1024}, scene);
+                this.createMapTexture();
             }
 
-            async updateTexture() {
-                try {
-                    const canvas = await html2canvas(this.domElement, {
-                        useCORS: true,
-                        allowTaint: true,
-                        scale: 0.5
-                    });
-                    const ctx = this.getContext();
-                    ctx.clearRect(0, 0, 1024, 1024);
-                    ctx.drawImage(canvas, 0, 0, 1024, 1024);
-                    this.update();
-                    console.log("Mapa texture aktualizována");
-                } catch (e) {
-                    console.warn('html2canvas failed:', e);
-                    // Fallback - jednoduchá textura
-                    const ctx = this.getContext();
-                    ctx.fillStyle = '#4a90e2';
-                    ctx.fillRect(0, 0, 1024, 1024);
-                    ctx.fillStyle = 'white';
-                    ctx.font = '48px Arial';
-                    ctx.fillText('Map Loading...', 300, 500);
-                    this.update();
+            createMapTexture() {
+                const ctx = this.getContext();
+                
+                // Pozadí
+                ctx.fillStyle = '#4a90e2';
+                ctx.fillRect(0, 0, 1024, 1024);
+                
+                // Mřížka jako mapa
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                for(let i = 0; i < 1024; i += 64) {
+                    ctx.beginPath();
+                    ctx.moveTo(i, 0);
+                    ctx.lineTo(i, 1024);
+                    ctx.stroke();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(0, i);
+                    ctx.lineTo(1024, i);
+                    ctx.stroke();
                 }
+                
+                // Text
+                ctx.fillStyle = 'white';
+                ctx.font = '48px Arial';
+                ctx.fillText('VR Mapa', 400, 500);
+                ctx.font = '24px Arial';
+                ctx.fillText('Pan & Zoom s myší', 350, 550);
+                
+                this.update();
+                console.log("Jednoduchá mapa textura vytvořena");
             }
         }
 
-        // HtmlMesh class z index.html
-        class HtmlMesh {
-            constructor(domElement, scene) {
-                this.domElement = domElement;
-                this.texture = new HtmlTexture(domElement, scene);
+        // Jednoduchý mesh s mapou
+        class SimpleMapMesh {
+            constructor(scene) {
+                this.texture = new SimpleMapTexture(scene);
                 this.texture.hasAlpha = true;
 
-                this.mesh = BABYLON.MeshBuilder.CreatePlane("plane", { height: 5, width: 8 });
-                this.material = new BABYLON.StandardMaterial("Mat", scene);
+                this.mesh = BABYLON.MeshBuilder.CreatePlane("mapPlane", { height: 4, width: 6 });
+                this.material = new BABYLON.StandardMaterial("MapMat", scene);
                 this.material.diffuseTexture = this.texture;
+                this.material.emissiveTexture = this.texture;
+                this.material.emissiveColor = new BABYLON.Color3(0.3, 0.3, 0.3);
                 this.mesh.material = this.material;
-                this.mesh.position = new BABYLON.Vector3(0, 2, 2);
+                this.mesh.position = new BABYLON.Vector3(0, 2, 3);
+                this.mesh.rotation.x = -Math.PI / 12;
             }
         }
 
@@ -176,9 +182,8 @@
                 groundMat.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.3);
                 ground.material = groundMat;
 
-                // Převod mapy na VR pomocí HtmlMesh
-                const mapElement = document.getElementById('map');
-                htmlMesh = new HtmlMesh(mapElement, vrScene);
+                // Převod mapy na VR pomocí SimpleMapMesh
+                htmlMesh = new SimpleMapMesh(vrScene);
 
                 // Spustit render loop
                 vrEngine.runRenderLoop(() => {
@@ -194,10 +199,16 @@
                     });
                     
                     if (xrExperience.baseExperience) {
-                        console.log("WebXR ready - klikněte na VR ikonu");
+                        // Přidat VR tlačítko do scény
+                        const vrButton = xrExperience.enterExitUI.activeButton;
+                        if (vrButton) {
+                            vrButton.style.display = 'block';
+                            console.log("WebXR tlačítko aktivní - klikněte pro stereo VR");
+                        }
                     }
                 } catch (xrError) {
                     console.warn("WebXR není dostupný:", xrError);
+                    alert("Pro stereo VR potřebujete WebXR kompatibilní prohlížeč");
                 }
 
                 // Resize handler
