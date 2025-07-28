@@ -1,281 +1,111 @@
-<!doctype html>
-<html>
-    <head>
-        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Babylon.js s Interaktivní Leaflet Mapou ve VR</title>
-
-        <!-- Knihovny třetích stran -->
-        <script src="https://cdn.babylonjs.com/babylon.js"></script>
-        <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
-        <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>PoC: VR Ovládání 2D Mapy</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; cursor: none; background: #333; }
+        #map { width: 100%; height: 100%; }
         
-        <!-- Knihovna pro převod HTML na obrázek (pro texturu) -->
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+        /* Ovládací panel z tvé mapy */
+        .controls {
+            position: absolute; top: 20px; right: 20px; z-index: 1000;
+            background: rgba(0, 0, 0, 0.8); color: white; padding: 15px; border-radius: 8px;
+            border: 1px solid #4a90e2; font-family: sans-serif;
+        }
+        .controls label { display: block; margin-bottom: 5px; }
+        .controls input[type="range"] { width: 200px; }
 
-        <!-- Knihovna pro mapy Leaflet.js -->
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-            integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-            crossorigin=""/>
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-            crossorigin=""></script>
+        /* "Laser" z VR prostředí */
+        .laser-pointer {
+            position: fixed; width: 20px; height: 20px;
+            background: radial-gradient(circle, #ff0000 0%, #ff0000 40%, transparent 70%);
+            border: 2px solid #ff0000; border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none; /* Důležité, aby neblokoval kliknutí */
+            z-index: 9999;
+        }
+    </style>
+</head>
+<body>
 
-        <style>
-            html,
-            body {
-                overflow: hidden;
-                width: 100%;
-                height: 100%;
-                margin: 0;
-                padding: 0;
-            }
+    <div id="map"></div>
+    <div class="laser-pointer"></div>
 
-            #renderCanvas {
-                width: 100%;
-                height: 100%;
-                touch-action: none;
-            }
+    <div class="controls">
+        <h4>Ovládání vrstvy</h4>
+        <label for="opacitySlider">Průhlednost (Opacity)</label>
+        <input type="range" id="opacitySlider" min="0" max="1" step="0.01" value="0.7">
+    </div>
 
-            /* Kontejner pro mapu. Musí mít fixní rozměry. */
-            /* Je umístěn mimo viditelnou oblast, protože ho vykreslujeme do textury. */
-            #mapContainer {
-                width: 1024px; /* Větší rozlišení pro lepší čitelnost */
-                height: 768px;
-                position: absolute;
-                left: -9999px; /* Schování mimo obrazovku */
-                top: 0;
-                background-color: #f0f0f0;
-            }
-        </style>
-    </head>
-    <body>
-        <!-- Kontejner pro Leaflet mapu -->
-        <div id="mapContainer"></div>
+<script>
+    // 1. ZÁKLADNÍ NASTAVENÍ MAPY
+    const map = L.map('map', { zoomControl: false }).setView([49.8, 15.5], 8);
+    const baseLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    }).addTo(map);
+    const overlayLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        maxZoom: 17,
+        attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)'
+    }).addTo(map);
 
-        <!-- Canvas pro Babylon.js scénu -->
-        <canvas id="renderCanvas"></canvas>
+    const opacitySlider = document.getElementById('opacitySlider');
+    overlayLayer.setOpacity(opacitySlider.value);
 
-        <!-- 
-            HLAVNÍ SKRIPT SCÉNY
-            Atribut 'defer' zajišťuje, že se kód spustí až po načtení celého HTML,
-            čímž se vyřeší chyba "BABYLON is not defined".
-        -->
-        <script defer>
-            const canvas = document.getElementById("renderCanvas");
-            let engine = null;
-            let scene = null;
 
-            // =========================================================================
-            // TŘÍDY A NÁSTROJE
-            // =========================================================================
+    // 2. LOGIKA PRO "VR" OVLÁDÁNÍ SLIDERU
+    const laserPointer = document.querySelector('.laser-pointer');
+    let activeSlider = null;
+    let isDragging = false;
 
-            /**
-             * Simuluje události myši na HTML elementu.
-             * @param {HTMLElement} element - Cílový element.
-             * @param {string} eventType - Typ události (např. 'mousedown', 'mousemove').
-             * @param {number} x - Relativní X souřadnice (0 až 1).
-             * @param {number} y - Relativní Y souřadnice (0 až 1).
-             * @param {number} button - Kód tlačítka (0=levé, 1=střední, 2=pravé).
-             */
-            function htmlevent(element, eventType, x, y, button = 0) {
-                x = Math.max(0, Math.min(1, x));
-                y = Math.max(0, Math.min(1, y));
+    // Sledování pozice "laseru" (kurzoru myši)
+    document.addEventListener('mousemove', (e) => {
+        laserPointer.style.left = `${e.clientX}px`;
+        laserPointer.style.top = `${e.clientY}px`;
 
-                const rect = element.getBoundingClientRect();
-                const clientX = rect.left + x * rect.width;
-                const clientY = rect.top + y * rect.height;
+        if (isDragging && activeSlider) {
+            // Získání rozměrů a pozice slideru
+            const sliderRect = activeSlider.getBoundingClientRect();
+            // Výpočet nové hodnoty na základě pozice myši relativně ke slideru
+            let newValue = (e.clientX - sliderRect.left) / sliderRect.width;
+            
+            // Omezení hodnoty mezi 0 a 1
+            newValue = Math.max(0, Math.min(1, newValue));
 
-                const eventInit = {
-                    clientX,
-                    clientY,
-                    bubbles: true,
-                    cancelable: true,
-                    composed: true,
-                    view: window,
-                    button,
-                    buttons: (eventType === 'mousedown' || eventType === 'mousemove') && button === 0 ? 1 : 0,
-                };
-                
-                const event = new MouseEvent(eventType, eventInit);
-                element.dispatchEvent(event);
-            }
+            // Přepočet na rozsah min/max daného slideru
+            const min = parseFloat(activeSlider.min);
+            const max = parseFloat(activeSlider.max);
+            activeSlider.value = min + newValue * (max - min);
 
-            /**
-             * Dynamická textura, která se aktualizuje z obsahu HTML elementu.
-             */
-            class HtmlTexture extends BABYLON.DynamicTexture {
-                constructor(domElement, scene) {
-                    const tempCanvas = document.createElement("canvas");
-                    tempCanvas.width = domElement.clientWidth;
-                    tempCanvas.height = domElement.clientHeight;
+            // Spuštění 'input' události, aby se změna projevila
+            activeSlider.dispatchEvent(new Event('input'));
+        }
+    });
 
-                    super("HtmlTexture", tempCanvas, scene, true);
-                    this.domElement = domElement;
-                    this._scene = scene;
-                    
-                    this._updateInterval = setInterval(() => this.update(), 100); // Aktualizace 10x za sekundu
-                }
+    // "Chytnutí" slideru
+    document.addEventListener('mousedown', (e) => {
+        if (e.target.type === 'range') {
+            isDragging = true;
+            activeSlider = e.target;
+            // Zabráníme výchozímu chování, aby se slider nepřetahoval dvakrát
+            e.preventDefault();
+        }
+    });
 
-                async update() {
-                    try {
-                        const canvas = await html2canvas(this.domElement, {
-                            useCORS: true,
-                            logging: false,
-                            x: this.domElement.offsetLeft,
-                            y: this.domElement.offsetTop,
-                            width: this.domElement.clientWidth,
-                            height: this.domElement.clientHeight,
-                            windowWidth: document.documentElement.scrollWidth,
-                            windowHeight: document.documentElement.scrollHeight
-                        });
-                        const textureContext = this.getContext();
-                        textureContext.clearRect(0, 0, this.getSize().width, this.getSize().height);
-                        textureContext.drawImage(canvas, 0, 0);
-                        super.update();
-                    } catch (error) {
-                        console.error("html2canvas error:", error);
-                    }
-                }
-                
-                dispose() {
-                    clearInterval(this._updateInterval);
-                    super.dispose();
-                }
-            }
+    // "Puštění" slideru
+    document.addEventListener('mouseup', () => {
+        isDragging = false;
+        activeSlider = null;
+    });
 
-            /**
-             * Vytváří 3D plochu (mesh) s interaktivní HTML texturou.
-             */
-            class HtmlMesh {
-                constructor(domElement, scene) {
-                    this.domElement = domElement;
-                    this.texture = new HtmlTexture(domElement, scene);
-                    
-                    const planeOptions = {
-                        height: 5,
-                        width: 5 * (domElement.clientWidth / domElement.clientHeight) // Zachová poměr stran
-                    };
-                    this.mesh = BABYLON.MeshBuilder.CreatePlane("htmlPlane", planeOptions, scene);
-                    
-                    this.material = new BABYLON.StandardMaterial("htmlMat", scene);
-                    this.material.diffuseTexture = this.texture;
-                    this.material.emissiveColor = new BABYLON.Color3(0.2, 0.2, 0.2); // Zabrání úplnému zčernání
-                    this.material.backFaceCulling = false;
-                    this.mesh.material = this.material;
+    // 3. PROPOJENÍ SLIDERU S MAPOU
+    opacitySlider.addEventListener('input', (e) => {
+        overlayLayer.setOpacity(e.target.value);
+    });
 
-                    let isDragging = false;
+</script>
 
-                    const getHTMLCoords = (pickResult) => {
-                        if (!pickResult?.hit) return null;
-                        const htmlCoords = pickResult.getTextureCoordinates();
-                        if (!htmlCoords) return null;
-                        return { x: htmlCoords.x, y: 1 - htmlCoords.y }; // Y je v 3D a HTML obráceně
-                    };
-
-                    scene.onPointerObservable.add((pointerInfo) => {
-                        if (pointerInfo.pickInfo?.pickedMesh !== this.mesh) {
-                            if (isDragging) {
-                                isDragging = false;
-                                htmlevent(this.domElement, "mouseup", 0, 0);
-                                htmlevent(this.domElement, "mouseleave", 0, 0);
-                            }
-                            return;
-                        }
-
-                        const coords = getHTMLCoords(pointerInfo.pickInfo);
-                        if (!coords) return;
-                        
-                        switch (pointerInfo.type) {
-                            case BABYLON.PointerEventTypes.POINTERDOWN:
-                                isDragging = true;
-                                htmlevent(this.domElement, "mousedown", coords.x, coords.y, 0);
-                                break;
-                            case BABYLON.PointerEventTypes.POINTERUP:
-                                if (isDragging) {
-                                    isDragging = false;
-                                    htmlevent(this.domElement, "mouseup", coords.x, coords.y, 0);
-                                }
-                                break;
-                            case BABYLON.PointerEventTypes.POINTERMOVE:
-                                htmlevent(this.domElement, "mousemove", coords.x, coords.y, isDragging ? 0 : -1);
-                                break;
-                            case BABYLON.PointerEventTypes.POINTERWHEEL:
-                                const event = new WheelEvent('wheel', {
-                                    deltaY: pointerInfo.event.deltaY,
-                                    bubbles: true,
-                                });
-                                this.domElement.dispatchEvent(event);
-                                pointerInfo.event.preventDefault();
-                                break;
-                        }
-                    });
-                }
-            }
-
-            // =========================================================================
-            // HLAVNÍ LOGIKA APLIKACE
-            // =========================================================================
-
-            /**
-             * Inicializuje scénu Babylon.js.
-             */
-            const createScene = async function () {
-                const scene = new BABYLON.Scene(engine);
-                
-                // Kamera a světlo
-                const camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 1.6, -2.5), scene);
-                camera.setTarget(new BABYLON.Vector3(0, 1.6, 0));
-                camera.attachControl(canvas, true);
-                const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
-                light.intensity = 1.0;
-
-                // Inicializace mapy v našem skrytém divu
-                const mapElement = document.getElementById('mapContainer');
-                const map = L.map(mapElement, {
-                    preferCanvas: true,
-                    zoomAnimation: false, // Lepší pro html2canvas
-                    fadeAnimation: false,
-                }).setView([49.8, 15.5], 7); // Pohled na ČR
-
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                }).addTo(map);
-
-                // Vytvoření 3D plochy s texturou mapy
-                const htmlMesh = new HtmlMesh(mapElement, scene);
-                htmlMesh.mesh.position = new BABYLON.Vector3(0, 1.6, 0);
-
-                // Vytvoření základního prostředí a VR
-                const xrHelper = await scene.createDefaultXRExperienceAsync({
-                    floorMeshes: [] // Nemáme podlahu, takže prázdné pole
-                });
-
-                return scene;
-            };
-
-            /**
-             * Startovací funkce aplikace.
-             */
-            const start = async function() {
-                engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true });
-                scene = await createScene();
-
-                engine.runRenderLoop(function () {
-                    if (scene) {
-                        scene.render();
-                    }
-                });
-
-                window.addEventListener("resize", function () {
-                    engine.resize();
-                });
-            };
-
-            // Spuštění aplikace
-            start();
-
-        </script>
-    </body>
+</body>
 </html>
