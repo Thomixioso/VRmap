@@ -32,6 +32,7 @@
         }
         #leftController { left: 20px; }
         #rightController { right: 20px; }
+        #errorMessage { color: red; margin-top: 10px; }  /* Styl pro chybové zprávy */
     </style>
 </head>
 <body>
@@ -43,6 +44,7 @@
         <div id="leftController" class="controller">Left Controller: X Y</div>
         <div id="rightController" class="controller">Right Controller: A B</div>
     </div>
+    <div id="errorMessage"></div>  <!-- Místo pro globální chybové zprávy -->
 
     <script>
         let map = L.map('map').setView([50.0755, 14.4378], 13);  // Výchozí pohled (např. Praha)
@@ -50,29 +52,60 @@
 
         let xrSession = null;  // Globální proměnná pro XR session
 
+        // Fetch data.json s error handling
         fetch('data.json')
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Nepodařilo se načíst data.json: ' + response.statusText);
+                }
+                return response.json();
+            })
             .then(data => {
-                data.locations.forEach(location => {
-                    let marker = L.marker([location.lat, location.lng]).addTo(map);
-                    marker.bindPopup(location.title);
+                // Data je array, takže iterujeme přímo přes data
+                if (!Array.isArray(data)) {
+                    throw new Error('Data.json nemá očekávanou strukturu (mělo by být array míst).');
+                }
+                data.forEach(location => {
+                    let marker = L.marker([location.lat, location.lon]).addTo(map);  // Použij "lon" místo "lng"
+                    marker.bindPopup(location.name);  // Použij "name" místo "title"
                     marker.on('click', () => showLocationDetails(location));
                 });
+            })
+            .catch(error => {
+                console.error('Chyba při načítání dat:', error);
+                document.getElementById('errorMessage').innerHTML = '<p>Chyba: Nepodařilo se načíst data. Zkontroluj soubor data.json nebo síťové připojení.</p>';
             });
 
         function showLocationDetails(location) {
             let details = document.getElementById('detailsContainer');
             details.innerHTML = `
-                <h2>${location.title}</h2>
-                <p>${location.description}</p>
+                <h2>${location.name}</h2>  <!-- Použij "name" -->
+                <p><strong>Kategorie:</strong> ${location.category}</p>
+                <p id="description">Načítání popisu...</p>
             `;
+
+            // Načti popis z TXT souboru (z "txtFile")
+            fetch(location.txtFile)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Nepodařilo se načíst TXT soubor: ' + response.statusText);
+                    }
+                    return response.text();
+                })
+                .then(text => {
+                    document.getElementById('description').innerHTML = text.replace(/\n/g, '<br>');  // Nahraď nové řádky pro HTML
+                })
+                .catch(error => {
+                    console.error('Chyba při načítání TXT:', error);
+                    document.getElementById('description').innerHTML = 'Chyba: Nepodařilo se načíst popis z TXT souboru.';
+                });
 
             let imageContainer = document.getElementById('imageContainer');
             imageContainer.innerHTML = '';  // Vyčistit předchozí obsah
 
             let img = document.createElement('img');
             img.src = location.image;
-            img.alt = location.title;
+            img.alt = location.name;
             img.onerror = () => {
                 imageContainer.innerHTML = '<p>Chyba při načítání obrázku.</p>';
             };
