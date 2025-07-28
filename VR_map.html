@@ -2,172 +2,308 @@
 <html lang="cs">
 <head>
     <meta charset="UTF-8">
-    <title>Pokročilé VR Ovládání 2D Mapy</title>
+    <title>Leaflet Mapa ve VR (A-Frame)</title>
+    <!-- A-Frame knihovna -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <!-- A-Frame komponenta pro vkládání HTML - DŮLEŽITÉ! -->
+    <!-- Tato komponenta umožňuje vykreslit HTML jako texturu a interagovat s ní -->
+    <script src="https://unpkg.com/aframe-html-shader/dist/aframe-html-shader.min.js"></script>
+
+    <!-- Leaflet CSS a JS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; cursor: none; background: #333; }
-        #map { width: 100%; height: 100%; }
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+        /* Skryjeme původní Leaflet mapu, bude vložena do A-Frame */
+        #map-container {
+            width: 1000px; /* Šířka pro vykreslení v A-Frame */
+            height: 800px; /* Výška pro vykreslení v A-Frame */
+            background-color: #333;
+            position: absolute; /* Důležité pro to, aby se vykreslilo mimo běžný tok dokumentu */
+            top: -9999px; /* Skryjeme to z viditelné části HTML */
+            left: -9999px;
+            /* Border pro vizualizaci, kde je kontejner */
+            border: 1px solid red;
+            box-sizing: border-box;
+            overflow: hidden; /* Důležité pro Leaflet */
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+        }
 
-        /* Vylepšení pro mapové panely, aby na ně šly aplikovat filtry */
-        .leaflet-tile-pane { transition: filter 0.1s linear; }
-
+        /* Styly pro ovládací panel z předchozí verze */
         .controls {
             position: absolute; top: 10px; right: 10px; z-index: 1000;
-            background: rgba(0, 0, 0, 0.8); color: white; padding: 15px; border-radius: 8px;
-            border: 1px solid #4a90e2; font-family: sans-serif; max-height: 95%; overflow-y: auto;
+            background: rgba(10, 10, 15, 0.85); color: white; padding: 15px; border-radius: 8px;
+            border: 1px solid #4a90e2; font-family: sans-serif;
+            max-height: 90%; overflow-y: auto;
+            backdrop-filter: blur(5px);
+            width: 250px; /* Pevná šířka pro lepší ovládání */
+            box-sizing: border-box;
         }
-        .control-group { margin-bottom: 15px; border-top: 1px solid #555; padding-top: 10px; }
-        .control-group h5 { margin: 0 0 10px 0; color: #4a90e2; }
+        .control-group { margin-bottom: 15px; border-top: 1px solid #444; padding-top: 15px; }
+        .control-group h5 { margin: 0 0 10px 0; color: #4a90e2; text-transform: uppercase; letter-spacing: 1px; }
         .controls label { display: block; margin-bottom: 5px; font-size: 14px; }
-        .controls input[type="range"] { width: 200px; }
-
-        .laser-pointer {
-            position: fixed; width: 20px; height: 20px;
-            background: radial-gradient(circle, #ff0000 0%, #ff0000 40%, transparent 70%);
-            border: 2px solid #ff0000; border-radius: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none; z-index: 9999;
-            transition: transform 0.1s ease-out, background 0.1s, border-color 0.1s;
-        }
-        /* Nový stav pro "chycení" slideru */
-        .laser-pointer.grabbing {
-            transform: translate(-50%, -50%) scale(1.5);
-            background: radial-gradient(circle, #4a90e2 0%, #4a90e2 40%, transparent 70%);
-            border-color: #4a90e2;
-        }
+        .controls input[type="range"] { width: 100%; } /* Aby se vešly do 250px šířky */
+        .controls select { width: 100%; padding: 5px; background: #333; color: white; border: 1px solid #555; border-radius: 4px; }
+        .radio-group label { display: inline-block; margin-right: 15px; }
     </style>
 </head>
 <body>
 
-    <div id="map"></div>
-    <div class="laser-pointer"></div>
+    <!-- A-Frame scéna -->
+    <a-scene>
+        <!-- Kamera s raycasterem pro interakci -->
+        <a-entity camera look-controls position="0 1.6 2">
+            <!-- Kurzor pro interakci (simulace VR laseru) -->
+            <a-cursor raycaster="objects: .collidable; interval: 100;"></a-cursor>
+        </a-entity>
 
-    <div class="controls" id="controlsPanel">
-        <h4>Ovládání vrstev</h4>
-        <div class="control-group">
-            <h5>Překryvná vrstva (Overlay)</h5>
-            <label>Průhlednost: <span id="overlayOpacityVal">0.7</span></label>
-            <input type="range" id="overlayOpacity" min="0" max="1" step="0.01" value="0.7">
-            <label>Jas: <span id="overlayBrightnessVal">100</span>%</label>
-            <input type="range" id="overlayBrightness" min="0" max="200" step="1" value="100">
-            <label>Kontrast: <span id="overlayContrastVal">100</span>%</label>
-            <input type="range" id="overlayContrast" min="0" max="200" step="1" value="100">
-            <label>Sytost: <span id="overlaySaturateVal">100</span>%</label>
-            <input type="range" id="overlaySaturate" min="0" max="200" step="1" value="100">
-            <label>Odstín: <span id="overlayHueVal">0</span>°</label>
-            <input type="range" id="overlayHue" min="0" max="360" step="1" value="0">
-        </div>
-        <div class="control-group">
-            <h5>Podkladová vrstva (Base)</h5>
-            <label>Jas: <span id="baseBrightnessVal">100</span>%</label>
-            <input type="range" id="baseBrightness" min="0" max="200" step="1" value="100">
-            <label>Kontrast: <span id="baseContrastVal">100</span>%</label>
-            <input type="range" id="baseContrast" min="0" max="200" step="1" value="100">
-            <label>Sytost: <span id="baseSaturateVal">100</span>%</label>
-            <input type="range" id="baseSaturate" min="0" max="200" step="1" value="100">
-            <label>Odstín: <span id="baseHueVal">0</span>°</label>
-            <input type="range" id="baseHue" min="0" max="360" step="1" value="0">
+        <!-- Světlo -->
+        <a-light type="ambient" color="#BBB"></a-light>
+        <a-light type="directional" position="1 1 1" color="#FFF"></a-light>
+
+        <!-- Rovina, na kterou se vykreslí HTML obsah (včetně mapy a ovládacího panelu) -->
+        <!-- 'html-shader' komponenta vykreslí obsah #map-container -->
+        <!-- 'width' a 'height' by měly odpovídat rozměrům #map-container pro nejlepší kvalitu -->
+        <!-- 'position' umístí rovinu před kameru -->
+        <a-plane
+            id="mapPlane"
+            html-shader="target: #map-container;"
+            width="10" height="8"  <!-- Poměr stran by měl odpovídat 1000x800 -->
+            position="0 1 -5"
+            rotation="0 0 0"
+            class="collidable"
+        ></a-plane>
+
+        <!-- Volitelný pozemní rovina -->
+        <a-plane static-body rotation="-90 0 0" width="100" height="100" color="#7BC8A4"></a-plane>
+    </a-scene>
+
+    <!-- Skrytý kontejner pro Leaflet mapu a ovládací panel -->
+    <div id="map-container">
+        <div id="map"></div>
+        <div class="controls" id="controlsPanel">
+            <div class="control-group">
+                <h5>Překryvná vrstva (Overlay)</h5>
+                <div class="radio-group" id="overlaySelector">
+                    <label><input type="radio" name="overlayType" value="topo" checked> Topo</label>
+                    <label><input type="radio" name="overlayType" value="street"> Street</label>
+                </div>
+                <label for="blendMode" style="margin-top:10px;">Mód prolnutí:</label>
+                <select id="blendMode">
+                    <option value="normal">Normal</option>
+                    <option value="multiply">Multiply</option>
+                    <option value="screen">Screen</option>
+                    <option value="overlay" selected>Overlay</option>
+                    <option value="darken">Darken</option>
+                    <option value="lighten">Lighten</option>
+                    <option value="color-dodge">Color Dodge</option>
+                    <option value="color-burn">Color Burn</option>
+                    <option value="hard-light">Hard Light</option>
+                    <option value="soft-light">Soft Light</option>
+                    <option value="difference">Difference</option>
+                    <option value="exclusion">Exclusion</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <h5>Vizuální efekty (Overlay)</h5>
+                <label>Průhlednost: <span id="overlayOpacityVal">0.7</span></label>
+                <input type="range" id="overlayOpacity" min="0" max="1" step="0.01" value="0.7">
+                <label>Jas: <span id="overlayBrightnessVal">100</span>%</label>
+                <input type="range" id="overlayBrightness" min="0" max="200" step="1" value="100">
+                <label>Kontrast: <span id="overlayContrastVal">100</span>%</label>
+                <input type="range" id="overlayContrast" min="0" max="200" step="1" value="100">
+                <label>Sytost: <span id="overlaySaturateVal">100</span>%</label>
+                <input type="range" id="overlaySaturate" min="0" max="200" step="1" value="100">
+                <label>Odstín: <span id="overlayHueVal">0</span>°</label>
+                <input type="range" id="overlayHue" min="0" max="360" step="1" value="0">
+            </div>
+            <div class="control-group">
+                <h5>Vizuální efekty (Base)</h5>
+                <label>Jas: <span id="baseBrightnessVal">100</span>%</label>
+                <input type="range" id="baseBrightness" min="0" max="200" step="1" value="100">
+                <label>Kontrast: <span id="baseContrastVal">100</span>%</label>
+                <input type="range" id="baseContrast" min="0" max="200" step="1" value="100">
+                <label>Sytost: <span id="baseSaturateVal">100</span>%</label>
+                <input type="range" id="baseSaturate" min="0" max="200" step="1" value="100">
+                <label>Odstín: <span id="baseHueVal">0</span>°</label>
+                <input type="range" id="baseHue" min="0" max="360" step="1" value="0">
+            </div>
         </div>
     </div>
 
 <script>
-    // 1. NASTAVENÍ MAPY A VRSTEV
-    const map = L.map('map', { zoomControl: false }).setView([49.8, 15.5], 8);
-    const baseLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
-    const overlayLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png').addTo(map);
+    // 1. NASTAVENÍ MAPY A VRSTEV (stejné jako předtím, jen je v jiném kontejneru)
+    let map;
+    let baseLayer;
+    let overlayLayers = {};
+    let currentOverlay;
+    let basePane;
+    let overlayPane;
 
-    const basePane = baseLayer.getPane();
-    const overlayPane = overlayLayer.getPane();
+    // Počkej, až se A-Frame scéna načte, pak inicializuj Leaflet
+    document.querySelector('a-scene').addEventListener('loaded', function () {
+        map = L.map('map', {
+            zoomControl: false,
+            // Zakážeme interakce s mapou přímo, protože interakce bude přes A-Frame
+            dragging: false,
+            zoomSnap: 0,
+            scrollWheelZoom: false,
+            doubleClickZoom: false,
+            boxZoom: false,
+            keyboard: false,
+            attributionControl: false
+        }).setView([49.8, 15.5], 8);
 
-    // 2. LOGIKA PRO "VR" OVLÁDÁNÍ
-    const laserPointer = document.querySelector('.laser-pointer');
-    let activeSlider = null;
-    let isDragging = false;
+        baseLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
 
-    document.addEventListener('mousemove', (e) => {
-        laserPointer.style.left = `${e.clientX}px`;
-        laserPointer.style.top = `${e.clientY}px`;
+        overlayLayers = {
+            topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png'),
+            street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png')
+        };
+        currentOverlay = overlayLayers.topo;
+        currentOverlay.addTo(map);
 
-        if (isDragging && activeSlider) {
-            const sliderRect = activeSlider.getBoundingClientRect();
-            let newValueRatio = (e.clientX - sliderRect.left) / sliderRect.width;
-            newValueRatio = Math.max(0, Math.min(1, newValueRatio));
+        basePane = baseLayer.getPane();
+        overlayPane = currentOverlay.getPane();
 
-            const min = parseFloat(activeSlider.min);
-            const max = parseFloat(activeSlider.max);
-            activeSlider.value = min + newValueRatio * (max - min);
-            
-            // Vyvolá 'input' událost, aby se změny projevily v reálném čase
-            activeSlider.dispatchEvent(new Event('input', { bubbles: true }));
-        }
+        // Zajistíme, že Leaflet překreslí dlaždice po inicializaci v "neviditelném" DOMu
+        map.invalidateSize();
+
+        // Nastavíme listenery, jakmile je mapa připravena
+        setupEventListeners();
+        updateMapEffects(); // Aplikovat výchozí efekty
     });
 
-    document.addEventListener('mousedown', (e) => {
-        // Cílíme pouze na prvky typu 'range' uvnitř našeho panelu
-        if (e.target.type === 'range') {
-            isDragging = true;
-            activeSlider = e.target;
-            laserPointer.classList.add('grabbing'); // Vizuální zpětná vazba
-            e.preventDefault();
+    // 2. LOGIKA PRO "VR" OVLÁDÁNÍ SLIDERŮ
+    // Tato logika je integrována do A-Frame raycasteru a 'html-shader' komponenty.
+    // Nemáme přímo 'laserPointer' jako DOM element, ale A-Frame cursor.
+    // 'html-shader' komponenta se stará o předávání událostí (kliknutí, pohyb)
+    // na vložený HTML obsah.
+
+    let isDraggingSlider = false;
+    let activeSliderElement = null; // Reference na HTML DOM element slideru
+
+    // A-Frame komponenta, která poslouchá události z raycasteru
+    // a simuluje přetahování sliderů.
+    AFRAME.registerComponent('slider-interactor', {
+        init: function() {
+            this.el.addEventListener('mousedown', (evt) => {
+                // Zkontrolujeme, zda jsme klikli na slider
+                const targetEl = evt.detail.intersection.object.el; // Toto je A-Frame entita (mapPlane)
+                const originalEvent = evt.detail.originalEvent; // Původní DOM událost
+
+                // Získáme skutečný DOM element, na který se kliklo uvnitř map-container
+                const clickedElement = originalEvent.target;
+
+                if (clickedElement && clickedElement.type === 'range') {
+                    isDraggingSlider = true;
+                    activeSliderElement = clickedElement;
+                    // Můžeme přidat vizuální zpětnou vazbu na A-Frame kurzor, pokud chceme
+                    // např. document.querySelector('a-cursor').setAttribute('color', 'blue');
+                }
+            });
+
+            this.el.addEventListener('mouseup', () => {
+                if (isDraggingSlider) {
+                    isDraggingSlider = false;
+                    activeSliderElement = null;
+                    // document.querySelector('a-cursor').setAttribute('color', 'red');
+                }
+            });
+
+            // Tato část je složitější: A-Frame 'html-shader' neposílá přímo 'mousemove'
+            // s pozicí myši přes slider. Musíme se spolehnout na to, že 'html-shader'
+            // předává události a pak se spolehnout na A-Frame raycaster.
+            // Pro přetahování slideru je ideální, když 'html-shader' komponenta
+            // má vestavěnou podporu pro simulaci 'mousemove' na vloženém HTML.
+            // Pokud ne, je to omezení této metody.
+            // Pro tento PoC se budeme spoléhat na to, že 'html-shader' předává kliknutí
+            // a 'input' události. Přetahování slideru myší uvnitř VR bude náročnější
+            // a často se řeší jinými způsoby (např. posouváním hodnoty po malých krocích
+            // při držení tlačítka a pohybu ovladačem).
+
+            // Pro demonstraci, jak by se dalo ovládat "pohybem" ve VR:
+            // Když je slider "uchopen" a uživatel pohne VR ovladačem (nebo pohledem kamery v tomto případě)
+            // Můžeme simulovat změnu hodnoty.
+            // Toto je zjednodušení, protože nemáme skutečný VR ovladač.
+            // V reálném VR byste poslouchali události VR ovladače.
+            this.el.addEventListener('raycaster-intersected', (evt) => {
+                if (isDraggingSlider && activeSliderElement) {
+                    // Toto je velmi zjednodušené a nemusí fungovat přesně
+                    // v závislosti na implementaci aframe-html-shaderu.
+                    // V reálném VR byste použili pozici VR ovladače.
+                    // Zde jen simulujeme, že se něco děje, když "míříte" na slider
+                    // a držíte tlačítko.
+                    const intersection = evt.detail.intersection;
+                    if (intersection) {
+                        // Zde byste museli vypočítat, kde na slideru je průsečík
+                        // a podle toho nastavit hodnotu.
+                        // Pro PoC to zatím vynecháme, protože je to komplexní
+                        // a závisí na přesné implementaci html-shaderu.
+                        // Namísto toho se spolehneme na to, že kliknutí aktivuje slider
+                        // a pak uživatel může ovládat hodnotu jiným způsobem (např.
+                        // stisknutím tlačítka "plus/minus" nebo pohybem celého panelu).
+                    }
+                }
+            });
         }
     });
+    // Přidáme komponentu na rovinu s mapou
+    document.getElementById('mapPlane').setAttribute('slider-interactor', '');
 
-    document.addEventListener('mouseup', () => {
-        if (isDragging) {
-            isDragging = false;
-            activeSlider = null;
-            laserPointer.classList.remove('grabbing'); // Ukončení zpětné vazby
-        }
-    });
 
-    // 3. CENTRÁLNÍ FUNKCE PRO APLIKACI ZMĚN
+    // 3. CENTRÁLNÍ FUNKCE PRO APLIKACI ZMĚN (stejné jako předtím)
     const controlsPanel = document.getElementById('controlsPanel');
 
     function updateMapEffects() {
-        // Aplikace průhlednosti
+        if (!map) return; // Ujistíme se, že mapa je inicializovaná
+
+        overlayPane.style.mixBlendMode = document.getElementById('blendMode').value;
         const opacity = document.getElementById('overlayOpacity').value;
-        overlayLayer.setOpacity(opacity);
+        currentOverlay.setOpacity(opacity);
         document.getElementById('overlayOpacityVal').textContent = parseFloat(opacity).toFixed(2);
 
-        // Sestavení CSS filtrů pro překryvnou vrstvu
         const oBrightness = document.getElementById('overlayBrightness').value;
         const oContrast = document.getElementById('overlayContrast').value;
         const oSaturate = document.getElementById('overlaySaturate').value;
         const oHue = document.getElementById('overlayHue').value;
-        overlayPane.style.filter = `
-            brightness(${oBrightness}%) 
-            contrast(${oContrast}%) 
-            saturate(${oSaturate}%) 
-            hue-rotate(${oHue}deg)
-        `;
+        overlayPane.style.filter = `brightness(${oBrightness}%) contrast(${oContrast}%) saturate(${oSaturate}%) hue-rotate(${oHue}deg)`;
         document.getElementById('overlayBrightnessVal').textContent = oBrightness;
         document.getElementById('overlayContrastVal').textContent = oContrast;
         document.getElementById('overlaySaturateVal').textContent = oSaturate;
         document.getElementById('overlayHueVal').textContent = oHue;
 
-        // Sestavení CSS filtrů pro podkladovou vrstvu
         const bBrightness = document.getElementById('baseBrightness').value;
         const bContrast = document.getElementById('baseContrast').value;
         const bSaturate = document.getElementById('baseSaturate').value;
         const bHue = document.getElementById('baseHue').value;
-        basePane.style.filter = `
-            brightness(${bBrightness}%) 
-            contrast(${bContrast}%) 
-            saturate(${bSaturate}%) 
-            hue-rotate(${bHue}deg)
-        `;
+        basePane.style.filter = `brightness(${bBrightness}%) contrast(${bContrast}%) saturate(${bSaturate}%) hue-rotate(${bHue}deg)`;
         document.getElementById('baseBrightnessVal').textContent = bBrightness;
         document.getElementById('baseContrastVal').textContent = bContrast;
         document.getElementById('baseSaturateVal').textContent = bSaturate;
         document.getElementById('baseHueVal').textContent = bHue;
     }
 
-    // Posloucháme změny na celém panelu najednou
-    controlsPanel.addEventListener('input', updateMapEffects);
+    // 4. LISTENERY PRO NOVÉ OVLÁDACÍ PRVKY
+    function setupEventListeners() {
+        document.getElementById('overlaySelector').addEventListener('change', (e) => {
+            const selectedType = e.target.value;
+            if (overlayLayers[selectedType] && currentOverlay !== overlayLayers[selectedType]) {
+                map.removeLayer(currentOverlay);
+                currentOverlay = overlayLayers[selectedType];
+                map.addLayer(currentOverlay);
+                overlayPane = currentOverlay.getPane(); // Důležité: získat nový pane
+                updateMapEffects();
+            }
+        });
 
-    // Zavoláme funkci poprvé, aby se nastavily výchozí hodnoty
-    updateMapEffects();
+        controlsPanel.addEventListener('input', updateMapEffects);
+        document.getElementById('blendMode').addEventListener('change', updateMapEffects);
+    }
 
 </script>
 
