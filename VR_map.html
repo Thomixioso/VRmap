@@ -445,8 +445,9 @@ class HtmlTexture extends BABYLON.DynamicTexture {
         const observer = new MutationObserver(() => {
 
             if (!this.scheduleUpdate) {
-                // ideally should use xr.requestAnimationFrame, here setTimeout to avoid passing the renderer
-                this.scheduleUpdate = setTimeout(() => this.update(), 16);
+                // For map updates, use longer delay to allow tiles to load
+                const delay = this.domElement.querySelector('#mapContainer') ? 100 : 16;
+                this.scheduleUpdate = setTimeout(() => this.update(), delay);
             }
 
         });
@@ -455,6 +456,13 @@ class HtmlTexture extends BABYLON.DynamicTexture {
         observer.observe(domElement, config);
 
         this.observer = observer;
+        
+        // Set up periodic updates for dynamic content like maps
+        this.periodicUpdate = setInterval(() => {
+            if (this.domElement.querySelector('#mapContainer')) {
+                this.update();
+            }
+        }, 500); // Update every 500ms for map content
     }
 
     get width() {
@@ -469,6 +477,16 @@ class HtmlTexture extends BABYLON.DynamicTexture {
         html2canvas(this.domElement);
         super.update()
         this.scheduleUpdate = null;
+    }
+    
+    dispose() {
+        super.dispose();
+        if (this.observer) {
+            this.observer.disconnect();
+        }
+        if (this.periodicUpdate) {
+            clearInterval(this.periodicUpdate);
+        }
     }
 }
 
@@ -740,11 +758,26 @@ function html2canvas(element) {
 
             x = rect.left - offset.left - 0.5;
             y = rect.top - offset.top - 0.5;
+            width = rect.width;
+            height = rect.height;
 
             context.save();
-            const dpr = window.devicePixelRatio;
-            context.scale(1 / dpr, 1 / dpr);
-            context.drawImage(element, x, y);
+            try {
+                // Draw the canvas content directly
+                context.drawImage(element, x, y, width, height);
+            } catch (e) {
+                // If canvas drawing fails, draw a placeholder
+                context.fillStyle = '#f0f0f0';
+                context.fillRect(x, y, width, height);
+                context.strokeStyle = '#ccc';
+                context.strokeRect(x, y, width, height);
+                
+                // Add text indicating it's a map
+                context.fillStyle = '#666';
+                context.font = '12px Arial';
+                context.textAlign = 'center';
+                context.fillText('Interactive Map', x + width/2, y + height/2);
+            }
             context.restore();
 
         } else if (element instanceof HTMLImageElement) {
@@ -772,6 +805,52 @@ function html2canvas(element) {
             height = rect.height;
 
             style = window.getComputedStyle(element);
+
+            // Special handling for Leaflet map container
+            if (element.classList && (element.classList.contains('leaflet-container') || element.id === 'mapContainer')) {
+                // Draw map background
+                context.fillStyle = '#a6cee3'; // Light blue for water
+                context.fillRect(x, y, width, height);
+                
+                // Try to capture any canvas elements within the map
+                const mapCanvases = element.querySelectorAll('canvas');
+                mapCanvases.forEach(canvas => {
+                    if (canvas.style.display !== 'none') {
+                        try {
+                            const canvasRect = canvas.getBoundingClientRect();
+                            const canvasX = canvasRect.left - offset.left - 0.5;
+                            const canvasY = canvasRect.top - offset.top - 0.5;
+                            context.drawImage(canvas, canvasX, canvasY, canvas.width, canvas.height);
+                        } catch (e) {
+                            console.log('Could not draw map canvas:', e);
+                        }
+                    }
+                });
+                
+                // Try to capture tile images
+                const tileImages = element.querySelectorAll('img');
+                tileImages.forEach(img => {
+                    if (img.complete && img.naturalWidth > 0) {
+                        try {
+                            const imgRect = img.getBoundingClientRect();
+                            const imgX = imgRect.left - offset.left - 0.5;
+                            const imgY = imgRect.top - offset.top - 0.5;
+                            context.drawImage(img, imgX, imgY, imgRect.width, imgRect.height);
+                        } catch (e) {
+                            console.log('Could not draw map tile:', e);
+                        }
+                    }
+                });
+                
+                // Add map overlay text
+                context.fillStyle = 'rgba(0,0,0,0.7)';
+                context.fillRect(x + 5, y + height - 25, 100, 20);
+                context.fillStyle = 'white';
+                context.font = '10px Arial';
+                context.fillText('Leaflet Map', x + 10, y + height - 10);
+                
+                return; // Skip normal element processing
+            }
 
             // Get the border of the element used for fill and border
 
