@@ -57,6 +57,8 @@
         let map = L.map('map').setView([50.0755, 14.4378], 13);  // Výchozí pohled (např. Praha)
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
+        let xrSession = null;  // Globální proměnná pro XR session (pro správný exit na Questu)
+
         // Fetch data.json s error handling
         fetch('data.json')
             .then(response => {
@@ -126,36 +128,65 @@
         function openVRView(imagePath) {
             const vrContainer = document.getElementById('vrContainer');
             
-            // Zkopírováno z demo: Jednoduché vložení <stereo-img> s atributy (minimální, jako v demo)
+            // Zkopírováno z demo: Jednoduché vložení <stereo-img> s atributy
             vrContainer.innerHTML += `
                 <stereo-img src="${imagePath}" type="left-right" angle="180"></stereo-img>
-            `;  // Změň 'left-right' nebo '180' podle tvých obrázků (jako v demo příkladech)
+            `;  // Změň 'left-right' nebo '180' podle tvých obrázků
             
             vrContainer.classList.add('active');
+
+            // Spustit XR session pro immersivní VR (potřebné pro Quest)
+            if (navigator.xr) {
+                navigator.xr.requestSession('immersive-vr').then(session => {
+                    xrSession = session;
+                }).catch(err => {
+                    console.error('Nepodařilo se spustit XR session:', err);
+                });
+            }
         }
 
         function exitVR() {
             const vrContainer = document.getElementById('vrContainer');
             vrContainer.classList.remove('active');
-            vrContainer.innerHTML = '';  // Vyčistit obsah (jako v demo)
+            vrContainer.innerHTML = '';  // Vyčistit obsah
+
+            // Ukončit XR session pro správný návrat z VR (klíčové pro Quest)
+            if (xrSession) {
+                xrSession.end().then(() => {
+                    xrSession = null;
+                }).catch(err => console.error('Chyba při ukončení XR session:', err));
+            }
         }
 
-        // Opravený listener pro Escape klávesu (volitelný, můžeš smazat)
+        // Listener pro Escape klávesu (volitelný)
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') exitVR();
         });
 
-        // Základní check gamepadů pro Quest ovladače (volitelný, můžeš smazat)
+        // Rozšířený check gamepadů pro Meta Quest 3 ovladače (detekuje tlačítka i joystick)
         function checkGamepads() {
             const gamepads = navigator.getGamepads();
             gamepads.forEach(gp => {
                 if (gp && gp.connected) {
-                    if (gp.buttons[3]?.pressed || gp.buttons[4]?.pressed) {
-                        exitVR();
+                    // Volitelné logování pro debugging (odkomentuj pro test - sleduj v konzoli, která tlačítka/joysticky se aktivují)
+                    // console.log('Gamepad:', gp.id);
+                    // gp.buttons.forEach((button, index) => {
+                    //     if (button.pressed) console.log(`Button ${index} pressed`);
+                    // });
+                    // console.log('Axes:', gp.axes);  // Pro joystick (hodnoty -1 až 1)
+
+                    // Detekce jakéhokoli tlačítka (trigger, grip, A/B/X/Y, thumbstick press)
+                    const isButtonPressed = gp.buttons.some(button => button.pressed);  // Jakýkoli stisk tlačítka
+
+                    // Detekce pohybu joysticku (např. posun nahoru/dolů > 50% rozsahu)
+                    const isJoystickMoved = Math.abs(gp.axes[1]) > 0.5 || Math.abs(gp.axes[0]) > 0.5;  // Vertikální/horizontální pohyb
+
+                    if (isButtonPressed || isJoystickMoved) {
+                        exitVR();  // Ukončit VR při jakémkoli stisku nebo pohybu
                     }
                 }
             });
-            setTimeout(checkGamepads, 100);
+            requestAnimationFrame(checkGamepads);  // Použij requestAnimationFrame místo setTimeout pro lepší výkon (každý frame ~16ms)
         }
         checkGamepads();  // Spustit kontrolu
     </script>
