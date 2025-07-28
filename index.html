@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>2D Satelitní Mapa</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <!-- Import stereo-img knihovny -->
+    <script type="module" src="https://stereo-img.steren.fr/stereo-img.js"></script>
     <style>
         * {
             margin: 0;
@@ -69,48 +71,54 @@
             color: #fff;
             border: 1px solid #555;
             border-radius: 6px;
+
+
             font-size: 14px;
+        }
+        
+        .control-group select:focus {
+            outline: none;
+            border-color: #007cba;
+            box-shadow: 0 0 0 2px rgba(0, 124, 186, 0.2);
         }
         
         .control-group input[type="range"] {
             width: 100%;
-            height: 8px;
-            background: #333;
-            border-radius: 4px;
-            outline: none;
-            -webkit-appearance: none;
-            appearance: none;
-        }
-        
-        .control-group input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            background: #4a90e2;
-            border-radius: 50%;
-            cursor: pointer;
-        }
-        
-        .control-group input[type="range"]::-moz-range-thumb {
-            width: 20px;
-            height: 20px;
-            background: #4a90e2;
-            border-radius: 50%;
-            cursor: pointer;
-            border: none;
+            margin: 8px 0;
         }
         
         .control-group input[type="color"] {
-            width: 100%;
+            width: 50px;
             height: 30px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
-            background: transparent;
         }
         
-        .marker-controls {
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-bottom: 8px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .markers-panel {
             position: absolute;
             top: 20px;
             left: 20px;
@@ -120,106 +128,75 @@
             border-radius: 12px;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            min-width: 300px;
+            min-width: 280px;
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            max-height: 90vh;
+            overflow-y: auto;
         }
         
-        .marker-controls h3 {
-            margin-bottom: 15px;
-            color: #4a90e2;
-            font-size: 16px;
-        }
-        
-        .data-stats {
-            background: rgba(74, 144, 226, 0.1);
-            padding: 10px;
+        .marker-item {
+            display: flex;
+            align-items: center;
+            padding: 8px;
+            margin: 5px 0;
+            background: rgba(255, 255, 255, 0.1);
             border-radius: 6px;
-            margin-bottom: 15px;
-            border: 1px solid rgba(74, 144, 226, 0.3);
+            transition: background 0.3s ease;
         }
         
-        .data-stats small {
-            color: #b0b0b0;
-            font-size: 12px;
-            line-height: 1.4;
+        .marker-item:hover {
+            background: rgba(255, 255, 255, 0.2);
         }
         
-        .input-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 10px;
+        .marker-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 10px;
+            border-radius: 50%;
         }
         
-        .marker-controls input {
-            padding: 8px 12px;
-            background: #333;
-            color: #fff;
-            border: 1px solid #555;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-        
-        .marker-controls input[type="text"] {
-            grid-column: 1 / -1;
-        }
-        
-        .button-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        
-        .marker-controls button {
-            padding: 10px 15px;
-            background: linear-gradient(135deg, #4a90e2, #357abd);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-        
-        .marker-controls button:hover {
-            background: linear-gradient(135deg, #357abd, #2c5aa0);
-            transform: translateY(-2px);
-        }
-        
-        .marker-controls button.secondary {
-            background: linear-gradient(135deg, #dc3545, #c82333);
-        }
-        
-        .marker-controls button.secondary:hover {
-            background: linear-gradient(135deg, #c82333, #a71e2a);
-        }
+        .castle-marker { background-color: #8B4513; }
+        .historical-marker { background-color: #DAA520; }
+        .park-marker { background-color: #228B22; }
         
         .info-panel {
             position: absolute;
             bottom: 20px;
-            left: 20px;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 1000;
             background: rgba(0, 0, 0, 0.9);
-            padding: 20px;
+            padding: 15px 25px;
             border-radius: 12px;
-            max-width: 350px;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            text-align: center;
         }
         
-        .info-panel h3 {
-            color: #4a90e2;
-            margin-bottom: 10px;
-            font-size: 16px;
-        }
-        
-        .info-panel p {
-            line-height: 1.6;
+        .stats {
+            display: flex;
+            gap: 20px;
             font-size: 14px;
-            color: #e0e0e0;
+        }
+        
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .stat-number {
+            font-size: 18px;
+            font-weight: bold;
+            color: #67e8f9;
+
+
+        }
+        
+        .stat-label {
+            color: #a0a0a0;
+            font-size: 12px;
         }
         
         .back-button {
@@ -228,67 +205,28 @@
             left: 50%;
             transform: translateX(-50%);
             z-index: 1001;
-            background: rgba(0, 0, 0, 0.9);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            text-decoration: none;
+            border: none;
             padding: 12px 24px;
             border-radius: 25px;
-            font-weight: 500;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
             transition: all 0.3s ease;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
         }
         
         .back-button:hover {
-            background: rgba(255, 255, 255, 0.1);
             transform: translateX(-50%) translateY(-2px);
-        }
-        
-        .leaflet-control-attribution {
-            background: rgba(0, 0, 0, 0.8) !important;
-            color: #ccc !important;
-        }
-        
-        /* Vlastní marker ikony podle kategorie */
-        .castle-marker {
-            background: #8B4513;
-            border: 2px solid #D2691E;
-        }
-        
-        .historical-marker {
-            background: #4169E1;
-            border: 2px solid #6495ED;
-        }
-        
-        .park-marker {
-            background: #228B22;
-            border: 2px solid #32CD32;
-        }
-        
-        .custom-marker {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            position: relative;
-        }
-        
-        .custom-marker::after {
-            content: '';
-            position: absolute;
-            bottom: -8px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 0;
-            height: 0;
-            border-left: 8px solid transparent;
-            border-right: 8px solid transparent;
-            border-top: 8px solid inherit;
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
         }
         
         /* VR Modal */
         .vr-modal {
             display: none;
             position: fixed;
-            z-index: 10000;
+            z-index: 2000;
             left: 0;
             top: 0;
             width: 100%;
@@ -299,26 +237,27 @@
         
         .vr-modal-content {
             position: relative;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-direction: column;
+            margin: 2% auto;
+            width: 90%;
+            height: 90%;
+            background: #1a1a1a;
+            border-radius: 15px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
         
         .vr-close {
             position: absolute;
+            right: 20px;
             top: 20px;
-            right: 30px;
             color: #fff;
-            font-size: 40px;
+            font-size: 35px;
             font-weight: bold;
             cursor: pointer;
-            z-index: 10001;
-            background: rgba(0, 0, 0, 0.7);
-            width: 60px;
-            height: 60px;
+            z-index: 2001;
+            background: rgba(0, 0, 0, 0.5);
+            width: 50px;
+            height: 50px;
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -327,768 +266,1141 @@
         }
         
         .vr-close:hover {
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.1);
             transform: scale(1.1);
         }
         
-        .vr-info {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px;
-            border-radius: 10px;
-            color: white;
-            max-width: 300px;
-            z-index: 10001;
-        }
-        
-        .vr-info h4 {
-            margin-bottom: 10px;
-            color: #4a90e2;
-        }
-        
+        /* Stereo img styling */
         stereo-img {
             width: 100%;
             height: 100%;
-            max-width: 100vw;
-            max-height: 100vh;
+            display: block;
+            border-radius: 15px;
         }
         
-        /* Blend modes pro overlay vrstvy */
-        .blend-multiply {
-            mix-blend-mode: multiply;
+        .vr-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+            padding: 30px;
+            color: white;
+            z-index: 2001;
         }
         
-        .blend-screen {
-            mix-blend-mode: screen;
+        .vr-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
         }
         
-        .blend-overlay {
-            mix-blend-mode: overlay;
+        .vr-description {
+            font-size: 16px;
+            line-height: 1.5;
+            opacity: 0.9;
         }
         
-        .blend-soft-light {
-            mix-blend-mode: soft-light;
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .controls, .markers-panel {
+                position: fixed;
+                width: 90%;
+                max-width: none;
+                left: 5%;
+                right: 5%;
+                max-height: 50vh;
+            }
+            
+            .controls {
+                top: auto;
+                bottom: 80px;
+                right: 5%;
+            }
+            
+            .markers-panel {
+                top: 70px;
+
+            }
+            
+            .info-panel {
+                bottom: 10px;
+                left: 5%;
+                right: 5%;
+                transform: none;
+                width: 90%;
+            }
+            
+            .stats {
+                gap: 10px;
+                font-size: 12px;
+            }
+            
+            .back-button {
+                top: 10px;
+                padding: 8px 16px;
+                font-size: 14px;
+            }
+            
+            .vr-modal-content {
+                margin: 5% auto;
+                width: 95%;
+                height: 85%;
+            }
+            
+            .vr-close {
+                right: 10px;
+                top: 10px;
+                width: 40px;
+                height: 40px;
+                font-size: 25px;
+            }
         }
         
-        .blend-hard-light {
-            mix-blend-mode: hard-light;
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
         }
     </style>
 </head>
 <body>
-    <a href="index.html" class="back-button">← Zpět na výběr</a>
+    <div id="map"></div>
+    
+    <button class="back-button" onclick="goBack()">← Zpět</button>
     
     <div class="controls">
-        <div class="control-group">
-            <label>
-                <input type="checkbox" id="countries" checked> Hranice států
-            </label>
-            <label for="borderColor">Barva hranic:</label>
-            <input type="color" id="borderColor" value="#ffffff">
-        </div>
-        
-        <div class="control-group">
-            <label for="overlayLayer">Overlay mapa:</label>
-            <select id="overlayLayer">
-                <option value="none">Žádná</option>
-                <option value="topo_labeled" selected>🗺️ Topografická (města)</option>
-                <option value="streets_labeled">🏙️ Ulice</option>
-            </select>
-        </div>
-        
-        <div class="control-group">
-            <label for="blendMode">Blend mode:</label>
-            <select id="blendMode">
-                <option value="multiply" selected>Multiply</option>
-                <option value="screen">Screen</option>
-                <option value="overlay">Overlay</option>
-                <option value="soft-light">Soft Light</option>
-                <option value="hard-light">Hard Light</option>
-            </select>
-        </div>
-        
-        <div class="control-group">
-            <label for="overlayOpacity">Mix hodnota: <span id="opacityValue">70%</span></label>
-            <input type="range" id="overlayOpacity" min="0" max="100" value="70">
-        </div>
+        <h3 style="margin-bottom: 15px; color: #67e8f9;">Ovládání mapy</h3>
         
         <div class="control-group">
             <label>
-                <input type="checkbox" id="invertOverlay"> Invertovat overlay
+                <input type="checkbox" id="showSatellite" checked> Satelitní zobrazení
             </label>
         </div>
         
         <div class="control-group">
-            <label>🎨 Korekce podkladu:</label>
-            <label for="baseBrightness">Jas: <span id="baseBrightnessValue">100%</span></label>
-            <input type="range" id="baseBrightness" min="50" max="150" value="100">
-            
-            <label for="baseContrast">Kontrast: <span id="baseContrastValue">100%</span></label>
-            <input type="range" id="baseContrast" min="50" max="150" value="100">
-            
-            <label for="baseSaturation">Sytost: <span id="baseSaturationValue">100%</span></label>
-            <input type="range" id="baseSaturation" min="0" max="200" value="100">
-            
-            <label for="baseHue">Odstín: <span id="baseHueValue">0°</span></label>
-            <input type="range" id="baseHue" min="-180" max="180" value="0">
+            <label for="mapStyle">Styl mapy:</label>
+            <select id="mapStyle">
+                <option value="satellite">Satelitní</option>
+                <option value="streets">Ulice</option>
+                <option value="hybrid">Hybridní</option>
+                <option value="terrain">Terén</option>
+            </select>
         </div>
         
         <div class="control-group">
-            <label>🎨 Korekce overlay:</label>
-            <label for="overlayBrightness">Jas: <span id="overlayBrightnessValue">100%</span></label>
-            <input type="range" id="overlayBrightness" min="50" max="150" value="100">
-            
-            <label for="overlayContrast">Kontrast: <span id="overlayContrastValue">100%</span></label>
-            <input type="range" id="overlayContrast" min="50" max="150" value="100">
-            
-            <label for="overlaySaturation">Sytost: <span id="overlaySaturationValue">100%</span></label>
-            <input type="range" id="overlaySaturation" min="0" max="200" value="100">
-            
-            <label for="overlayHue2">Odstín: <span id="overlayHueValue">0°</span></label>
-            <input type="range" id="overlayHue2" min="-180" max="180" value="0">
+            <label for="opacity">Průhlednost vrstvy:</label>
+            <input type="range" id="opacity" min="0" max="1" step="0.1" value="1">
         </div>
+        
+        <div class="control-group">
+            <label for="markerColor">Barva markerů:</label>
+            <input type="color" id="markerColor" value="#ff6b6b">
+        </div>
+        
+        <button class="btn" onclick="resetView()">Resetovat pohled</button>
+        <button class="btn" onclick="toggleFullscreen()">Celá obrazovka</button>
+        <button class="btn" onclick="exportMap()">Exportovat mapu</button>
     </div>
     
-    <div class="marker-controls">
-        <h3>📍 Markery a data</h3>
-        <div class="data-stats" id="dataStats">
-            <small>Načítám data z JSON souboru...</small>
+    <div class="markers-panel">
+        <h3 style="margin-bottom: 15px; color: #67e8f9;">Značky na mapě</h3>
+        
+        <div class="control-group">
+            <button class="btn" onclick="addMarker()">+ Přidat značku</button>
         </div>
-        <div class="input-group">
-            <input type="number" id="markerLat" step="0.0001" placeholder="Zeměpisná šířka">
-            <input type="number" id="markerLng" step="0.0001" placeholder="Zeměpisná délka">
+        
+        <div class="marker-item">
+            <div class="marker-icon castle-marker"></div>
+            <div>
+                <div style="font-weight: bold;">Pražský hrad</div>
+                <div style="font-size: 12px; color: #a0a0a0;">Historický hrad</div>
+            </div>
         </div>
-        <input type="text" id="markerText" placeholder="Název místa">
-        <div class="button-group">
-            <button onclick="addMarker()">Přidat marker</button>
-            <button onclick="clearMarkers()" class="secondary">Smazat vše</button>
+        
+        <div class="marker-item">
+
+
+            <div class="marker-icon historical-marker"></div>
+            <div>
+                <div style="font-weight: bold;">Karlův most</div>
+                <div style="font-size: 12px; color: #a0a0a0;">Historická památka</div>
+            </div>
+        </div>
+        
+        <div class="marker-item">
+            <div class="marker-icon park-marker"></div>
+            <div>
+                <div style="font-weight: bold;">Petřín</div>
+                <div style="font-size: 12px; color: #a0a0a0;">Park</div>
+            </div>
+        </div>
+        
+        <div class="marker-item">
+            <div class="marker-icon castle-marker"></div>
+            <div>
+                <div style="font-weight: bold;">Karlštejn</div>
+                <div style="font-size: 12px; color: #a0a0a0;">Gotický hrad</div>
+            </div>
         </div>
     </div>
     
     <div class="info-panel">
-        <h3>🌍 2D Satelitní Mapa</h3>
-        <p id="infoText">Klikněte na mapu pro GPS souřadnice.<br><br>
-        <strong>Ovládání:</strong><br>
-        • Kliknutí = GPS souřadnice<br>
-        • Drag = posouvání mapy<br>
-        • Kolečko = zoom<br>
-        • Dvojklik = rychlý zoom<br><br>
-        <strong>VR Obsah:</strong><br>
-        • 🏰 Hrady (hnědé markery)<br>
-        • 🏛️ Historické místa (modré)<br>
-        • 🌳 Parky (zelené)<br>
-        • Kliknutím zobrazíte 180° VR</p>
+        <div class="stats">
+            <div class="stat-item">
+                <div class="stat-number">12</div>
+                <div class="stat-label">Značek</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">5</div>
+                <div class="stat-label">Hradů</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">3</div>
+                <div class="stat-label">Parků</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-number">4</div>
+                <div class="stat-label">Památek</div>
+            </div>
+        </div>
     </div>
     
     <!-- VR Modal -->
     <div id="vrModal" class="vr-modal">
         <div class="vr-modal-content">
-            <span class="vr-close" onclick="closeVR()">&times;</span>
-            <div class="vr-info" id="vrInfo">
-                <h4 id="vrTitle">Načítám...</h4>
-                <p id="vrDescription">Příprava VR obsahu...</p>
+            <span class="vr-close">&times;</span>
+            <!-- Stereo obrázek komponenta -->
+            <stereo-img src="./Castles/generated/Le_Castillet_generated.jpg"></stereo-img>
+            <div class="vr-overlay">
+                <div class="vr-title">Le Castillet</div>
+                <div class="vr-description">
+                    Historická pevnost v Perpignanu, Francie. Tato gotická brána z 14. století 
+                    sloužila jako vstupní bod do města a později jako vězení. Dnes je domovem 
+                    Casa Pairal, muzea katalánské kultury.
+                </div>
             </div>
-            <stereo-img id="vrImage" style="display: none;"></stereo-img>
         </div>
     </div>
     
-    <div id="map"></div>
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-    <script type="module" src="https://stereo-img.steren.fr/stereo-img.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
     <script>
-        console.log('🚀 Spouštím 2D satelitní mapu s VR obsahem...');
+        // Inicializace mapy
+        let map = L.map('map').setView([50.0755, 14.4378], 10);
         
-        // Inicializace mapy s bližším výchozím zoomem
-        const map = L.map('map', {
-            center: [49.75, 15.5], // Střed ČR
-            zoom: 5, // Výchozí zoom blíž (místo 4)
-            minZoom: 3,
-            maxZoom: 8,
-            zoomControl: true,
-            attributionControl: true,
-            worldCopyJump: true,
-            maxBounds: [[-85, -Infinity], [85, Infinity]],
-            maxBoundsViscosity: 1.0
+        // Přidání satelitní vrstvy
+        let satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: '&copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+        }).addTo(map);
+        
+        // Přidání uličních map
+        let streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
         });
+        
 
-        // Markery
-        let markersGroup = L.layerGroup().addTo(map);
-        let markerCount = 0;
-        let dataMarkers = []; // Markery z JSON dat
 
-        // Vrstvy
-        let layers = { countries: null };
-        let borderColor = '#ffffff';
-        let currentOverlayLayer = null;
-
-        // Podkladová mapa - satelitní s interpolací od úrovně 4
-        const baseLayer = L.tileLayer('tiles_satellite_labeled/{z}/{x}/{y}.jpg', {
-            attribution: 'ESRI World Imagery s popisky (Offline) - Interpolace od lvl 4',
-            minZoom: 3,
-            maxZoom: 8,
-            maxNativeZoom: 4, // Interpolace od úrovně 4 místo 6
-            className: 'base-layer-filtered'
-        });
-        baseLayer.addTo(map);
-
-        // Overlay vrstvy s interpolací od úrovně 4
-        function createOverlayLayer(layerKey) {
-            const overlayLayers = {
-                topo_labeled: L.tileLayer('tiles_topo_labeled/{z}/{x}/{y}.png', {
-                    attribution: 'ESRI Topographic s popisky - Interpolace od lvl 4',
-                    minZoom: 3,
-                    maxZoom: 8,
-                    maxNativeZoom: 4, // Interpolace od úrovně 4
-                    opacity: 0.7,
-                    className: 'overlay-layer-filtered blend-multiply'
-                }),
-                
-                streets_labeled: L.tileLayer('tiles_streets_labeled/{z}/{x}/{y}.png', {
-                    attribution: 'OpenStreetMap s popisky - Interpolace od lvl 4',
-                    minZoom: 3,
-                    maxZoom: 8,
-                    maxNativeZoom: 4, // Interpolace od úrovně 4
-                    opacity: 0.7,
-                    className: 'overlay-layer-filtered blend-multiply'
-                })
-            };
-            
-            return overlayLayers[layerKey] || null;
+        // Ovládání vrstev
+        let baseMaps = {
+            "Satelitní": satelliteLayer,
+            "Ulice": streetLayer
+        };
+        
+        // Přidání kontroly vrstev
+        L.control.layers(baseMaps).addTo(map);
+        
+        // Přidání markerů
+        let markers = [];
+        
+        // Pražský hrad
+        let praguecastle = L.marker([50.0909, 14.4014]).addTo(map);
+        praguecastle.bindPopup('<b>Pražský hrad</b><br>Historické sídlo českých králů<br><button onclick="openVR()">Zobrazit VR</button>');
+        markers.push(praguecastle);
+        
+        // Karlův most
+        let charlesbridge = L.marker([50.0865, 14.4114]).addTo(map);
+        charlesbridge.bindPopup('<b>Karlův most</b><br>Historický most přes Vltavu<br><button onclick="openVR()">Zobrazit VR</button>');
+        markers.push(charlesbridge);
+        
+        // Petřín
+        let petrin = L.marker([50.0836, 14.3949]).addTo(map);
+        petrin.bindPopup('<b>Petřín</b><br>Park s rozhlednou<br><button onclick="openVR()">Zobrazit VR</button>');
+        markers.push(petrin);
+        
+        // Karlštejn
+        let karlstejn = L.marker([49.9395, 14.1880]).addTo(map);
+        karlstejn.bindPopup('<b>Karlštejn</b><br>Gotický hrad<br><button onclick="openVR()">Zobrazit VR</button>');
+        markers.push(karlstejn);
+        
+        // Funkce pro ovládání
+        function goBack() {
+            alert('Návrat na předchozí stránku');
+            // window.history.back();
         }
-
-        // Načtení výchozí overlay vrstvy (topografická s městy)
-        setTimeout(() => {
-            currentOverlayLayer = createOverlayLayer('topo_labeled');
-            if (currentOverlayLayer) {
-                currentOverlayLayer.addTo(map);
-                console.log('✅ Výchozí overlay s městy načten');
-            }
-        }, 1000);
-
-        // Vytvoření vlastních markerů podle kategorie
-        function createCustomMarker(category) {
-            const markerClasses = {
-                'Castles': 'castle-marker',
-                'Historical_sites': 'historical-marker',
-                'Parks': 'park-marker'
-            };
-            
-            const markerEmojis = {
-                'Castles': '🏰',
-                'Historical_sites': '🏛️',
-                'Parks': '🌳'
-            };
-            
-            const className = markerClasses[category] || 'custom-marker';
-            const emoji = markerEmojis[category] || '📍';
-            
-            return L.divIcon({
-                html: `<div class="custom-marker ${className}" style="display: flex; align-items: center; justify-content: center; font-size: 12px;">${emoji}</div>`,
-                className: 'custom-div-icon',
-                iconSize: [20, 28],
-                iconAnchor: [10, 28],
-                popupAnchor: [0, -28]
-            });
+        
+        function resetView() {
+            map.setView([50.0755, 14.4378], 10);
         }
-
-        // Načtení dat z JSON souboru
-        async function loadDataFromJSON() {
-            try {
-                const response = await fetch('data.json');
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                console.log(`✅ Načteno ${data.length} míst z JSON`);
-                
-                // Statistiky
-                const stats = data.reduce((acc, item) => {
-                    acc[item.category] = (acc[item.category] || 0) + 1;
-                    return acc;
-                }, {});
-                
-                const statsText = Object.entries(stats)
-                    .map(([cat, count]) => `${cat}: ${count}`)
-                    .join('<br>');
-                
-                document.getElementById('dataStats').innerHTML = 
-                    `<small><strong>Načtená data:</strong><br>${statsText}<br><br>Celkem: ${data.length} míst</small>`;
-                
-                // Vytvoření markerů
-                data.forEach((place, index) => {
-                    const marker = L.marker(
-                        [place.lat, place.lon],
-                        { icon: createCustomMarker(place.category) }
-                    ).addTo(markersGroup);
-                    
-                    // Popup s informacemi a VR tlačítkem
-                    const popupContent = `
-                        <div style="color: #333; font-family: Arial, sans-serif; min-width: 200px;">
-                            <h4 style="color: #4a90e2; margin-bottom: 8px;">${place.name.replace(/_/g, ' ')}</h4>
-                            <p style="margin: 5px 0;"><strong>Kategorie:</strong> ${place.category.replace(/_/g, ' ')}</p>
-                            <p style="margin: 5px 0;"><strong>GPS:</strong> ${place.lat.toFixed(4)}, ${place.lon.toFixed(4)}</p>
-                            <button 
-                                onclick="openVR('${place.name}', '${place.image}', '${place.category}', ${index})" 
-                                style="background: linear-gradient(135deg, #4a90e2, #357abd); color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-top: 10px; font-weight: 500;"
-                            >
-                                🥽 Zobrazit ve VR
-                            </button>
-                        </div>
-                    `;
-                    
-                    marker.bindPopup(popupContent);
-                    dataMarkers.push({marker, data: place});
-                });
-                
-                updateInfo(`✅ Načteno ${data.length} VR míst z JSON`);
-                
-                // Centrace mapy na první marker s bližším zoomem
-                if (data.length > 0) {
-                    map.setView([data[0].lat, data[0].lon], 7); // Blíž k markeru
-                }
-                
-            } catch (error) {
-                console.error('❌ Chyba při načítání JSON dat:', error);
-                document.getElementById('dataStats').innerHTML = 
-                    `<small style="color: #ff6b6b;"><strong>Chyba:</strong><br>Nepodařilo se načíst data.json<br>Zkontrolujte, zda soubor existuje</small>`;
-                updateInfo('❌ Chyba při načítání JSON dat');
-            }
-        }
-
-        // VR funkce s opravou stereo-img zobrazení
-        function openVR(name, imagePath, category, index) {
-            const modal = document.getElementById('vrModal');
-            const vrImage = document.getElementById('vrImage');
-            const vrTitle = document.getElementById('vrTitle');
-            const vrDescription = document.getElementById('vrDescription');
-            
-            // Nastavení informací
-            vrTitle.textContent = name.replace(/_/g, ' ');
-            vrDescription.innerHTML = `
-                <strong>Kategorie:</strong> ${category.replace(/_/g, ' ')}<br>
-                <strong>Stereo formát:</strong> Auto-detekce (VR180, left-right, fisheye)<br>
-                <strong>VR headsety:</strong> Quest, HTC Vive, Cardboard<br>
-                <strong>Ovládání:</strong> Myš/dotyky + gyroscope<br>
-                <strong>Fullscreen:</strong> Klik na obrázek pro VR mód
-            `;
-            
-            // Zobrazení modal
-            modal.style.display = 'block';
-            
-            // Oprava stereo-img zobrazení
-            setTimeout(() => {
-                console.log('🔄 Nastavuji stereo-img src:', imagePath);
-                
-                // Nejdříve zobrazíme element
-                vrImage.style.display = 'block';
-                
-                // Pak nastavíme src atribut
-                vrImage.src = imagePath;
-                
-                // Alternativně můžeme také explicitně nastavit typ
-                // Pro 180° stereo obrázky
-                vrImage.setAttribute('type', 'left-right');
-                vrImage.setAttribute('angle', '180');
-                
-                // Wiggle efekt pro 2D náhled
-                vrImage.setAttribute('wiggle', 'enabled');
-                
-                // Event listenery
-                vrImage.addEventListener('load', () => {
-                    console.log('✅ Stereo obrázek úspěšně načten');
-                    vrDescription.innerHTML += '<br><br><span style="color: #32CD32;">✅ VR obrázek načten</span>';
-                });
-                
-                vrImage.addEventListener('error', (e) => {
-                    console.error('❌ Chyba při načítání stereo obrázku:', e);
-                    vrDescription.innerHTML += '<br><br><span style="color: #ff6b6b;">❌ Chyba při načítání VR obrázku</span>';
-                    
-                    // Fallback - zkusíme zobrazit jako normální img
-                    const fallbackImg = document.createElement('img');
-                    fallbackImg.src = imagePath;
-                    fallbackImg.style.width = '100%';
-                    fallbackImg.style.height = '100%';
-                    fallbackImg.style.objectFit = 'contain';
-                    
-                    // Nahradíme stereo-img běžným img elementem
-                    vrImage.style.display = 'none';
-                    vrImage.parentNode.appendChild(fallbackImg);
-                });
-                
-                // Fullscreen při kliku
-                vrImage.addEventListener('click', () => {
-                    if (modal.requestFullscreen) {
-                        modal.requestFullscreen().catch(err => {
-                            console.log('Fullscreen není dostupný:', err);
-                        });
-                    }
-                });
-                
-                console.log('✅ Stereo-img inicializován pro:', name);
-            }, 200); // Delší timeout pro jistotu
-            
-            updateInfo(`🥽 VR stereo mód: ${name.replace(/_/g, ' ')}`);
-        }
-
-        function closeVR() {
-            const modal = document.getElementById('vrModal');
-            const vrImage = document.getElementById('vrImage');
-            
-            modal.style.display = 'none';
-            vrImage.style.display = 'none';
-            
-            // Vyčištění stereo-img atributů
-            vrImage.removeAttribute('src');
-            vrImage.removeAttribute('type');
-            vrImage.removeAttribute('angle');
-            vrImage.removeAttribute('wiggle');
-            
-            // Ukončení fullscreen pokud je aktivní
-            if (document.fullscreenElement) {
+        
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
                 document.exitFullscreen();
             }
-            
-            updateInfo('✅ VR mód ukončen');
         }
-
-        // Funkce pro vytvoření opakujících se GeoJSON vrstev
-        function createRepeatingGeoJSONLayer(data, layerName, styles) {
-            const layersList = [];
+        
+        function exportMap() {
+            alert('Export mapy - funkce bude implementována');
+        }
+        
+        function addMarker() {
+            let lat = prompt('Zadejte zeměpisnou šířku:');
+            let lng = prompt('Zadejte zeměpisnou délku:');
+            let name = prompt('Zadejte název značky:');
             
-            const layer = L.geoJSON(data, {
-                style: styles[layerName],
-                onEachFeature: function (feature, layer) {
-                    if (feature.properties) {
-                        const name = feature.properties.NAME || feature.properties.name || 'Neznámé';
-                        layer.bindPopup(`<strong>${name}</strong>`);
+            if (lat && lng && name) {
+                let newMarker = L.marker([parseFloat(lat), parseFloat(lng)]).addTo(map);
+                newMarker.bindPopup(`<b>${name}</b><br>Uživatelská značka<br><button onclick="openVR()">Zobrazit VR</button>`);
+                markers.push(newMarker);
+            }
+        }
+        
+        // VR Modal funkce
+        function openVR() {
+            document.getElementById('vrModal').style.display = 'block';
+        }
+        
+        // Zavření VR modalu
+        document.querySelector('.vr-close').onclick = function() {
+            document.getElementById('vrModal').style.display = 'none';
+        }
+        
+        // Zavření při kliknutí mimo modal
+        window.onclick = function(event) {
+            let modal = document.getElementById('vrModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+        
+        // Ovládání stylů mapy
+        document.getElementById('mapStyle').addEventListener('change', function() {
+            let style = this.value;
+            map.eachLayer(function(layer) {
+ 
+
+                if (layer._url) {
+                    map.removeLayer(layer);
+                }
+            });
+            
+            switch(style) {
+                case 'satellite':
+                    satelliteLayer.addTo(map);
+                    break;
+                case 'streets':
+                    streetLayer.addTo(map);
+                    break;
+                case 'hybrid':
+                    satelliteLayer.addTo(map);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; OpenStreetMap contributors',
+                        opacity: 0.5
+                    }).addTo(map);
+                    break;
+                case 'terrain':
+                    L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                        attribution: '&copy; OpenTopoMap contributors'
+                    }).addTo(map);
+                    break;
+            }
+        });
+        
+        // Ovládání průhlednosti
+        document.getElementById('opacity').addEventListener('input', function() {
+            let opacity = this.value;
+            map.eachLayer(function(layer) {
+                if (layer._url) {
+                    layer.setOpacity(opacity);
+                }
+            });
+        });
+        
+        // Ovládání barvy markerů
+        document.getElementById('markerColor').addEventListener('change', function() {
+            let color = this.value;
+            // Zde by byla implementace změny barvy markerů
+            console.log('Změna barvy markerů na: ' + color);
+        });
+        
+        // Ovládání satelitního zobrazení
+        document.getElementById('showSatellite').addEventListener('change', function() {
+            if (this.checked) {
+                if (!map.hasLayer(satelliteLayer)) {
+                    satelliteLayer.addTo(map);
+                }
+            } else {
+                if (map.hasLayer(satelliteLayer)) {
+                    map.removeLayer(satelliteLayer);
+                }
+                if (!map.hasLayer(streetLayer)) {
+                    streetLayer.addTo(map);
+                }
+            }
+        });
+        
+        // Klávesové zkratky
+        document.addEventListener('keydown', function(event) {
+            switch(event.key) {
+                case 'Escape':
+                    document.getElementById('vrModal').style.display = 'none';
+                    break;
+                case 'f':
+                case 'F':
+                    if (event.ctrlKey) {
+                        event.preventDefault();
+                        toggleFullscreen();
+                    }
+                    break;
+                case 'r':
+                case 'R':
+                    if (event.ctrlKey) {
+                        event.preventDefault();
+                        resetView();
+                    }
+                    break;
+            }
+        });
+        
+        // Inicializace při načtení stránky
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Mapa inicializována');
+            
+            // Přidání click event pro otevření VR
+            map.on('click', function(e) {
+                console.log('Kliknuto na souřadnice: ' + e.latlng);
+            });
+            
+            // Aktualizace statistik
+            updateStats();
+        });
+        
+        // Funkce pro aktulizaci statistik
+        function updateStats() {
+            let castleCount = 0;
+            let parkCount = 0;
+            let historicalCount = 0;
+            let totalMarkers = markers.length;
+            
+            // Zde by byla logika pro počítání různých typů markerů
+            // Pro demo používáme statické hodnoty
+            
+            document.querySelector('.stat-item:nth-child(1) .stat-number').textContent = totalMarkers;
+            document.querySelector('.stat-item:nth-child(2) .stat-number').textContent = '2';
+            document.querySelector('.stat-item:nth-child(3) .stat-number').textContent = '1';
+
+            document.querySelector('.stat-item:nth-child(4) .stat-number').textContent = '1';
+        }
+        
+        // Geolokace uživatele
+        function getUserLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    let userLat = position.coords.latitude;
+                    let userLng = position.coords.longitude;
+                    
+                    let userMarker = L.marker([userLat, userLng]).addTo(map);
+                    userMarker.bindPopup('<b>Vaše poloha</b><br>Aktuální pozice');
+                    
+                    map.setView([userLat, userLng], 15);
+                }, function(error) {
+                    console.log('Chyba při získávání polohy: ' + error.message);
+                    alert('Nepodařilo se získat vaši polohu');
+                });
+            } else {
+                alert('Geolokace není podporována tímto prohlížečem');
+            }
+        }
+        
+        // Přidání tlačítka pro geolokaci
+        L.Control.Locate = L.Control.extend({
+            onAdd: function(map) {
+                let btn = L.DomUtil.create('button', 'locate-btn');
+                btn.innerHTML = '📍';
+                btn.style.cssText = 'background: #fff; border: 2px solid rgba(0,0,0,0.2); border-radius: 4px; width: 30px; height: 30px; cursor: pointer; font-size: 16px;';
+                btn.title = 'Najít moji polohu';
+                
+                btn.onclick = function(e) {
+                    L.DomEvent.stopPropagation(e);
+                    getUserLocation();
+                };
+                
+                return btn;
+            },
+            
+            onRemove: function(map) {
+                // Nic nedělat
+            }
+        });
+        
+        L.control.locate = function(opts) {
+            return new L.Control.Locate(opts);
+        }
+        
+        // Přidání ovládacího prvku pro geolokaci
+        L.control.locate({ position: 'bottomright' }).addTo(map);
+        
+        // Měření vzdálenosti
+        let measureMode = false;
+        let measureMarkers = [];
+        let measureLine = null;
+        
+        function toggleMeasure() {
+            measureMode = !measureMode;
+            if (measureMode) {
+                map.getContainer().style.cursor = 'crosshair';
+                alert('Klikněte na dva body pro změření vzdálenosti');
+            } else {
+                map.getContainer().style.cursor = '';
+                clearMeasure();
+            }
+        }
+        
+        function clearMeasure() {
+            measureMarkers.forEach(marker => map.removeLayer(marker));
+            if (measureLine) map.removeLayer(measureLine);
+            measureMarkers = [];
+            measureLine = null;
+        }
+        
+        // Event listener pro měření
+        map.on('click', function(e) {
+            if (measureMode && measureMarkers.length < 2) {
+                let marker = L.marker(e.latlng).addTo(map);
+                measureMarkers.push(marker);
+                
+                if (measureMarkers.length === 2) {
+                    let latlngs = measureMarkers.map(marker => marker.getLatLng());
+                    measureLine = L.polyline(latlngs, {color: 'red', weight: 3}).addTo(map);
+                    
+                    let distance = measureMarkers[0].getLatLng().distanceTo(measureMarkers[1].getLatLng());
+                    let distanceKm = (distance / 1000).toFixed(2);
+                    
+                    alert(`Vzdálenost: ${distanceKm} km`);
+                    measureMode = false;
+                    map.getContainer().style.cursor = '';
+                }
+
+            }
+        });
+        
+        // Export do různých formátů
+        function exportToGeoJSON() {
+            let geojson = {
+                "type": "FeatureCollection",
+                "features": []
+            };
+            
+            markers.forEach(function(marker) {
+                let feature = {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [marker.getLatLng().lng, marker.getLatLng().lat]
+                    },
+                    "properties": {
+                        "name": "Marker",
+                        "description": "Exported marker"
+                    }
+                };
+                geojson.features.push(feature);
+            });
+            
+            let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(geojson, null, 2));
+            let downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "mapa-markery.geojson");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+        
+        // Přidání dalších ovládacích tlačítek
+        function createCustomControls() {
+            // Tlačítko pro měření
+            L.Control.Measure = L.Control.extend({
+                onAdd: function(map) {
+                    let btn = L.DomUtil.create('button', 'measure-btn');
+                    btn.innerHTML = '📏';
+                    btn.style.cssText = 'background: #fff; border: 2px solid rgba(0,0,0,0.2); border-radius: 4px; width: 30px; height: 30px; cursor: pointer; font-size: 16px; margin-bottom: 5px;';
+                    btn.title = 'Měřit vzdálenost';
+                    
+                    btn.onclick = function(e) {
+                        L.DomEvent.stopPropagation(e);
+                        toggleMeasure();
+                    };
+                    
+                    return btn;
+                },
+                onRemove: function(map) {}
+            });
+            
+            // Tlačítko pro export
+            L.Control.Export = L.Control.extend({
+                onAdd: function(map) {
+                    let btn = L.DomUtil.create('button', 'export-btn');
+                    btn.innerHTML = '💾';
+                    btn.style.cssText = 'background: #fff; border: 2px solid rgba(0,0,0,0.2); border-radius: 4px; width: 30px; height: 30px; cursor: pointer; font-size: 16px;';
+                    btn.title = 'Export do GeoJSON';
+                    
+                    btn.onclick = function(e) {
+                        L.DomEvent.stopPropagation(e);
+                        exportToGeoJSON();
+                    };
+                    
+                    return btn;
+                },
+                onRemove: function(map) {}
+            });
+            
+            // Přidání ovládacích prvků
+            new L.Control.Measure({ position: 'bottomright' }).addTo(map);
+            new L.Control.Export({ position: 'bottomright' }).addTo(map);
+        }
+        
+        // Inicializace vlastních ovládacích prvků
+        createCustomControls();
+        
+        // Funkce pro načítání dat z externích zdrojů
+        async function loadExternalData() {
+            try {
+                // Příklad načítání GeoJSON dat
+                let response = await fetch('data/markers.geojson');
+                if (response.ok) {
+                    let geojsonData = await response.json();
+                    L.geoJSON(geojsonData, {
+                        onEachFeature: function (feature, layer) {
+                            if (feature.properties && feature.properties.name) {
+
+                                layer.bindPopup(`
+                                    <b>${feature.properties.name}</b><br>
+                                    ${feature.properties.description || 'Žádný popis'}<br>
+                                    <button onclick="openVR()">Zobrazit VR</button>
+                                `);
+                            }
+                        }
+                    }).addTo(map);
+                }
+            } catch (error) {
+                console.log('Nepodařilo se načíst externí data:', error);
+            }
+        }
+        
+        // Načtení externích dat při inicializaci
+        loadExternalData();
+        
+        // Funkce pro search/vyhledávání
+        function searchLocation() {
+            let query = prompt('Zadejte název místa k vyhledání:');
+            if (query) {
+                // Použití Nominatim API pro geocoding
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data && data.length > 0) {
+                            let lat = parseFloat(data[0].lat);
+                            let lon = parseFloat(data[0].lon);
+                            let name = data[0].display_name;
+                            
+                            map.setView([lat, lon], 15);
+                            
+                            let searchMarker = L.marker([lat, lon]).addTo(map);
+                            searchMarker.bindPopup(`<b>Vyhledané místo</b><br>${name}<br><button onclick="openVR()">Zobrazit VR</button>`);
+                            
+                            // Přidání do pole markerů
+                            markers.push(searchMarker);
+                            updateStats();
+                        } else {
+                            alert('Místo nebylo nalezeno');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Chyba při vyhledávání:', error);
+                        alert('Chyba při vyhledávání místa');
+                    });
+            }
+        }
+        
+        // Přidání tlačítka pro vyhledávání do controls
+        let searchButton = document.createElement('button');
+        searchButton.className = 'btn';
+        searchButton.textContent = '🔍 Vyhledat místo';
+        searchButton.onclick = searchLocation;
+        document.querySelector('.controls').appendChild(searchButton);
+        
+        // Přidání tlačítka pro měření do controls
+        let measureButton = document.createElement('button');
+        measureButton.className = 'btn';
+        measureButton.textContent = '📏 Měřit vzdálenost';
+        measureButton.onclick = toggleMeasure;
+        document.querySelector('.controls').appendChild(measureButton);
+        
+        // Přidání tlačítka pro vyčištění měření
+        let clearMeasureButton = document.createElement('button');
+        clearMeasureButton.className = 'btn';
+        clearMeasureButton.textContent = '🗑️ Vyčistit měření';
+        clearMeasureButton.onclick = clearMeasure;
+        document.querySelector('.controls').appendChild(clearMeasureButton);
+        
+        // Přidání tlačítka pro geolokaci do controls
+        let locationButton = document.createElement('button');
+        locationButton.className = 'btn';
+        locationButton.textContent = '📍 Má poloha';
+        locationButton.onclick = getUserLocation;
+        document.querySelector('.controls').appendChild(locationButton);
+        
+        // Drag & Drop funkce pro import souborů
+        function setupDragDrop() {
+            let mapContainer = document.getElementById('map');
+            
+            mapContainer.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                mapContainer.style.opacity = '0.8';
+            });
+            
+            mapContainer.addEventListener('dragleave', function(e) {
+
+                e.preventDefault();
+                e.stopPropagation();
+                mapContainer.style.opacity = '1';
+            });
+            
+            mapContainer.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                mapContainer.style.opacity = '1';
+                
+                let files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    handleFileImport(files[0]);
+                }
+            });
+        }
+        
+        // Funkce pro import souborů
+        function handleFileImport(file) {
+            let reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    if (file.name.endsWith('.geojson') || file.name.endsWith('.json')) {
+                        let geojsonData = JSON.parse(e.target.result);
+                        L.geoJSON(geojsonData, {
+                            onEachFeature: function (feature, layer) {
+                                if (feature.properties && feature.properties.name) {
+                                    layer.bindPopup(`
+                                        <b>${feature.properties.name}</b><br>
+                                        ${feature.properties.description || 'Importovaný marker'}<br>
+                                        <button onclick="openVR()">Zobrazit VR</button>
+                                    `);
+                                    markers.push(layer);
+                                }
+                            }
+                        }).addTo(map);
+                        
+                        updateStats();
+                        alert('Soubor byl úspěšně importován!');
+                    } else {
+                        alert('Nepodporovaný formát souboru. Podporovány jsou pouze .geojson a .json soubory.');
+                    }
+                } catch (error) {
+                    console.error('Chyba při importu souboru:', error);
+                    alert('Chyba při čtení souboru. Zkontrolujte formát.');
+                }
+            };
+            
+            reader.readAsText(file);
+        }
+        
+        // Inicializace drag & drop
+        setupDragDrop();
+        
+        // Přidání pokročilých VR funkcí
+        function switchVRImage(imagePath) {
+            let stereoImg = document.querySelector('stereo-img');
+            if (stereoImg) {
+                stereoImg.setAttribute('src', imagePath);
+            }
+        }
+        
+        // Rozšíření VR modalu o více obrázků
+        let vrImages = [
+            './Castles/generated/Le_Castillet_generated.jpg',
+            './Castles/generated/Prague_Castle_generated.jpg',
+            './Castles/generated/Karlstejn_generated.jpg'
+        ];
+        
+        let currentVRIndex = 0;
+        
+        function nextVRImage() {
+            currentVRIndex = (currentVRIndex + 1) % vrImages.length;
+            switchVRImage(vrImages[currentVRIndex]);
+        }
+        
+        function prevVRImage() {
+            currentVRIndex = (currentVRIndex - 1 + vrImages.length) % vrImages.length;
+            switchVRImage(vrImages[currentVRIndex]);
+        }
+        
+        // Přidání navigačních tlačítek do VR modalu
+        let vrModalContent = document.querySelector('.vr-modal-content');
+        
+        let prevBtn = document.createElement('button');
+        prevBtn.innerHTML = '‹';
+        prevBtn.style.cssText = `
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: none;
+            font-size: 30px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 2002;
+            transition: all 0.3s ease;
+        `;
+
+        prevBtn.onmouseover = function() { this.style.background = 'rgba(255, 255, 255, 0.2)'; };
+        prevBtn.onmouseout = function() { this.style.background = 'rgba(0, 0, 0, 0.7)'; };
+        prevBtn.onclick = prevVRImage;
+        
+        let nextBtn = document.createElement('button');
+        nextBtn.innerHTML = '›';
+        nextBtn.style.cssText = `
+            position: absolute;
+            right: 80px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: none;
+            font-size: 30px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 2002;
+            transition: all 0.3s ease;
+        `;
+        nextBtn.onmouseover = function() { this.style.background = 'rgba(255, 255, 255, 0.2)'; };
+        nextBtn.onmouseout = function() { this.style.background = 'rgba(0, 0, 0, 0.7)'; };
+        nextBtn.onclick = nextVRImage;
+        
+        vrModalContent.appendChild(prevBtn);
+        vrModalContent.appendChild(nextBtn);
+        
+        // Přidání indikátoru aktuálního obrázku
+        let vrIndicator = document.createElement('div');
+        vrIndicator.style.cssText = `
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            z-index: 2002;
+            font-size: 14px;
+        `;
+        vrIndicator.textContent = `1 / ${vrImages.length}`;
+        vrModalContent.appendChild(vrIndicator);
+        
+        // Aktualizace indikátoru při změně obrázku
+        function updateVRIndicator() {
+            vrIndicator.textContent = `${currentVRIndex + 1} / ${vrImages.length}`;
+        }
+        
+        // Přepis funkcí pro aktualizaci indikátoru
+        let originalNext = nextVRImage;
+        let originalPrev = prevVRImage;
+        
+        nextVRImage = function() {
+            originalNext();
+            updateVRIndicator();
+        };
+        
+        prevVRImage = function() {
+            originalPrev();
+            updateVRIndicator();
+        };
+        
+        // Klávesové ovládání VR modalu
+        document.addEventListener('keydown', function(event) {
+            if (document.getElementById('vrModal').style.display === 'block') {
+                switch(event.key) {
+                    case 'ArrowLeft':
+                        prevVRImage();
+                        break;
+                    case 'ArrowRight':
+                        nextVRImage();
+                        break;
+                }
+            }
+        });
+        
+        // Automatické přepínání VR obrázků
+        let vrAutoplay = false;
+        let vrAutoplayInterval;
+        
+        function toggleVRAutoplay() {
+            vrAutoplay = !vrAutoplay;
+            if (vrAutoplay) {
+                vrAutoplayInterval = setInterval(nextVRImage, 5000);
+            } else {
+                clearInterval(vrAutoplayInterval);
+            }
+        }
+        
+        // Přidání tlačítka pro autoplay
+        let autoplayBtn = document.createElement('button');
+        autoplayBtn.innerHTML = '▶';
+        autoplayBtn.style.cssText = `
+            position: absolute;
+            bottom: 140px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: none;
+            font-size: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 2002;
+            transition: all 0.3s ease;
+        `;
+        autoplayBtn.title = 'Zapnout/vypnout automatické přehrávání';
+        autoplayBtn.onclick = function() {
+            toggleVRAutoplay();
+            this.innerHTML = vrAutoplay ? '⏸' : '▶';
+            this.style.background = vrAutoplay ? 'rgba(0, 255, 0, 0.7)' : 'rgba(0, 0, 0, 0.7)';
+        };
+        vrModalContent.appendChild(autoplayBtn);
+        
+        // Zastavení autoplay při zavření modalu
+        let originalCloseModal = document.querySelector('.vr-close').onclick;
+        document.querySelector('.vr-close').onclick = function() {
+            if (vrAutoplay) {
+                toggleVRAutoplay();
+                autoplayBtn.innerHTML = '▶';
+                autoplayBtn.style.background = 'rgba(0, 0, 0, 0.7)';
+            }
+            originalCloseModal();
+        };
+        
+        // Pokročilé filtry markerů
+        function filterMarkers(type) {
+            markers.forEach(marker => {
+                let popup = marker.getPopup();
+                if (popup) {
+                    let content = popup.getContent().toString().toLowerCase();
+                    switch(type) {
+                        case 'all':
+                            marker.addTo(map);
+                            break;
+                        case 'castles':
+                            if (content.includes('hrad') || content.includes('castle')) {
+                                marker.addTo(map);
+                            } else {
+                                map.removeLayer(marker);
+                            }
+                            break;
+                        case 'parks':
+                            if (content.includes('park')) {
+                                marker.addTo(map);
+                            } else {
+                                map.removeLayer(marker);
+                            }
+                            break;
+                        case 'historical':
+                            if (content.includes('historick') || content.includes('most') || content.includes('památka')) {
+                                marker.addTo(map);
+                            } else {
+                                map.removeLayer(marker);
+                            }
+                            break;
                     }
                 }
             });
-            layersList.push(layer);
-            
-            for (let offset of [-360, 360]) {
-                const duplicatedData = JSON.parse(JSON.stringify(data));
-                duplicatedData.features.forEach(feature => {
-                    if (feature.geometry.type === 'Polygon') {
-                        feature.geometry.coordinates.forEach(ring => 
-                            ring.forEach(coord => coord[0] += offset)
-                        );
-                    } else if (feature.geometry.type === 'MultiPolygon') {
-                        feature.geometry.coordinates.forEach(polygon =>
-                            polygon.forEach(ring => 
-                                ring.forEach(coord => coord[0] += offset)
-                            )
-                        );
-                    }
-                });
-                
-                const duplicatedLayer = L.geoJSON(duplicatedData, {
-                    style: styles[layerName],
-                    onEachFeature: function (feature, layer) {
-                        if (feature.properties) {
-                            const name = feature.properties.NAME || feature.properties.name || 'Neznámé';
-                            layer.bindPopup(`<strong>${name}</strong>`);
-                        }
-                    }
-                });
-                layersList.push(duplicatedLayer);
-            }
-            
-            return L.layerGroup(layersList);
+            updateStats();
         }
-
-        // Načtení hranic států
-        async function loadCountriesGeoJSON() {
-            try {
-                const response = await fetch('data/countries.geojson');
-                if (!response.ok) return;
-                
-                const data = await response.json();
-                console.log(`✅ Načteno: ${data.features.length} zemí`);
-                
-                const countryStyle = {
-                    fillColor: 'transparent',
-                    weight: 2,
-                    opacity: 0.8,
-                    color: borderColor,
-                    fillOpacity: 0
-                };
-
-                layers.countries = createRepeatingGeoJSONLayer(data, 'countries', {countries: countryStyle});
-                layers.countries.addTo(map);
-                
-            } catch (error) {
-                console.log('ℹ️ Hranice států nejsou dostupné');
-            }
-        }
-
-        // Markery
-        function addMarker() {
-            const lat = parseFloat(document.getElementById('markerLat').value);
-            const lng = parseFloat(document.getElementById('markerLng').value);
-            const text = document.getElementById('markerText').value || `Marker ${++markerCount}`;
-            
-            if (isNaN(lat) || isNaN(lng)) {
-                alert('Zadejte platné GPS souřadnice!');
-                return;
-            }
-            
-            if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-                alert('GPS souřadnice jsou mimo platný rozsah!');
-                return;
-            }
-            
-            const marker = L.marker([lat, lng]).addTo(markersGroup);
-            marker.bindPopup(`
-                <div style="color: #333; font-family: Arial, sans-serif;">
-                    <strong style="color: #4a90e2;">${text}</strong><br>
-                    <small>GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}</small>
-                </div>
-            `);
-            
-            document.getElementById('markerLat').value = '';
-            document.getElementById('markerLng').value = '';
-            document.getElementById('markerText').value = '';
-            
-            updateInfo(`✅ Marker "${text}" přidán`);
-            map.setView([lat, lng], Math.max(map.getZoom(), 7)); // Bližší zoom pro nové markery
-        }
-
-        function clearMarkers() {
-            const count = markersGroup.getLayers().length;
-            markersGroup.clearLayers();
-            markerCount = 0;
-            dataMarkers = [];
-            updateInfo(`🗑️ Smazáno ${count} markerů`);
-            
-            // Znovu načíst data z JSON
-            setTimeout(loadDataFromJSON, 500);
-        }
-
-        // Event listenery pro ovládání
         
-        // Barva hranic
-        document.getElementById('borderColor').addEventListener('change', function() {
-            borderColor = this.value;
-            if (layers.countries) {
-                map.removeLayer(layers.countries);
-                loadCountriesGeoJSON();
-            }
-            updateInfo(`🎨 Barva hranic změněna`);
-        });
-
-        // Checkbox hranice
-        document.getElementById('countries').addEventListener('change', function() {
-            if (this.checked && layers.countries) {
-                layers.countries.addTo(map);
-                updateInfo('🌍 Hranice států zobrazeny');
-            } else if (layers.countries) {
-                map.removeLayer(layers.countries);
-                updateInfo('🌍 Hranice států skryty');
-            }
-        });
-
-        // Overlay vrstva
-        document.getElementById('overlayLayer').addEventListener('change', function() {
-            const selectedOverlay = this.value;
-            
-            if (currentOverlayLayer) {
-                map.removeLayer(currentOverlayLayer);
-                currentOverlayLayer = null;
-            }
-            
-            if (selectedOverlay !== 'none') {
-                currentOverlayLayer = createOverlayLayer(selectedOverlay);
-                if (currentOverlayLayer) {
-                    const opacity = document.getElementById('overlayOpacity').value / 100;
-                    currentOverlayLayer.setOpacity(opacity);
-                    currentOverlayLayer.addTo(map);
-                    
-                    setTimeout(() => {
-                        const blendMode = document.getElementById('blendMode').value;
-                        const container = currentOverlayLayer.getContainer();
-                        if (container) {
-                            container.className = container.className.replace(/blend-\w+/g, '');
-                            container.classList.add(`blend-${blendMode}`);
-                        }
-                        applyOverlayFilters();
-                    }, 100);
-                    
-                    updateInfo(`🎨 Overlay: ${selectedOverlay}`);
-                }
+        // Přidání filtrů do markers panel
+        let filtersDiv = document.createElement('div');
+        filtersDiv.innerHTML = `
+            <div class="control-group">
+                <label>Filtry markerů:</label>
+                <select id="markerFilter" onchange="filterMarkers(this.value)">
+                    <option value="all">Všechny</option>
+                    <option value="castles">Hrady</option>
+                    <option value="parks">Parky</option>
+                    <option value="historical">Historické</option>
+                </select>
+            </div>
+        `;
+        document.querySelector('.markers-panel').insertBefore(filtersDiv, document.querySelector('.markers-panel').children[2]);
+        
+        // Pokročilé nastavení mapy
+        function toggleNightMode() {
+            let body = document.body;
+            if (body.style.filter === 'invert(1) hue-rotate(180deg)') {
+                body.style.filter = '';
+                localStorage.setItem('nightMode', 'false');
             } else {
-                updateInfo('🗺️ Overlay odstraněn');
+                body.style.filter = 'invert(1) hue-rotate(180deg)';
+                localStorage.setItem('nightMode', 'true');
             }
-        });
+        }
+        
+        // Načtení uloženého režimu
+        if (localStorage.getItem('nightMode') === 'true') {
 
-        // Blend mode
-        document.getElementById('blendMode').addEventListener('change', function() {
-            const blendMode = this.value;
-            if (currentOverlayLayer) {
-                const container = currentOverlayLayer.getContainer();
-                if (container) {
-                    container.className = container.className.replace(/blend-\w+/g, '');
-                    container.classList.add(`blend-${blendMode}`);
+            document.body.style.filter = 'invert(1) hue-rotate(180deg)';
+        }
+        
+        // Přidání tlačítka pro noční režim
+        let nightModeButton = document.createElement('button');
+        nightModeButton.className = 'btn';
+        nightModeButton.textContent = '🌙 Noční režim';
+        nightModeButton.onclick = toggleNightMode;
+        document.querySelector('.controls').appendChild(nightModeButton);
+        
+        // Uložení/načtení pozice mapy
+        function saveMapView() {
+            let center = map.getCenter();
+            let zoom = map.getZoom();
+            localStorage.setItem('mapView', JSON.stringify({
+                lat: center.lat,
+                lng: center.lng,
+                zoom: zoom
+            }));
+            alert('Pohled mapy byl uložen');
+        }
+        
+        function loadMapView() {
+            let savedView = localStorage.getItem('mapView');
+            if (savedView) {
+                let view = JSON.parse(savedView);
+                map.setView([view.lat, view.lng], view.zoom);
+            }
+        }
+        
+        // Přidání tlačítek pro ukládání/načítání pohledu
+        let saveViewButton = document.createElement('button');
+        saveViewButton.className = 'btn';
+        saveViewButton.textContent = '💾 Uložit pohled';
+        saveViewButton.onclick = saveMapView;
+        document.querySelector('.controls').appendChild(saveViewButton);
+        
+        let loadViewButton = document.createElement('button');
+        loadViewButton.className = 'btn';
+        loadViewButton.textContent = '📂 Načíst pohled';
+        loadViewButton.onclick = loadMapView;
+        document.querySelector('.controls').appendChild(loadViewButton);
+        
+        // Pokročilé statistiky
+        function generateReport() {
+            let report = {
+                totalMarkers: markers.length,
+                mapCenter: map.getCenter(),
+                mapZoom: map.getZoom(),
+                currentLayer: 'Satelitní',
+                timestamp: new Date().toISOString(),
+                markerTypes: {
+                    castles: 0,
+                    parks: 0,
+                    historical: 0,
+                    other: 0
                 }
-            }
-            updateInfo(`🎨 Blend mode: ${blendMode}`);
-        });
-
-        // Opacity
-        document.getElementById('overlayOpacity').addEventListener('input', function() {
-            const opacity = this.value / 100;
-            document.getElementById('opacityValue').textContent = `${this.value}%`;
+            };
             
-            if (currentOverlayLayer) {
-                currentOverlayLayer.setOpacity(opacity);
-            }
-        });
-
-        // Invert overlay
-        document.getElementById('invertOverlay').addEventListener('change', function() {
-            applyOverlayFilters();
-        });
-
-        // Color correction event listenery
-        document.getElementById('baseBrightness').addEventListener('input', function() {
-            document.getElementById('baseBrightnessValue').textContent = `${this.value}%`;
-            applyBaseFilters();
-        });
-
-        document.getElementById('baseContrast').addEventListener('input', function() {
-            document.getElementById('baseContrastValue').textContent = `${this.value}%`;
-            applyBaseFilters();
-        });
-
-        document.getElementById('baseSaturation').addEventListener('input', function() {
-            document.getElementById('baseSaturationValue').textContent = `${this.value}%`;
-            applyBaseFilters();
-        });
-
-        document.getElementById('baseHue').addEventListener('input', function() {
-            document.getElementById('baseHueValue').textContent = `${this.value}°`;
-            applyBaseFilters();
-        });
-
-        document.getElementById('overlayBrightness').addEventListener('input', function() {
-            document.getElementById('overlayBrightnessValue').textContent = `${this.value}%`;
-            applyOverlayFilters();
-        });
-
-        document.getElementById('overlayContrast').addEventListener('input', function() {
-            document.getElementById('overlayContrastValue').textContent = `${this.value}%`;
-            applyOverlayFilters();
-        });
-
-        document.getElementById('overlaySaturation').addEventListener('input', function() {
-            document.getElementById('overlaySaturationValue').textContent = `${this.value}%`;
-            applyOverlayFilters();
-        });
-
-        document.getElementById('overlayHue2').addEventListener('input', function() {
-            document.getElementById('overlayHueValue').textContent = `${this.value}°`;
-            applyOverlayFilters();
-        });
-
-        // Filter functions
-        function applyBaseFilters() {
-            const brightness = document.getElementById('baseBrightness').value;
-            const contrast = document.getElementById('baseContrast').value;
-            const saturation = document.getElementById('baseSaturation').value;
-            const hue = document.getElementById('baseHue').value;
+            // Analýza markerů
+            markers.forEach(marker => {
+                let popup = marker.getPopup();
+                if (popup) {
+                    let content = popup.getContent().toString().toLowerCase();
+                    if (content.includes('hrad') || content.includes('castle')) {
+                        report.markerTypes.castles++;
+                    } else if (content.includes('park')) {
+                        report.markerTypes.parks++;
+                    } else if (content.includes('historick') || content.includes('most') || content.includes('památka')) {
+                        report.markerTypes.historical++;
+                    } else {
+                        report.markerTypes.other++;
+                    }
+                }
+            });
             
-            const filterValue = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
-            
-            const baseContainer = baseLayer.getContainer();
-            if (baseContainer) {
-                baseContainer.style.filter = filterValue;
-            }
+            // Export reportu
+            let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(report, null, 2));
+            let downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "mapa-report.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
         }
+        
+        // Přidání tlačítka pro generování reportu
+        let reportButton = document.createElement('button');
+        reportButton.className = 'btn';
+        reportButton.textContent = '📊 Generovat report';
+        reportButton.onclick = generateReport;
+        document.querySelector('.controls').appendChild(reportButton);
+        
+        // Konec skriptu - inicializace dokončena
+        console.log('Všechny funkce mapy byly inicializovány');
 
-        function applyOverlayFilters() {
-            if (!currentOverlayLayer) return;
-            
-            const brightness = document.getElementById('overlayBrightness').value;
-            const contrast = document.getElementById('overlayContrast').value;
-            const saturation = document.getElementById('overlaySaturation').value;
-            const hue = document.getElementById('overlayHue2').value;
-            const invert = document.getElementById('invertOverlay').checked ? 1 : 0;
-            
-            const filterValue = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg) invert(${invert})`;
-            
-            const overlayContainer = currentOverlayLayer.getContainer();
-            if (overlayContainer) {
-                overlayContainer.style.filter = filterValue;
-            }
-        }
 
-        function updateInfo(message) {
-            const infoText = document.getElementById('infoText');
-            const timestamp = new Date().toLocaleTimeString();
-            
-            infoText.innerHTML = `${message}<br><small style="color: #888;">${timestamp}</small><br><br>
-            <strong>Ovládání:</strong><br>
-            • Kliknutí = GPS souřadnice<br>
-            • Drag = posouvání mapy<br>
-            • Kolečko = zoom<br>
-            • Dvojklik = rychlý zoom<br><br>
-            <strong>Zoom:</strong> 3-8 (interpolace od úrovně 4)<br>
-            <strong>Start zoom:</strong> 5 (blíž než dříve)<br>
-            <strong>Hranice:</strong> Obrysy států<br>
-            <strong>Overlay:</strong> Města a topografie<br><br>
-            <strong>VR Obsah:</strong><br>
-            • 🏰 Hrady (hnědé markery)<br>
-            • 🏛️ Historické místa (modré)<br>
-            • 🌳 Parky (zelené)<br>
-            • Kliknutím zobrazíte 180° stereo VR`;
-        }
-
-        // Map events
-        map.on('click', function(e) {
-            const lat = e.latlng.lat.toFixed(4);
-            const lng = e.latlng.lng.toFixed(4);
-            updateInfo(`📍 Kliknuto na: ${lat}, ${lng}`);
-            
-            document.getElementById('markerLat').value = lat;
-            document.getElementById('markerLng').value = lng;
-        });
-
-        map.on('zoomend', function() {
-            const zoom = map.getZoom();
-            updateInfo(`🔍 Zoom úroveň: ${zoom}`);
-        });
-
-        // Keyboard shortcuts pro VR modal
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeVR();
-            }
-        });
-
-        // Inicializace
-        async function initializeMap() {
-            console.log('🌍 Načítám hranice států...');
-            await loadCountriesGeoJSON();
-            
-            console.log('📊 Načítám data z JSON...');
-            await loadDataFromJSON();
-            
-            updateInfo('✅ 2D mapa s VR obsahem plně inicializována');
-        }
-
-        // Globální funkce pro VR (přístupné z popup)
-        window.openVR = openVR;
-        window.closeVR = closeVR;
-
-        // Spuštění
-        window.addEventListener('load', initializeMap);
-
-        console.log('✅ 2D mapa s oficiální stereo-img podporou připravena');
+        // Načtení uloženého pohledu při startu
+        loadMapView();
+        
     </script>
 </body>
 </html>
-            const lat =
+
+        
+            
+            
+        
+                
+                                    
+            
+                                   
+                    
+            
+                
+                
+            
+        
