@@ -240,7 +240,7 @@
                 var scene = new BABYLON.Scene(engine);
 
                 // This creates and positions a free camera (non-mesh)
-                var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 5, -10), scene);
+                var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 1.6, -5), scene);
 
                 // This targets the camera to scene origin
                 camera.setTarget(BABYLON.Vector3.Zero());
@@ -250,17 +250,27 @@
 
                 // This creates a light, aiming 0,1,0 - to the sky (non-mesh)
                 var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+                light.intensity = 1.2;
 
-                // Default intensity is 1. Let's dim the light a small amount
-                light.intensity = 0.7;
+                // Add a directional light for better visibility
+                var dirLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(-1, -1, -1), scene);
+                dirLight.intensity = 0.8;
 
                 // Create a texture from our Leaflet map
                 const mapContainer = document.getElementById('mapContainer');
                 console.log("Creating HtmlMesh from map container...");
                 mapMesh = new HtmlMesh(mapContainer, scene);
 
-                // Position the map mesh
-                mapMesh.mesh.position = new BABYLON.Vector3(0, 0, 0);
+                // Position the map mesh in front of the camera (VR friendly position)
+                mapMesh.mesh.position = new BABYLON.Vector3(0, 1.6, 2);
+                
+                // Add a subtle ground for reference
+                var ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 20, height: 20}, scene);
+                var groundMaterial = new BABYLON.StandardMaterial("groundMat", scene);
+                groundMaterial.diffuseColor = new BABYLON.Color3(0.2, 0.3, 0.4);
+                groundMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
+                ground.material = groundMaterial;
+                ground.position.y = -0.5;
 
                 console.log("Babylon.js scene created successfully");
 
@@ -323,13 +333,14 @@
                     this.texture.hasAlpha = true;
 
                     // create plane with appropriate aspect ratio for the map (4:3 ratio)
-                    this.mesh = BABYLON.MeshBuilder.CreatePlane("mapPlane", { height: 6, width: 8 });
+                    this.mesh = BABYLON.MeshBuilder.CreatePlane("mapPlane", { height: 3, width: 4 });
                     this.material = new BABYLON.StandardMaterial("mapMaterial", scene);
 
-                    // create material
+                    // create material with better VR visibility
                     this.material.diffuseTexture = this.texture;
                     this.material.emissiveTexture = this.texture;
-                    this.material.emissiveColor = new BABYLON.Color3(0.3, 0.3, 0.3);
+                    this.material.emissiveColor = new BABYLON.Color3(0.5, 0.5, 0.5);
+                    this.material.backFaceCulling = false; // Make it visible from both sides
                     this.mesh.material = this.material;
 
                     // remember to update or you will get NOTHING :)
