@@ -11,6 +11,7 @@
     <!-- Babylon.js -->
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+    <script src="https://cdn.babylonjs.com/WebXR/babylon.webxr.js"></script>
     <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     
     <style>
@@ -78,30 +79,45 @@
 
         // Inicializace mapy
         function initMap() {
-            map = L.map('map').setView([50.0755, 14.4378], 6); // Praha
+            map = L.map('map', {
+                preferCanvas: true // Canvas místo WebGL
+            }).setView([50.0755, 14.4378], 6);
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
         }
 
-        // HtmlTexture class z index.html
+        // HtmlTexture class
         class HtmlTexture extends BABYLON.DynamicTexture {
             constructor(domElement, scene) {
-                super("HtmlTexture", {width: 512, height: 512}, scene);
+                super("HtmlTexture", {width: 1024, height: 1024}, scene);
                 this.domElement = domElement;
-                this.updateTexture();
+                setTimeout(() => this.updateTexture(), 2000); // Čekání na načtení mapy
             }
 
             async updateTexture() {
                 try {
-                    const canvas = await html2canvas(this.domElement);
+                    const canvas = await html2canvas(this.domElement, {
+                        useCORS: true,
+                        allowTaint: true,
+                        scale: 0.5
+                    });
                     const ctx = this.getContext();
-                    ctx.clearRect(0, 0, 512, 512);
-                    ctx.drawImage(canvas, 0, 0, 512, 512);
+                    ctx.clearRect(0, 0, 1024, 1024);
+                    ctx.drawImage(canvas, 0, 0, 1024, 1024);
                     this.update();
+                    console.log("Mapa texture aktualizována");
                 } catch (e) {
                     console.warn('html2canvas failed:', e);
+                    // Fallback - jednoduchá textura
+                    const ctx = this.getContext();
+                    ctx.fillStyle = '#4a90e2';
+                    ctx.fillRect(0, 0, 1024, 1024);
+                    ctx.fillStyle = 'white';
+                    ctx.font = '48px Arial';
+                    ctx.fillText('Map Loading...', 300, 500);
+                    this.update();
                 }
             }
         }
@@ -169,12 +185,17 @@
                     vrScene.render();
                 });
 
-                // WebXR
+                // WebXR pro stereo rendering
                 try {
                     xrExperience = await vrScene.createDefaultXRExperienceAsync({
-                        floorMeshes: [ground]
+                        floorMeshes: [ground],
+                        requiredFeatures: ["local-floor"],
+                        optionalFeatures: ["hand-tracking"]
                     });
-                    console.log("VR experience vytvořen");
+                    
+                    if (xrExperience.baseExperience) {
+                        console.log("WebXR ready - klikněte na VR ikonu");
+                    }
                 } catch (xrError) {
                     console.warn("WebXR není dostupný:", xrError);
                 }
