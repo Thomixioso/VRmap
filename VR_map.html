@@ -150,6 +150,7 @@
                 
                 if (xrHelper) {
                     console.log('✅ XR Helper created successfully');
+                    console.log('🔍 XR Helper properties:', Object.keys(xrHelper));
                     
                     // Debug XR state changes
                     if (xrHelper.baseExperience) {
@@ -163,6 +164,8 @@
                                 console.log('🖥️ Back to desktop mode');
                             }
                         });
+                    } else {
+                        console.log('❌ XR Base Experience NOT available');
                     }
                     
                     // Debug input sources
