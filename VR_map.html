@@ -7,6 +7,9 @@
 
         <!-- Babylon.js -->
         <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
+        <!-- Leaflet CSS and JS -->
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
         <script src="https://cdn.babylonjs.com/recast.js"></script>
         <script src="https://cdn.babylonjs.com/ammo.js"></script>
@@ -80,7 +83,11 @@
         thickness: 0.5,
         textureOffsetX: 0,
         textureOffsetY: 0,
-        textureScale: 1.0
+        textureScale: 1.0,
+        // Map parameters
+        mapLat: 50.0755, // Prague coordinates
+        mapLng: 14.4378,
+        mapZoom: 10
     };
     
     function onChange() {
@@ -88,6 +95,16 @@
         // Update texture transformation when GUI changes
         if (window.htmlMeshInstance && window.htmlMeshInstance.material) {
             updateTextureTransform();
+        }
+        // Update map if map parameters changed
+        if (window.leafletMap) {
+            updateMap();
+        }
+    }
+    
+    function updateMap() {
+        if (window.leafletMap) {
+            window.leafletMap.setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
         }
     }
     
@@ -115,6 +132,65 @@
     textureFolder.add(parameters, 'textureOffsetX', -2, 2, 0.01).onChange(onChange);
     textureFolder.add(parameters, 'textureOffsetY', -2, 2, 0.01).onChange(onChange);
     textureFolder.add(parameters, 'textureScale', 0.1, 3, 0.01).onChange(onChange);
+    
+    // Map control parameters
+    const mapFolder = gui.addFolder('World Map');
+    mapFolder.add(parameters, 'mapLat', -90, 90, 0.001).onChange(onChange).name('Latitude');
+    mapFolder.add(parameters, 'mapLng', -180, 180, 0.001).onChange(onChange).name('Longitude');
+    mapFolder.add(parameters, 'mapZoom', 1, 18, 1).onChange(onChange).name('Zoom Level');
+    
+    // Create map container
+    const mapContainer = document.createElement('div');
+    mapContainer.id = 'mapContainer';
+    mapContainer.style.width = '280px';
+    mapContainer.style.height = '200px';
+    mapContainer.style.margin = '10px';
+    mapContainer.style.border = '1px solid #ccc';
+    mapContainer.style.borderRadius = '4px';
+    
+    // Add map container to GUI
+    const mapElement = mapFolder.add({ map: 'Interactive Map' }, 'map');
+    mapElement.domElement.appendChild(mapContainer);
+    
+    // Initialize Leaflet map
+    setTimeout(() => {
+        window.leafletMap = L.map('mapContainer', {
+            zoomControl: true,
+            attributionControl: false
+        }).setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
+        
+        // Add OpenStreetMap tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+        }).addTo(window.leafletMap);
+        
+        // Add a marker for current position
+        window.mapMarker = L.marker([parameters.mapLat, parameters.mapLng])
+            .addTo(window.leafletMap)
+            .bindPopup('Current Location');
+        
+        // Handle map events to update parameters
+        window.leafletMap.on('moveend', function() {
+            const center = window.leafletMap.getCenter();
+            parameters.mapLat = center.lat;
+            parameters.mapLng = center.lng;
+            if (window.mapMarker) {
+                window.mapMarker.setLatLng([center.lat, center.lng]);
+            }
+            // Update GUI display (this will trigger the texture update)
+            gui.updateDisplay();
+        });
+        
+        window.leafletMap.on('zoomend', function() {
+            parameters.mapZoom = window.leafletMap.getZoom();
+            gui.updateDisplay();
+        });
+        
+        // Make map container draggable for VR interaction
+        mapContainer.style.cursor = 'grab';
+        
+        console.log("Leaflet map initialized");
+    }, 100);
     
     // GUI is now visible both on screen and as texture in VR
     // gui.domElement.style.visibility = 'hidden';
@@ -214,6 +290,8 @@ function setupVRControls(xrHelper, parameters, updateTextureTransform) {
     let isDragging = false;
     let lastControllerPosition = null;
     let dragStartPosition = { offsetX: parameters.textureOffsetX, offsetY: parameters.textureOffsetY };
+    let isMapDragging = false;
+    let mapDragStart = { lat: parameters.mapLat, lng: parameters.mapLng };
     
     xrHelper.input.onControllerAddedObservable.add((controller) => {
         controller.onMotionControllerInitObservable.add((motionController) => {
@@ -231,12 +309,17 @@ function setupVRControls(xrHelper, parameters, updateTextureTransform) {
                             offsetX: parameters.textureOffsetX, 
                             offsetY: parameters.textureOffsetY 
                         };
-                        console.log("Started texture dragging");
+                        mapDragStart = { 
+                            lat: parameters.mapLat, 
+                            lng: parameters.mapLng 
+                        };
+                        console.log("Started dragging");
                     } else {
                         // Stop dragging
                         isDragging = false;
+                        isMapDragging = false;
                         lastControllerPosition = null;
-                        console.log("Stopped texture dragging");
+                        console.log("Stopped dragging");
                     }
                 });
             }
@@ -246,20 +329,20 @@ function setupVRControls(xrHelper, parameters, updateTextureTransform) {
             if (squeezeComponent) {
                 squeezeComponent.onButtonStateChangedObservable.add((component) => {
                     if (component.pressed) {
-                        // Zoom in
+                        // Zoom texture out
                         parameters.textureScale = Math.max(0.1, parameters.textureScale - 0.1);
                         updateTextureTransform();
-                        console.log("Zoom in, scale:", parameters.textureScale);
+                        console.log("Texture zoom out, scale:", parameters.textureScale);
                     }
                 });
             }
             
-            // Handle thumbstick for additional zoom control
+            // Handle thumbstick for zoom control
             const thumbstickComponent = motionController.getComponent("xr-standard-thumbstick");
             if (thumbstickComponent) {
                 thumbstickComponent.onAxisValueChangedObservable.add((axes) => {
                     if (Math.abs(axes.y) > 0.5) {
-                        // Use thumbstick Y axis for zoom
+                        // Use thumbstick Y axis for texture zoom
                         const zoomSpeed = 0.02;
                         if (axes.y > 0.5) {
                             parameters.textureScale = Math.min(3.0, parameters.textureScale + zoomSpeed);
@@ -267,6 +350,16 @@ function setupVRControls(xrHelper, parameters, updateTextureTransform) {
                             parameters.textureScale = Math.max(0.1, parameters.textureScale - zoomSpeed);
                         }
                         updateTextureTransform();
+                    }
+                    
+                    // Use thumbstick X axis for map zoom
+                    if (Math.abs(axes.x) > 0.5 && window.leafletMap) {
+                        if (axes.x > 0.5) {
+                            parameters.mapZoom = Math.min(18, parameters.mapZoom + 0.1);
+                        } else if (axes.x < -0.5) {
+                            parameters.mapZoom = Math.max(1, parameters.mapZoom - 0.1);
+                        }
+                        window.leafletMap.setZoom(Math.round(parameters.mapZoom));
                     }
                 });
             }
@@ -281,7 +374,26 @@ function setupVRControls(xrHelper, parameters, updateTextureTransform) {
                         parameters.textureOffsetY = 0;
                         parameters.textureScale = 1.0;
                         updateTextureTransform();
-                        console.log("Reset texture transform");
+                        
+                        // Reset map to Prague
+                        parameters.mapLat = 50.0755;
+                        parameters.mapLng = 14.4378;
+                        parameters.mapZoom = 10;
+                        if (window.leafletMap) {
+                            window.leafletMap.setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
+                        }
+                        console.log("Reset texture and map");
+                    }
+                });
+            }
+            
+            // Handle B/Y button for switching between texture and map dragging
+            const bButtonComponent = motionController.getComponent("b-button") || motionController.getComponent("y-button");
+            if (bButtonComponent) {
+                bButtonComponent.onButtonStateChangedObservable.add((component) => {
+                    if (component.pressed) {
+                        isMapDragging = !isMapDragging;
+                        console.log("Switched dragging mode:", isMapDragging ? "Map" : "Texture");
                     }
                 });
             }
@@ -297,12 +409,27 @@ function setupVRControls(xrHelper, parameters, updateTextureTransform) {
                 const deltaX = currentPosition.x - lastControllerPosition.x;
                 const deltaY = currentPosition.y - lastControllerPosition.y;
                 
-                // Apply movement to texture offset with sensitivity scaling
-                const sensitivity = 2.0;
-                parameters.textureOffsetX = dragStartPosition.offsetX + (deltaX * sensitivity);
-                parameters.textureOffsetY = dragStartPosition.offsetY + (deltaY * sensitivity);
-                
-                updateTextureTransform();
+                if (isMapDragging && window.leafletMap) {
+                    // Apply movement to map
+                    const mapSensitivity = 10.0;
+                    parameters.mapLat = mapDragStart.lat - (deltaY * mapSensitivity);
+                    parameters.mapLng = mapDragStart.lng + (deltaX * mapSensitivity);
+                    
+                    // Clamp values
+                    parameters.mapLat = Math.max(-90, Math.min(90, parameters.mapLat));
+                    parameters.mapLng = Math.max(-180, Math.min(180, parameters.mapLng));
+                    
+                    window.leafletMap.setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
+                    if (window.mapMarker) {
+                        window.mapMarker.setLatLng([parameters.mapLat, parameters.mapLng]);
+                    }
+                } else {
+                    // Apply movement to texture offset
+                    const sensitivity = 2.0;
+                    parameters.textureOffsetX = dragStartPosition.offsetX + (deltaX * sensitivity);
+                    parameters.textureOffsetY = dragStartPosition.offsetY + (deltaY * sensitivity);
+                    updateTextureTransform();
+                }
             }
         }
     });
