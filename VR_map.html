@@ -1019,52 +1019,29 @@ function html2canvas(element) {
 
             style = window.getComputedStyle(element);
 
-            // Special handling for full map container
+            // Special handling for full map container with procedural overlay
             if (element.id === 'fullMapContainer' || element.classList.contains('leaflet-container')) {
-                // Try to capture the leaflet map directly
-                const leafletPanes = element.querySelectorAll('.leaflet-pane');
-                
-                // Draw map background first
-                context.fillStyle = '#f0f8ff';
+                // Draw map background
+                context.fillStyle = '#e8f4f8';
                 context.fillRect(x, y, width, height);
                 
-                // Try to draw tile layers
-                const tilePane = element.querySelector('.leaflet-tile-pane');
-                if (tilePane) {
-                    const tiles = tilePane.querySelectorAll('img');
-                    tiles.forEach(tile => {
-                        if (tile.complete && tile.naturalWidth > 0) {
-                            try {
-                                const tileRect = tile.getBoundingClientRect();
-                                const tileX = tileRect.left - offset.left - 0.5;
-                                const tileY = tileRect.top - offset.top - 0.5;
-                                context.drawImage(tile, tileX, tileY, tileRect.width, tileRect.height);
-                            } catch (e) {
-                                console.log('Could not draw map tile:', e);
-                            }
-                        }
-                    });
+                // Try to capture the procedural overlay canvas
+                const overlayCanvas = element.querySelector('canvas');
+                if (overlayCanvas && overlayCanvas === window.mapOverlayCanvas) {
+                    try {
+                        // Draw the procedural overlay directly (no CORS issues)
+                        context.drawImage(overlayCanvas, x, y, width, height);
+                    } catch (e) {
+                        console.log('Could not draw overlay canvas:', e);
+                        // Draw fallback topographic pattern
+                        drawFallbackTopographic(context, x, y, width, height);
+                    }
+                } else {
+                    // Draw fallback topographic pattern
+                    drawFallbackTopographic(context, x, y, width, height);
                 }
                 
-                // Try to draw markers
-                const markerPane = element.querySelector('.leaflet-marker-pane');
-                if (markerPane) {
-                    const markers = markerPane.querySelectorAll('img');
-                    markers.forEach(marker => {
-                        if (marker.complete && marker.naturalWidth > 0) {
-                            try {
-                                const markerRect = marker.getBoundingClientRect();
-                                const markerX = markerRect.left - offset.left - 0.5;
-                                const markerY = markerRect.top - offset.top - 0.5;
-                                context.drawImage(marker, markerX, markerY, markerRect.width, markerRect.height);
-                            } catch (e) {
-                                console.log('Could not draw marker:', e);
-                            }
-                        }
-                    });
-                }
-                
-                // Draw zoom controls
+                // Try to draw Leaflet controls that don't have CORS issues
                 const zoomControl = element.querySelector('.leaflet-control-zoom');
                 if (zoomControl) {
                     const controlRect = zoomControl.getBoundingClientRect();
@@ -1092,30 +1069,85 @@ function html2canvas(element) {
                     const infoY = infoRect.top - offset.top - 0.5;
                     
                     context.fillStyle = 'rgba(255,255,255,0.9)';
-                    context.fillRect(infoX, infoY, infoRect.width, infoRect.height);
+                    context.fillRect(infoX, infoY, Math.min(infoRect.width, 120), Math.min(infoRect.height, 80));
                     context.strokeStyle = '#ccc';
-                    context.strokeRect(infoX, infoY, infoRect.width, infoRect.height);
+                    context.strokeRect(infoX, infoY, Math.min(infoRect.width, 120), Math.min(infoRect.height, 80));
                     
                     // Add coordinate text
                     context.fillStyle = '#333';
-                    context.font = '10px monospace';
+                    context.font = '9px monospace';
                     context.textAlign = 'left';
-                    const coords = customControl.textContent || 'Loading...';
-                    const lines = coords.split('\n');
-                    lines.forEach((line, i) => {
-                        context.fillText(line.trim(), infoX + 5, infoY + 12 + i * 12);
-                    });
+                    
+                    if (window.leafletMap) {
+                        const center = window.leafletMap.getCenter();
+                        const zoom = window.leafletMap.getZoom();
+                        const lines = [
+                            'Coordinates:',
+                            `Lat: ${center.lat.toFixed(4)}`,
+                            `Lng: ${center.lng.toFixed(4)}`,
+                            `Zoom: ${zoom}`,
+                            'VR Controls:',
+                            'Trigger: Pan',
+                            'Thumbstick: Zoom'
+                        ];
+                        
+                        lines.forEach((line, i) => {
+                            if (i < 7) { // Limit lines to fit
+                                context.fillText(line, infoX + 3, infoY + 10 + i * 10);
+                            }
+                        });
+                    }
                 }
                 
-                // If nothing was drawn, add fallback
+                // Add map attribution
                 context.fillStyle = 'rgba(0,0,0,0.1)';
-                context.fillRect(x + 10, y + height - 30, 100, 20);
+                context.fillRect(x + 10, y + height - 25, 150, 15);
                 context.fillStyle = 'white';
-                context.font = '10px Arial';
+                context.font = '9px Arial';
                 context.textAlign = 'left';
-                context.fillText('Leaflet Map', x + 15, y + height - 15);
+                context.fillText('Procedural Topographic Map', x + 12, y + height - 15);
                 
                 return; // Skip normal element processing
+            }
+            
+            // Helper function to draw fallback topographic pattern
+            function drawFallbackTopographic(ctx, x, y, width, height) {
+                // Gradient background
+                const gradient = ctx.createLinearGradient(x, y, x + width, y + height);
+                gradient.addColorStop(0, '#e8f4f8');
+                gradient.addColorStop(0.3, '#d4f1d4');
+                gradient.addColorStop(0.6, '#b8d4b8');
+                gradient.addColorStop(1, '#8fbc8f');
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(x, y, width, height);
+                
+                // Simple contour lines
+                ctx.strokeStyle = 'rgba(139, 69, 19, 0.4)';
+                ctx.lineWidth = 1;
+                
+                for (let i = 0; i < 5; i++) {
+                    const yPos = y + (height / 6) * (i + 1);
+                    ctx.beginPath();
+                    ctx.moveTo(x, yPos);
+                    for (let xPos = x; xPos < x + width; xPos += 10) {
+                        const wave = Math.sin((xPos - x) / 20 + i) * 3;
+                        ctx.lineTo(xPos, yPos + wave);
+                    }
+                    ctx.stroke();
+                }
+                
+                // Add some terrain features
+                ctx.fillStyle = 'rgba(139, 69, 19, 0.2)';
+                for (let i = 0; i < 8; i++) {
+                    const spotX = x + (width * Math.sin(i)) / 2 + width / 2;
+                    const spotY = y + (height * Math.cos(i * 1.3)) / 2 + height / 2;
+                    const radius = 8 + Math.sin(i) * 5;
+                    
+                    ctx.beginPath();
+                    ctx.arc(spotX, spotY, radius, 0, Math.PI * 2);
+                    ctx.fill();
+                }
             }
 
             // Get the border of the element used for fill and border
