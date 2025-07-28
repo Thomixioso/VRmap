@@ -159,10 +159,14 @@
             attributionControl: false
         }).setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
         
-        // Add OpenStreetMap tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        // Use a different tile provider that might be more CORS friendly
+        // or create a simple colored map
+        const tileLayer = L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', {
             maxZoom: 18,
-        }).addTo(window.leafletMap);
+        });
+        
+        // Create a simple procedural map instead
+        createSimpleMap();
         
         // Add a marker for current position
         window.mapMarker = L.marker([parameters.mapLat, parameters.mapLng])
@@ -177,20 +181,162 @@
             if (window.mapMarker) {
                 window.mapMarker.setLatLng([center.lat, center.lng]);
             }
+            // Update the procedural map
+            updateProceduralMap();
             // Update GUI display (this will trigger the texture update)
             gui.updateDisplay();
         });
         
         window.leafletMap.on('zoomend', function() {
             parameters.mapZoom = window.leafletMap.getZoom();
+            updateProceduralMap();
             gui.updateDisplay();
         });
         
         // Make map container draggable for VR interaction
         mapContainer.style.cursor = 'grab';
         
-        console.log("Leaflet map initialized");
+        console.log("Leaflet map initialized with procedural tiles");
     }, 100);
+    
+    // Function to create a simple procedural map
+    function createSimpleMap() {
+        const mapCanvas = document.createElement('canvas');
+        mapCanvas.width = 280;
+        mapCanvas.height = 200;
+        mapCanvas.style.position = 'absolute';
+        mapCanvas.style.top = '0';
+        mapCanvas.style.left = '0';
+        mapCanvas.style.pointerEvents = 'none';
+        mapCanvas.style.zIndex = '1000';
+        
+        const mapContainer = document.getElementById('mapContainer');
+        mapContainer.appendChild(mapCanvas);
+        
+        window.mapCanvas = mapCanvas;
+        updateProceduralMap();
+    }
+    
+    // Function to update the procedural map based on current view
+    function updateProceduralMap() {
+        if (!window.mapCanvas) return;
+        
+        const ctx = window.mapCanvas.getContext('2d');
+        const width = window.mapCanvas.width;
+        const height = window.mapCanvas.height;
+        
+        // Clear canvas
+        ctx.clearRect(0, 0, width, height);
+        
+        // Ocean background
+        ctx.fillStyle = '#4a90e2';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Simple land masses based on lat/lng
+        const centerLat = parameters.mapLat;
+        const centerLng = parameters.mapLng;
+        const zoom = parameters.mapZoom;
+        
+        // Draw continents (very simplified)
+        ctx.fillStyle = '#8fbc8f';
+        
+        // Europe (around Prague)
+        if (centerLat > 40 && centerLat < 70 && centerLng > -10 && centerLng < 40) {
+            const europeX = (centerLng + 10) / 50 * width;
+            const europeY = (70 - centerLat) / 30 * height;
+            ctx.beginPath();
+            ctx.ellipse(europeX, europeY, 40 + zoom * 2, 30 + zoom * 1.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Asia
+        if (centerLat > 10 && centerLat < 70 && centerLng > 40 && centerLng < 150) {
+            const asiaX = (centerLng - 40) / 110 * width;
+            const asiaY = (70 - centerLat) / 60 * height;
+            ctx.beginPath();
+            ctx.ellipse(asiaX, asiaY, 60 + zoom * 3, 40 + zoom * 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // North America
+        if (centerLat > 20 && centerLat < 70 && centerLng > -150 && centerLng < -60) {
+            const naX = (centerLng + 150) / 90 * width;
+            const naY = (70 - centerLat) / 50 * height;
+            ctx.beginPath();
+            ctx.ellipse(naX, naY, 50 + zoom * 2.5, 35 + zoom * 2, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Add some cities as dots
+        ctx.fillStyle = '#ff6b6b';
+        const citySize = Math.max(2, zoom / 3);
+        
+        // Major cities
+        const cities = [
+            { name: 'Prague', lat: 50.0755, lng: 14.4378 },
+            { name: 'London', lat: 51.5074, lng: -0.1278 },
+            { name: 'Paris', lat: 48.8566, lng: 2.3522 },
+            { name: 'New York', lat: 40.7128, lng: -74.0060 },
+            { name: 'Tokyo', lat: 35.6762, lng: 139.6503 }
+        ];
+        
+        cities.forEach(city => {
+            // Only show cities if they're roughly in view
+            const latDiff = Math.abs(city.lat - centerLat);
+            const lngDiff = Math.abs(city.lng - centerLng);
+            const viewRange = 50 / zoom;
+            
+            if (latDiff < viewRange && lngDiff < viewRange) {
+                const cityX = width/2 + (city.lng - centerLng) * (width / viewRange / 2);
+                const cityY = height/2 + (centerLat - city.lat) * (height / viewRange / 2);
+                
+                if (cityX >= 0 && cityX <= width && cityY >= 0 && cityY <= height) {
+                    ctx.beginPath();
+                    ctx.arc(cityX, cityY, citySize, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // City label
+                    if (zoom > 5) {
+                        ctx.fillStyle = '#333';
+                        ctx.font = '10px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(city.name, cityX, cityY - citySize - 2);
+                        ctx.fillStyle = '#ff6b6b';
+                    }
+                }
+            }
+        });
+        
+        // Current location marker
+        ctx.fillStyle = '#e74c3c';
+        ctx.beginPath();
+        ctx.arc(width/2, height/2, 5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Crosshair
+        ctx.strokeStyle = '#e74c3c';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(width/2 - 10, height/2);
+        ctx.lineTo(width/2 + 10, height/2);
+        ctx.moveTo(width/2, height/2 - 10);
+        ctx.lineTo(width/2, height/2 + 10);
+        ctx.stroke();
+        
+        // Coordinate info
+        ctx.fillStyle = 'rgba(0,0,0,0.7)';
+        ctx.fillRect(5, height - 25, 150, 20);
+        ctx.fillStyle = 'white';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(`${centerLat.toFixed(3)}, ${centerLng.toFixed(3)}`, 8, height - 10);
+        
+        // Zoom level
+        ctx.fillRect(width - 60, 5, 55, 20);
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Zoom: ${zoom}`, width - 32, 18);
+    }
     
     // GUI is now visible both on screen and as texture in VR
     // gui.domElement.style.visibility = 'hidden';
@@ -808,46 +954,31 @@ function html2canvas(element) {
 
             // Special handling for Leaflet map container
             if (element.classList && (element.classList.contains('leaflet-container') || element.id === 'mapContainer')) {
-                // Draw map background
-                context.fillStyle = '#a6cee3'; // Light blue for water
-                context.fillRect(x, y, width, height);
-                
-                // Try to capture any canvas elements within the map
-                const mapCanvases = element.querySelectorAll('canvas');
-                mapCanvases.forEach(canvas => {
-                    if (canvas.style.display !== 'none') {
-                        try {
-                            const canvasRect = canvas.getBoundingClientRect();
-                            const canvasX = canvasRect.left - offset.left - 0.5;
-                            const canvasY = canvasRect.top - offset.top - 0.5;
-                            context.drawImage(canvas, canvasX, canvasY, canvas.width, canvas.height);
-                        } catch (e) {
-                            console.log('Could not draw map canvas:', e);
-                        }
+                // Find our procedural map canvas
+                const mapCanvas = element.querySelector('canvas');
+                if (mapCanvas) {
+                    try {
+                        // Draw the procedural map canvas directly
+                        context.drawImage(mapCanvas, x, y, width, height);
+                    } catch (e) {
+                        console.log('Could not draw procedural map canvas:', e);
+                        // Fallback to simple colored rectangle
+                        context.fillStyle = '#4a90e2';
+                        context.fillRect(x, y, width, height);
+                        context.fillStyle = 'white';
+                        context.font = '12px Arial';
+                        context.textAlign = 'center';
+                        context.fillText('Procedural Map', x + width/2, y + height/2);
                     }
-                });
-                
-                // Try to capture tile images
-                const tileImages = element.querySelectorAll('img');
-                tileImages.forEach(img => {
-                    if (img.complete && img.naturalWidth > 0) {
-                        try {
-                            const imgRect = img.getBoundingClientRect();
-                            const imgX = imgRect.left - offset.left - 0.5;
-                            const imgY = imgRect.top - offset.top - 0.5;
-                            context.drawImage(img, imgX, imgY, imgRect.width, imgRect.height);
-                        } catch (e) {
-                            console.log('Could not draw map tile:', e);
-                        }
-                    }
-                });
-                
-                // Add map overlay text
-                context.fillStyle = 'rgba(0,0,0,0.7)';
-                context.fillRect(x + 5, y + height - 25, 100, 20);
-                context.fillStyle = 'white';
-                context.font = '10px Arial';
-                context.fillText('Leaflet Map', x + 10, y + height - 10);
+                } else {
+                    // Fallback if no canvas found
+                    context.fillStyle = '#4a90e2';
+                    context.fillRect(x, y, width, height);
+                    context.fillStyle = 'white';
+                    context.font = '12px Arial';
+                    context.textAlign = 'center';
+                    context.fillText('Loading Map...', x + width/2, y + height/2);
+                }
                 
                 return; // Skip normal element processing
             }
