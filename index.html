@@ -3,760 +3,623 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>2D Satelitní Mapa</title>
+    <title>VR Mapa se skutečnou 2D mapou</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
     <style>
-        * {
+        body {
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #1a1a1a;
-            color: #fff;
-            height: 100vh;
+            background: #000;
+            font-family: Arial, sans-serif;
             overflow: hidden;
         }
-        
-        #map {
-            height: 100vh;
-            width: 100%;
+
+        .vr-ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 350px;
+            border: 2px solid #4a90e2;
         }
-        
-        .controls {
+
+        .vr-button {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px 0;
+            width: 100%;
+            font-size: 14px;
+        }
+
+        .vr-button:hover {
+            background: #357abd;
+        }
+
+        .back-link {
             position: absolute;
             top: 20px;
             right: 20px;
-            z-index: 1000;
-            background: rgba(0, 0, 0, 0.9);
-            padding: 20px;
-            border-radius: 12px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            min-width: 300px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        
-        .control-group {
-            margin-bottom: 15px;
-        }
-        
-        .control-group:last-child {
-            margin-bottom: 0;
-        }
-        
-        .control-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-size: 14px;
-            color: #e0e0e0;
-            font-weight: 500;
-        }
-        
-        .control-group input[type="checkbox"] {
-            margin-right: 10px;
-            transform: scale(1.2);
-        }
-        
-        .control-group select {
-            width: 100%;
-            padding: 8px 12px;
-            background: #333;
-            color: #fff;
-            border: 1px solid #555;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-        
-        .control-group input[type="range"] {
-            width: 100%;
-            height: 8px;
-            background: #333;
-            border-radius: 4px;
-            outline: none;
-            -webkit-appearance: none;
-            appearance: none;
-        }
-        
-        .control-group input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            background: #4a90e2;
-            border-radius: 50%;
-            cursor: pointer;
-        }
-        
-        .control-group input[type="range"]::-moz-range-thumb {
-            width: 20px;
-            height: 20px;
-            background: #4a90e2;
-            border-radius: 50%;
-            cursor: pointer;
-            border: none;
-        }
-        
-        .control-group input[type="color"] {
-            width: 100%;
-            height: 30px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            background: transparent;
-        }
-        
-        .marker-controls {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 1000;
-            background: rgba(0, 0, 0, 0.9);
-            padding: 20px;
-            border-radius: 12px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            min-width: 300px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-        
-        .marker-controls h3 {
-            margin-bottom: 15px;
-            color: #4a90e2;
-            font-size: 16px;
-        }
-        
-        .input-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-        
-        .marker-controls input {
-            padding: 8px 12px;
-            background: #333;
-            color: #fff;
-            border: 1px solid #555;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-        
-        .marker-controls input[type="text"] {
-            grid-column: 1 / -1;
-        }
-        
-        .button-group {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        
-        .marker-controls button {
-            padding: 10px 15px;
-            background: linear-gradient(135deg, #4a90e2, #357abd);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-        
-        .marker-controls button:hover {
-            background: linear-gradient(135deg, #357abd, #2c5aa0);
-            transform: translateY(-2px);
-        }
-        
-        .marker-controls button.secondary {
-            background: linear-gradient(135deg, #dc3545, #c82333);
-        }
-        
-        .marker-controls button.secondary:hover {
-            background: linear-gradient(135deg, #c82333, #a71e2a);
-        }
-        
-        .info-panel {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            z-index: 1000;
-            background: rgba(0, 0, 0, 0.9);
-            padding: 20px;
-            border-radius: 12px;
-            max-width: 350px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-        }
-        
-        .info-panel h3 {
-            color: #4a90e2;
-            margin-bottom: 10px;
-            font-size: 16px;
-        }
-        
-        .info-panel p {
-            line-height: 1.6;
-            font-size: 14px;
-            color: #e0e0e0;
-        }
-        
-        .back-button {
-            position: absolute;
-            top: 20px;
-            left: 50%;
-            transform: translateX(-50%);
             z-index: 1001;
             background: rgba(0, 0, 0, 0.9);
             color: white;
             text-decoration: none;
             padding: 12px 24px;
-            border-radius: 25px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
         }
-        
-        .back-button:hover {
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateX(-50%) translateY(-2px);
+
+        /* 2D mapa - malá ale viditelná pro zachycení */
+        #map2D {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 400px;
+            height: 300px;
+            border: 2px solid #4a90e2;
+            border-radius: 8px;
+            z-index: 999;
         }
-        
-        .leaflet-control-attribution {
-            background: rgba(0, 0, 0, 0.8) !important;
-            color: #ccc !important;
+
+        /* Skrytý canvas pro zachycení mapy */
+        #mapCapture {
+            position: absolute;
+            top: -2000px;
+            left: -2000px;
         }
-        
-        /* Blend modes pro overlay vrstvy */
-        .blend-multiply {
-            mix-blend-mode: multiply;
+
+        #debugLog {
+            position: absolute;
+            top: 20px;
+            right: 450px;
+            z-index: 1000;
+            background: rgba(0, 50, 0, 0.9);
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            max-width: 300px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+            border: 1px solid #00ff00;
         }
-        
-        .blend-screen {
-            mix-blend-mode: screen;
+
+        .map-controls {
+            position: absolute;
+            bottom: 330px;
+            right: 20px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #4a90e2;
         }
-        
-        .blend-overlay {
-            mix-blend-mode: overlay;
+
+        .map-controls button {
+            background: #4a90e2;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            margin: 2px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
         }
-        
-        .blend-soft-light {
-            mix-blend-mode: soft-light;
+
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            border: 2px solid white;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 2000;
+            opacity: 0;
+            transition: opacity 0.3s;
         }
-        
-        .blend-hard-light {
-            mix-blend-mode: hard-light;
+
+        .crosshair.active {
+            opacity: 1;
         }
     </style>
 </head>
 <body>
-    <a href="index.html" class="back-button">← Zpět na výběr</a>
-    
-    <div class="controls">
-        <div class="control-group">
-            <label>
-                <input type="checkbox" id="countries" checked> Hranice států
-            </label>
-            <label for="borderColor">Barva hranic:</label>
-            <input type="color" id="borderColor" value="#ffffff">
+    <div id="container">
+        <canvas id="renderer"></canvas>
+        <canvas id="mapCapture" width="1024" height="1024"></canvas>
+        
+        <!-- Viditelná 2D mapa pro zachycení -->
+        <div id="map2D"></div>
+        
+        <div class="map-controls">
+            <h4>🗺️ Map Control</h4>
+            <button onclick="vrMap.zoomIn()">Zoom +</button>
+            <button onclick="vrMap.zoomOut()">Zoom -</button>
+            <br>
+            <button onclick="vrMap.panNorth()">⬆️ North</button>
+            <button onclick="vrMap.panSouth()">⬇️ South</button>
+            <br>
+            <button onclick="vrMap.panWest()">⬅️ West</button>
+            <button onclick="vrMap.panEast()">➡️ East</button>
+            <br>
+            <button onclick="vrMap.resetMapView()">🎯 Reset</button>
         </div>
         
-        <div class="control-group">
-            <label for="overlayLayer">Overlay mapa:</label>
-            <select id="overlayLayer">
-                <option value="none">Žádná</option>
-                <option value="topo_labeled" selected>🗺️ Topografická (města)</option>
-                <option value="streets_labeled">🏙️ Ulice</option>
-            </select>
+        <div class="crosshair" id="crosshair"></div>
+        
+        <div class="vr-ui">
+            <h3>🥽 VR + 2D Mapa</h3>
+            <button id="vrButton" class="vr-button">🎭 VR Mode</button>
+            <button id="resetView" class="vr-button">🎯 Reset View</button>
+            <button id="captureMap" class="vr-button">📸 Update VR Map</button>
+            <button id="testInteraction" class="vr-button">🖱️ Test Click</button>
+            
+            <div id="status">🔄 Načítání 2D mapy...</div>
         </div>
         
-        <div class="control-group">
-            <label for="blendMode">Blend mode:</label>
-            <select id="blendMode">
-                <option value="multiply" selected>Multiply</option>
-                <option value="screen">Screen</option>
-                <option value="overlay">Overlay</option>
-                <option value="soft-light">Soft Light</option>
-                <option value="hard-light">Hard Light</option>
-            </select>
+        <div id="debugLog">
+            <strong>📋 Debug Log:</strong><br>
+            Spouštím...
         </div>
         
-        <div class="control-group">
-            <label for="overlayOpacity">Mix hodnota: <span id="opacityValue">70%</span></label>
-            <input type="range" id="overlayOpacity" min="0" max="100" value="70">
-        </div>
-        
-        <div class="control-group">
-            <label>
-                <input type="checkbox" id="invertOverlay"> Invertovat overlay
-            </label>
-        </div>
-        
-        <div class="control-group">
-            <label>🎨 Korekce podkladu:</label>
-            <label for="baseBrightness">Jas: <span id="baseBrightnessValue">100%</span></label>
-            <input type="range" id="baseBrightness" min="50" max="150" value="100">
-            
-            <label for="baseContrast">Kontrast: <span id="baseContrastValue">100%</span></label>
-            <input type="range" id="baseContrast" min="50" max="150" value="100">
-            
-            <label for="baseSaturation">Sytost: <span id="baseSaturationValue">100%</span></label>
-            <input type="range" id="baseSaturation" min="0" max="200" value="100">
-            
-            <label for="baseHue">Odstín: <span id="baseHueValue">0°</span></label>
-            <input type="range" id="baseHue" min="-180" max="180" value="0">
-        </div>
-        
-        <div class="control-group">
-            <label>🎨 Korekce overlay:</label>
-            <label for="overlayBrightness">Jas: <span id="overlayBrightnessValue">100%</span></label>
-            <input type="range" id="overlayBrightness" min="50" max="150" value="100">
-            
-            <label for="overlayContrast">Kontrast: <span id="overlayContrastValue">100%</span></label>
-            <input type="range" id="overlayContrast" min="50" max="150" value="100">
-            
-            <label for="overlaySaturation">Sytost: <span id="overlaySaturationValue">100%</span></label>
-            <input type="range" id="overlaySaturation" min="0" max="200" value="100">
-            
-            <label for="overlayHue2">Odstín: <span id="overlayHueValue">0°</span></label>
-            <input type="range" id="overlayHue2" min="-180" max="180" value="0">
-        </div>
+        <a href="index.html" class="back-link">← Zpět</a>
     </div>
-    
-    <div class="marker-controls">
-        <h3>📍 Přidat marker</h3>
-        <div class="input-group">
-            <input type="number" id="markerLat" step="0.0001" placeholder="Zeměpisná šířka">
-            <input type="number" id="markerLng" step="0.0001" placeholder="Zeměpisná délka">
-        </div>
-        <input type="text" id="markerText" placeholder="Název místa">
-        <div class="button-group">
-            <button onclick="addMarker()">Přidat marker</button>
-            <button onclick="clearMarkers()" class="secondary">Smazat vše</button>
-        </div>
-    </div>
-    
-    <div class="info-panel">
-        <h3>🌍 2D Satelitní Mapa</h3>
-        <p id="infoText">Klikněte na mapu pro GPS souřadnice.<br><br>
-        <strong>Ovládání:</strong><br>
-        • Kliknutí = GPS souřadnice<br>
-        • Drag = posouvání mapy<br>
-        • Kolečko = zoom<br>
-        • Dvojklik = rychlý zoom<br><br>
-        <strong>Zoom:</strong> 3-8 (interpolace od úrovně 6)<br>
-        <strong>Hranice:</strong> Obrysy států (nastavitelná barva)<br>
-        <strong>Overlay:</strong> Města a topografie<br>
-        <strong>Filtry:</strong> Pokročilé color correction</p>
-    </div>
-    
-    <div id="map"></div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
     <script>
-        console.log('🚀 Spouštím 2D satelitní mapu s pokročilými filtry...');
-        
-        // Inicializace mapy
-        const map = L.map('map', {
-            center: [49.75, 15.5], // Střed ČR
-            zoom: 4,
-            minZoom: 3,
-            maxZoom: 8,
-            zoomControl: true,
-            attributionControl: true,
-            worldCopyJump: true,
-            maxBounds: [[-85, -Infinity], [85, Infinity]],
-            maxBoundsViscosity: 1.0
-        });
-
-        // Markery
-        let markersGroup = L.layerGroup().addTo(map);
-        let markerCount = 0;
-
-        // Vrstvy
-        let layers = { countries: null };
-        let borderColor = '#ffffff';
-        let currentOverlayLayer = null;
-
-        // Podkladová mapa - satelitní
-        const baseLayer = L.tileLayer('tiles_satellite_labeled/{z}/{x}/{y}.jpg', {
-            attribution: 'ESRI World Imagery s popisky (Offline)',
-            minZoom: 3,
-            maxZoom: 8,
-            maxNativeZoom: 6,
-            className: 'base-layer-filtered'
-        });
-        baseLayer.addTo(map);
-
-        // Overlay vrstvy
-        function createOverlayLayer(layerKey) {
-            const overlayLayers = {
-                topo_labeled: L.tileLayer('tiles_topo_labeled/{z}/{x}/{y}.png', {
-                    attribution: 'ESRI Topographic s popisky',
-                    minZoom: 3,
-                    maxZoom: 8,
-                    maxNativeZoom: 6,
-                    opacity: 0.7,
-                    className: 'overlay-layer-filtered blend-multiply'
-                }),
-                
-                streets_labeled: L.tileLayer('tiles_streets_labeled/{z}/{x}/{y}.png', {
-                    attribution: 'OpenStreetMap s popisky',
-                    minZoom: 3,
-                    maxZoom: 8,
-                    maxNativeZoom: 6,
-                    opacity: 0.7,
-                    className: 'overlay-layer-filtered blend-multiply'
-                })
-            };
-            
-            return overlayLayers[layerKey] || null;
-        }
-
-        // Načtení výchozí overlay vrstvy (topografická s městy)
-        setTimeout(() => {
-            currentOverlayLayer = createOverlayLayer('topo_labeled');
-            if (currentOverlayLayer) {
-                currentOverlayLayer.addTo(map);
-                console.log('✅ Výchozí overlay s městy načten');
-            }
-        }, 1000);
-
-        // Funkce pro vytvoření opakujících se GeoJSON vrstev
-        function createRepeatingGeoJSONLayer(data, layerName, styles) {
-            const layersList = [];
-            
-            const layer = L.geoJSON(data, {
-                style: styles[layerName],
-                onEachFeature: function (feature, layer) {
-                    if (feature.properties) {
-                        const name = feature.properties.NAME || feature.properties.name || 'Neznámé';
-                        layer.bindPopup(`<strong>${name}</strong>`);
-                    }
-                }
-            });
-            layersList.push(layer);
-            
-            for (let offset of [-360, 360]) {
-                const duplicatedData = JSON.parse(JSON.stringify(data));
-                duplicatedData.features.forEach(feature => {
-                    if (feature.geometry.type === 'Polygon') {
-                        feature.geometry.coordinates.forEach(ring => 
-                            ring.forEach(coord => coord[0] += offset)
-                        );
-                    } else if (feature.geometry.type === 'MultiPolygon') {
-                        feature.geometry.coordinates.forEach(polygon =>
-                            polygon.forEach(ring => 
-                                ring.forEach(coord => coord[0] += offset)
-                            )
-                        );
-                    }
-                });
-                
-                const duplicatedLayer = L.geoJSON(duplicatedData, {
-                    style: styles[layerName],
-                    onEachFeature: function (feature, layer) {
-                        if (feature.properties) {
-                            const name = feature.properties.NAME || feature.properties.name || 'Neznámé';
-                            layer.bindPopup(`<strong>${name}</strong>`);
-                        }
-                    }
-                });
-                layersList.push(duplicatedLayer);
-            }
-            
-            return L.layerGroup(layersList);
-        }
-
-        // Načtení hranic států
-        async function loadCountriesGeoJSON() {
-            try {
-                const response = await fetch('data/countries.geojson');
-                if (!response.ok) return;
-                
-                const data = await response.json();
-                console.log(`✅ Načteno: ${data.features.length} zemí`);
-                
-                const countryStyle = {
-                    fillColor: 'transparent',
-                    weight: 2,
-                    opacity: 0.8,
-                    color: borderColor,
-                    fillOpacity: 0
-                };
-
-                layers.countries = createRepeatingGeoJSONLayer(data, 'countries', {countries: countryStyle});
-                layers.countries.addTo(map);
-                
-            } catch (error) {
-                console.log('ℹ️ Hranice států nejsou dostupné');
-            }
-        }
-
-        // Markery
-        function addMarker() {
-            const lat = parseFloat(document.getElementById('markerLat').value);
-            const lng = parseFloat(document.getElementById('markerLng').value);
-            const text = document.getElementById('markerText').value || `Marker ${++markerCount}`;
-            
-            if (isNaN(lat) || isNaN(lng)) {
-                alert('Zadejte platné GPS souřadnice!');
-                return;
-            }
-            
-            if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-                alert('GPS souřadnice jsou mimo platný rozsah!');
-                return;
-            }
-            
-            const marker = L.marker([lat, lng]).addTo(markersGroup);
-            marker.bindPopup(`
-                <div style="color: #333; font-family: Arial, sans-serif;">
-                    <strong style="color: #4a90e2;">${text}</strong><br>
-                    <small>GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}</small>
-                </div>
-            `);
-            
-            document.getElementById('markerLat').value = '';
-            document.getElementById('markerLng').value = '';
-            document.getElementById('markerText').value = '';
-            
-            updateInfo(`✅ Marker "${text}" přidán`);
-            map.setView([lat, lng], Math.max(map.getZoom(), 6));
-        }
-
-        function clearMarkers() {
-            const count = markersGroup.getLayers().length;
-            markersGroup.clearLayers();
-            markerCount = 0;
-            updateInfo(`🗑️ Smazáno ${count} markerů`);
-        }
-
-        // Vzorové markery
-        const sampleMarkers = [
-            {lat: 50.0755, lng: 14.4378, text: "Praha"},
-            {lat: 49.1951, lng: 16.6068, text: "Brno"},
-            {lat: 49.7384, lng: 13.3736, text: "Plzeň"},
-            {lat: 49.8175, lng: 18.2625, text: "Ostrava"}
-        ];
-
-        sampleMarkers.forEach(point => {
-            const marker = L.marker([point.lat, point.lng]).addTo(markersGroup);
-            marker.bindPopup(`
-                <div style="color: #333; font-family: Arial, sans-serif;">
-                    <strong style="color: #4a90e2;">${point.text}</strong><br>
-                    <small>GPS: ${point.lat}, ${point.lng}</small><br>
-                    <small>Vzorový marker</small>
-                </div>
-            `);
-            markerCount++;
-        });
-
-        // Event listenery pro ovládání
-        
-        // Barva hranic
-        document.getElementById('borderColor').addEventListener('change', function() {
-            borderColor = this.value;
-            if (layers.countries) {
-                map.removeLayer(layers.countries);
-                loadCountriesGeoJSON();
-            }
-            updateInfo(`🎨 Barva hranic změněna`);
-        });
-
-        // Checkbox hranice
-        document.getElementById('countries').addEventListener('change', function() {
-            if (this.checked && layers.countries) {
-                layers.countries.addTo(map);
-                updateInfo('🌍 Hranice států zobrazeny');
-            } else if (layers.countries) {
-                map.removeLayer(layers.countries);
-                updateInfo('🌍 Hranice států skryty');
-            }
-        });
-
-        // Overlay vrstva
-        document.getElementById('overlayLayer').addEventListener('change', function() {
-            const selectedOverlay = this.value;
-            
-            if (currentOverlayLayer) {
-                map.removeLayer(currentOverlayLayer);
-                currentOverlayLayer = null;
-            }
-            
-            if (selectedOverlay !== 'none') {
-                currentOverlayLayer = createOverlayLayer(selectedOverlay);
-                if (currentOverlayLayer) {
-                    const opacity = document.getElementById('overlayOpacity').value / 100;
-                    currentOverlayLayer.setOpacity(opacity);
-                    currentOverlayLayer.addTo(map);
-                    
-                    setTimeout(() => {
-                        const blendMode = document.getElementById('blendMode').value;
-                        const container = currentOverlayLayer.getContainer();
-                        if (container) {
-                            container.className = container.className.replace(/blend-\w+/g, '');
-                            container.classList.add(`blend-${blendMode}`);
-                        }
-                        applyOverlayFilters();
-                    }, 100);
-                    
-                    updateInfo(`🎨 Overlay: ${selectedOverlay}`);
-                }
-            } else {
-                updateInfo('🗺️ Overlay odstraněn');
-            }
-        });
-
-        // Blend mode
-        document.getElementById('blendMode').addEventListener('change', function() {
-            const blendMode = this.value;
-            if (currentOverlayLayer) {
-                const container = currentOverlayLayer.getContainer();
-                if (container) {
-                    container.className = container.className.replace(/blend-\w+/g, '');
-                    container.classList.add(`blend-${blendMode}`);
-                }
-            }
-            updateInfo(`🎨 Blend mode: ${blendMode}`);
-        });
-
-        // Opacity
-        document.getElementById('overlayOpacity').addEventListener('input', function() {
-            const opacity = this.value / 100;
-            document.getElementById('opacityValue').textContent = `${this.value}%`;
-            
-            if (currentOverlayLayer) {
-                currentOverlayLayer.setOpacity(opacity);
-            }
-        });
-
-        // Invert overlay
-        document.getElementById('invertOverlay').addEventListener('change', function() {
-            applyOverlayFilters();
-        });
-
-        // Color correction event listenery
-        document.getElementById('baseBrightness').addEventListener('input', function() {
-            document.getElementById('baseBrightnessValue').textContent = `${this.value}%`;
-            applyBaseFilters();
-        });
-
-        document.getElementById('baseContrast').addEventListener('input', function() {
-            document.getElementById('baseContrastValue').textContent = `${this.value}%`;
-            applyBaseFilters();
-        });
-
-        document.getElementById('baseSaturation').addEventListener('input', function() {
-            document.getElementById('baseSaturationValue').textContent = `${this.value}%`;
-            applyBaseFilters();
-        });
-
-        document.getElementById('baseHue').addEventListener('input', function() {
-            document.getElementById('baseHueValue').textContent = `${this.value}°`;
-            applyBaseFilters();
-        });
-
-        document.getElementById('overlayBrightness').addEventListener('input', function() {
-            document.getElementById('overlayBrightnessValue').textContent = `${this.value}%`;
-            applyOverlayFilters();
-        });
-
-        document.getElementById('overlayContrast').addEventListener('input', function() {
-            document.getElementById('overlayContrastValue').textContent = `${this.value}%`;
-            applyOverlayFilters();
-        });
-
-        document.getElementById('overlaySaturation').addEventListener('input', function() {
-            document.getElementById('overlaySaturationValue').textContent = `${this.value}%`;
-            applyOverlayFilters();
-        });
-
-        document.getElementById('overlayHue2').addEventListener('input', function() {
-            document.getElementById('overlayHueValue').textContent = `${this.value}°`;
-            applyOverlayFilters();
-        });
-
-        // Filter functions
-        function applyBaseFilters() {
-            const brightness = document.getElementById('baseBrightness').value;
-            const contrast = document.getElementById('baseContrast').value;
-            const saturation = document.getElementById('baseSaturation').value;
-            const hue = document.getElementById('baseHue').value;
-            
-            const filterValue = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
-            
-            const baseContainer = baseLayer.getContainer();
-            if (baseContainer) {
-                baseContainer.style.filter = filterValue;
-            }
-        }
-
-        function applyOverlayFilters() {
-            if (!currentOverlayLayer) return;
-            
-            const brightness = document.getElementById('overlayBrightness').value;
-            const contrast = document.getElementById('overlayContrast').value;
-            const saturation = document.getElementById('overlaySaturation').value;
-            const hue = document.getElementById('overlayHue2').value;
-            const invert = document.getElementById('invertOverlay').checked ? 1 : 0;
-            
-            const filterValue = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg) invert(${invert})`;
-            
-            const overlayContainer = currentOverlayLayer.getContainer();
-            if (overlayContainer) {
-                overlayContainer.style.filter = filterValue;
-            }
-        }
-
-        function updateInfo(message) {
-            const infoText = document.getElementById('infoText');
+        // Debug logger
+        function debugLog(message) {
+            const debugElement = document.getElementById('debugLog');
             const timestamp = new Date().toLocaleTimeString();
-            infoText.innerHTML = `${message}<br><small style="color: #888;">${timestamp}</small><br><br>
-            <strong>Ovládání:</strong><br>
-            • Kliknutí = GPS souřadnice<br>
-            • Drag = posouvání mapy<br>
-            • Kolečko = zoom<br>
-            • Dvojklik = rychlý zoom<br><br>
-            <strong>Zoom:</strong> 3-8 (interpolace od úrovně 6)<br>
-            <strong>Hranice:</strong> Obrysy států (nastavitelná barva)<br>
-            <strong>Overlay:</strong> Města a topografie<br>
-            <strong>Filtry:</strong> Pokročilé color correction`;
+            console.log(`[${timestamp}] ${message}`);
+            debugElement.innerHTML += `<br>[${timestamp}] ${message}`;
+            debugElement.scrollTop = debugElement.scrollHeight;
         }
 
-        // Map events
-        map.on('click', function(e) {
-            const lat = e.latlng.lat.toFixed(4);
-            const lng = e.latlng.lng.toFixed(4);
-            updateInfo(`📍 Kliknuto na: ${lat}, ${lng}`);
-            
-            document.getElementById('markerLat').value = lat;
-            document.getElementById('markerLng').value = lng;
-        });
+        function updateStatus(message) {
+            document.getElementById('status').innerHTML = message;
+            debugLog(`STATUS: ${message}`);
+        }
 
-        map.on('zoomend', function() {
-            const zoom = map.getZoom();
-            updateInfo(`🔍 Zoom úroveň: ${zoom}`);
-        });
+        class VRMapWithReal2D {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.mapScreen = null;
+                this.leafletMap = null;
+                this.isVRMode = false;
+                
+                // Interaction
+                this.raycaster = new THREE.Raycaster();
+                this.mouse = new THREE.Vector2();
+                
+                debugLog('🚀 VR+2D inicializace začíná');
+                this.init();
+            }
 
-        // Inicializace
-        async function initializeMap() {
-            console.log('🌍 Načítám hranice států...');
-            await loadCountriesGeoJSON();
-            updateInfo('✅ 2D mapa plně inicializována');
+            async init() {
+                try {
+                    this.setupThreeJS();
+                    this.createTestObjects();
+                    this.createMapScreen();
+                    await this.setup2DMap();
+                    this.setupInteractions();
+                    this.animate();
+                    
+                    debugLog('✅ Inicializace dokončena');
+                    updateStatus('✅ VR s 2D mapou připravena');
+                } catch (error) {
+                    debugLog(`❌ Chyba inicializace: ${error.message}`);
+                    updateStatus('❌ Chyba inicializace');
+                }
+            }
+
+            setupThreeJS() {
+                debugLog('Nastavuji Three.js...');
+                
+                // Scéna
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x001122);
+
+                // Kamera
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.camera.position.set(0, 1, 4);
+
+                // Renderer
+                const canvas = document.getElementById('renderer');
+                this.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+
+                // Osvětlení
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                this.scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4);
+                directionalLight.position.set(2, 2, 1);
+                this.scene.add(directionalLight);
+
+                debugLog('✅ Three.js nastaven');
+            }
+
+            createTestObjects() {
+                debugLog('Vytvářím test objekty...');
+                
+                // Podlaha
+                const floorGeometry = new THREE.PlaneGeometry(10, 10);
+                const floorMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+                const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                floor.rotation.x = -Math.PI / 2;
+                floor.position.y = -1;
+                this.scene.add(floor);
+
+                debugLog('✅ Test objekty vytvořeny');
+            }
+
+            createMapScreen() {
+                debugLog('Vytvářím VR mapovou obrazovku...');
+                
+                // Mapová obrazovka 4x3 metry
+                const screenGeometry = new THREE.PlaneGeometry(4, 3);
+                
+                // Canvas pro zachycení mapy
+                const mapCanvas = document.getElementById('mapCapture');
+                const ctx = mapCanvas.getContext('2d');
+                
+                // Počáteční placeholder
+                this.drawPlaceholder(ctx);
+                
+                const screenTexture = new THREE.CanvasTexture(mapCanvas);
+                screenTexture.flipY = false;
+                
+                const screenMaterial = new THREE.MeshLambertMaterial({ 
+                    map: screenTexture,
+                    transparent: false
+                });
+                
+                this.mapScreen = new THREE.Mesh(screenGeometry, screenMaterial);
+                this.mapScreen.position.set(0, 1, 0);
+                this.mapScreen.name = 'mapScreen';
+                this.scene.add(this.mapScreen);
+
+                // Rám
+                this.createScreenFrame();
+                
+                debugLog('✅ VR mapová obrazovka vytvořena');
+            }
+
+            drawPlaceholder(ctx) {
+                // Placeholder dokud se nenačte mapa
+                const gradient = ctx.createLinearGradient(0, 0, 1024, 1024);
+                gradient.addColorStop(0, '#1e3c72');
+                gradient.addColorStop(0.5, '#2a5298');
+                gradient.addColorStop(1, '#1e3c72');
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 1024, 1024);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 48px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('🗺️ Načítám 2D mapu...', 512, 512);
+                
+                if (this.mapScreen && this.mapScreen.material.map) {
+                    this.mapScreen.material.map.needsUpdate = true;
+                }
+            }
+
+            createScreenFrame() {
+                const frameThickness = 0.05;
+                const frameColor = 0x222222;
+                
+                // Horní + dolní + boční rámy
+                const frames = [
+                    { size: [4.1, frameThickness, 0.02], pos: [0, 1 + 1.5 + frameThickness/2, 0] },
+                    { size: [4.1, frameThickness, 0.02], pos: [0, 1 - 1.5 - frameThickness/2, 0] },
+                    { size: [frameThickness, 3.1, 0.02], pos: [-2 - frameThickness/2, 1, 0] },
+                    { size: [frameThickness, 3.1, 0.02], pos: [2 + frameThickness/2, 1, 0] }
+                ];
+
+                frames.forEach(frame => {
+                    const geometry = new THREE.BoxGeometry(...frame.size);
+                    const material = new THREE.MeshLambertMaterial({ color: frameColor });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    mesh.position.set(...frame.pos);
+                    this.scene.add(mesh);
+                });
+            }
+
+            async setup2DMap() {
+                debugLog('Nastavuji Leaflet 2D mapu...');
+                
+                return new Promise((resolve) => {
+                    try {
+                        // Inicializace Leaflet mapy
+                        this.leafletMap = L.map('map2D', {
+                            center: [49.75, 15.5],
+                            zoom: 5,
+                            minZoom: 3,
+                            maxZoom: 8
+                        });
+
+                        // Satelitní vrstva (offline tiles)
+                        L.tileLayer('tiles_satellite_labeled/{z}/{x}/{y}.jpg', {
+                            attribution: 'Offline Satellite Map',
+                            minZoom: 3,
+                            maxZoom: 8,
+                            maxNativeZoom: 6
+                        }).addTo(this.leafletMap);
+
+                        // Hranice států (pokud existují)
+                        this.loadCountries();
+
+                        // Čekání na načtení tiles
+                        setTimeout(() => {
+                            this.captureMapToVR();
+                            debugLog('✅ 2D mapa připravena');
+                            updateStatus('✅ 2D mapa načtena');
+                            resolve();
+                        }, 2000);
+
+                        // Auto-update při změně mapy
+                        this.leafletMap.on('moveend zoomend', () => {
+                            setTimeout(() => this.captureMapToVR(), 500);
+                        });
+
+                    } catch (error) {
+                        debugLog(`❌ Chyba 2D mapy: ${error.message}`);
+                        resolve(); // Pokračuj i s chybou
+                    }
+                });
+            }
+
+            async loadCountries() {
+                try {
+                    const response = await fetch('data/countries.geojson');
+                    if (response.ok) {
+                        const data = await response.json();
+                        L.geoJSON(data, {
+                            style: {
+                                fillColor: 'transparent',
+                                weight: 2,
+                                opacity: 0.8,
+                                color: '#ffffff',
+                                fillOpacity: 0
+                            }
+                        }).addTo(this.leafletMap);
+                        debugLog('✅ Hranice států načteny');
+                    }
+                } catch (error) {
+                    debugLog('ℹ️ Hranice států nejsou dostupné');
+                }
+            }
+
+            captureMapToVR() {
+                debugLog('Zachytávám 2D mapu do VR...');
+                
+                if (!this.leafletMap) return;
+
+                try {
+                    // Použití html2canvas pro zachycení Leaflet mapy
+                    const mapElement = document.getElementById('map2D');
+                    
+                    html2canvas(mapElement, {
+                        width: 1024,
+                        height: 1024,
+                        scale: 1,
+                        useCORS: true,
+                        allowTaint: true
+                    }).then(canvas => {
+                        const ctx = document.getElementById('mapCapture').getContext('2d');
+                        ctx.clearRect(0, 0, 1024, 1024);
+                        ctx.drawImage(canvas, 0, 0, 1024, 1024);
+                        
+                        // Update Three.js textury
+                        if (this.mapScreen && this.mapScreen.material.map) {
+                            this.mapScreen.material.map.needsUpdate = true;
+                        }
+                        
+                        debugLog('✅ Mapa zachycena do VR');
+                    }).catch(error => {
+                        debugLog(`⚠️ html2canvas problém: ${error.message}`);
+                        this.fallbackCapture();
+                    });
+
+                } catch (error) {
+                    debugLog(`⚠️ Capture error: ${error.message}`);
+                    this.fallbackCapture();
+                }
+            }
+
+            fallbackCapture() {
+                // Fallback - informace z Leaflet API
+                const ctx = document.getElementById('mapCapture').getContext('2d');
+                
+                // Základ
+                const gradient = ctx.createLinearGradient(0, 0, 1024, 1024);
+                gradient.addColorStop(0, '#1e3c72');
+                gradient.addColorStop(0.5, '#2a5298');
+                gradient.addColorStop(1, '#1e3c72');
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 1024, 1024);
+
+                if (this.leafletMap) {
+                    const center = this.leafletMap.getCenter();
+                    const zoom = this.leafletMap.getZoom();
+                    
+                    // Info box
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                    ctx.fillRect(50, 50, 400, 200);
+                    
+                    ctx.fillStyle = 'white';
+                    ctx.font = '24px Arial';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('🗺️ Offline Mapa', 70, 90);
+                    ctx.fillText(`GPS: ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`, 70, 130);
+                    ctx.fillText(`Zoom: ${zoom}`, 70, 170);
+                    ctx.fillText(`Čas: ${new Date().toLocaleTimeString()}`, 70, 210);
+                }
+
+                if (this.mapScreen && this.mapScreen.material.map) {
+                    this.mapScreen.material.map.needsUpdate = true;
+                }
+            }
+
+            setupInteractions() {
+                debugLog('Nastavuji interakce...');
+                
+                // Mouse interakce s VR obrazovkou
+                this.renderer.domElement.addEventListener('click', (event) => {
+                    this.handleVRScreenClick(event);
+                });
+
+                this.renderer.domElement.addEventListener('mousemove', (event) => {
+                    this.handleMouseMove(event);
+                });
+
+                // Tlačítka
+                document.getElementById('vrButton').addEventListener('click', () => {
+                    this.toggleVR();
+                });
+
+                document.getElementById('resetView').addEventListener('click', () => {
+                    this.resetView();
+                });
+
+                document.getElementById('captureMap').addEventListener('click', () => {
+                    this.captureMapToVR();
+                });
+
+                document.getElementById('testInteraction').addEventListener('click', () => {
+                    this.testInteraction();
+                });
+
+                debugLog('✅ Interakce nastaveny');
+            }
+
+            handleVRScreenClick(event) {
+                this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const intersects = this.raycaster.intersectObject(this.mapScreen);
+
+                if (intersects.length > 0 && this.leafletMap) {
+                    const uv = intersects[0].uv;
+                    this.forwardClickToMap(uv);
+                }
+            }
+
+            handleMouseMove(event) {
+                this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const intersects = this.raycaster.intersectObject(this.mapScreen);
+
+                const crosshair = document.getElementById('crosshair');
+                if (intersects.length > 0) {
+                    crosshair.classList.add('active');
+                } else {
+                    crosshair.classList.remove('active');
+                }
+            }
+
+            forwardClickToMap(uv) {
+                if (!this.leafletMap || !uv) return;
+                
+                const mapBounds = this.leafletMap.getBounds();
+                const lat = mapBounds.getNorth() - (mapBounds.getNorth() - mapBounds.getSouth()) * uv.y;
+                const lng = mapBounds.getWest() + (mapBounds.getEast() - mapBounds.getWest()) * uv.x;
+                
+                this.leafletMap.panTo([lat, lng]);
+                
+                debugLog(`🖱️ VR Click -> GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+                updateStatus(`📍 Klik: ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+            }
+
+            // Map control functions
+            zoomIn() { if (this.leafletMap) this.leafletMap.zoomIn(); }
+            zoomOut() { if (this.leafletMap) this.leafletMap.zoomOut(); }
+            panNorth() { if (this.leafletMap) this.leafletMap.panBy([0, -50]); }
+            panSouth() { if (this.leafletMap) this.leafletMap.panBy([0, 50]); }
+            panWest() { if (this.leafletMap) this.leafletMap.panBy([-50, 0]); }
+            panEast() { if (this.leafletMap) this.leafletMap.panBy([50, 0]); }
+            resetMapView() { if (this.leafletMap) this.leafletMap.setView([49.75, 15.5], 5); }
+
+            toggleVR() {
+                this.isVRMode = !this.isVRMode;
+                
+                if (this.isVRMode) {
+                    this.camera.position.set(0, 1.6, 2);
+                    this.camera.fov = 90;
+                    updateStatus('🥽 VR mód aktivní');
+                } else {
+                    this.camera.position.set(0, 1, 4);
+                    this.camera.fov = 75;
+                    updateStatus('🖥️ Desktop mód');
+                }
+                
+                this.camera.updateProjectionMatrix();
+            }
+
+            resetView() {
+                this.camera.position.set(0, 1, 4);
+                this.camera.fov = 75;
+                this.camera.updateProjectionMatrix();
+                this.resetMapView();
+                updateStatus('🎯 Pohled resetován');
+            }
+
+            testInteraction() {
+                if (this.leafletMap) {
+                    this.leafletMap.setView([50.0755, 14.4378], 8); // Praha
+                    debugLog('🧪 Test: přesun na Prahu');
+                    updateStatus('🧪 Test: Praha');
+                }
+            }
+
+            animate() {
+                const animateFunction = () => {
+                    requestAnimationFrame(animateFunction);
+                    
+                    this.camera.lookAt(0, 1, 0);
+                    this.renderer.render(this.scene, this.camera);
+                };
+                
+                animateFunction();
+            }
         }
 
         // Spuštění
-        window.addEventListener('load', initializeMap);
+        let vrMap;
+        window.addEventListener('load', async () => {
+            try {
+                vrMap = new VRMapWithReal2D();
+                window.vrMap = vrMap; // Pro global přístup
+            } catch (error) {
+                debugLog(`💥 Kritická chyba: ${error.message}`);
+                updateStatus('💥 Kritická chyba');
+            }
+        });
 
-        console.log('✅ 2D mapa připravena');
+        debugLog('📄 Script načten - připraven na load event');
     </script>
 </body>
 </html>
