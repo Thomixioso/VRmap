@@ -366,6 +366,19 @@
             display: block;
         }
         
+        .aframe-scene {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: none;
+        }
+        
+        .aframe-scene.active {
+            display: block;
+        }
+        
         .vr-controls {
             position: absolute;
             bottom: 20px;
@@ -533,6 +546,35 @@
             </div>
             <div class="vr-viewer" id="vrViewer">
                 <canvas class="vr-canvas" id="vrCanvas"></canvas>
+                <a-scene 
+                    id="aframeScene" 
+                    class="aframe-scene"
+                    embedded 
+                    style="height: 100%; width: 100%;"
+                    vr-mode-ui="enabled: true"
+                    background="color: #000"
+                >
+                    <a-assets>
+                        <img id="vrStereoImage" crossorigin="anonymous">
+                    </a-assets>
+                    
+                    <!-- Stereo 180° geometry -->
+                    <a-sphere 
+                        id="vrSphere"
+                        radius="500" 
+                        geometry="phiStart: 0; phiLength: 180; thetaStart: 0; thetaLength: 360"
+                        material="side: back; shader: flat"
+                        rotation="0 -90 0"
+                        scale="-1 1 1"
+                    ></a-sphere>
+                    
+                    <a-camera 
+                        id="vrCamera"
+                        position="0 0 0"
+                        look-controls="enabled: true"
+                        wasd-controls="enabled: false"
+                    ></a-camera>
+                </a-scene>
             </div>
             <div class="vr-controls">
                 <button class="vr-button" id="monoButton" onclick="setViewMode('mono')">2D pohled</button>
@@ -546,6 +588,7 @@
     <div id="map"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
     <script>
         console.log('🚀 Spouštím 2D satelitní mapu s VR obsahem...');
         
@@ -698,7 +741,7 @@
             }
         }
 
-        // VR Viewer s WebXR podporou (implementace stereo-img)
+        // Zjednodušený VR Viewer s A-Frame pro 180° stereo
         class VRViewer {
             constructor(canvas) {
                 this.canvas = canvas;
@@ -712,11 +755,11 @@
                 this.rotationY = 0;
                 this.fov = 90;
                 
-                // WebXR vlastnosti
-                this.xrSession = null;
-                this.xrRefSpace = null;
-                this.gl = null;
-                this.xrCanvas = null;
+                // A-Frame elementy
+                this.aframeScene = document.getElementById('aframeScene');
+                this.vrSphere = document.getElementById('vrSphere');
+                this.vrStereoImage = document.getElementById('vrStereoImage');
+                this.vrCamera = document.getElementById('vrCamera');
                 
                 this.initEventListeners();
                 this.resize();
@@ -726,163 +769,50 @@
             }
             
             async checkVRSupport() {
-                if ('xr' in navigator) {
-                    try {
-                        const isSupported = await navigator.xr.isSessionSupported('immersive-vr');
-                        const vrButton = document.getElementById('vrHeadsetButton');
-                        if (isSupported) {
-                            vrButton.style.display = 'block';
-                            vrButton.style.background = 'rgba(34, 139, 34, 0.8)';
-                        } else {
-                            vrButton.textContent = '🥽 VR nedostupné';
-                            vrButton.style.background = 'rgba(139, 69, 19, 0.8)';
-                        }
-                    } catch (error) {
-                        console.log('WebXR není podporováno:', error);
-                        document.getElementById('vrHeadsetButton').style.display = 'none';
+                // A-Frame automaticky detekuje VR podporu
+                const vrButton = document.getElementById('vrHeadsetButton');
+                
+                // Čekáme na inicializaci A-Frame
+                setTimeout(() => {
+                    if (this.aframeScene.sceneEl && this.aframeScene.sceneEl.is('vr-mode-ui')) {
+                        vrButton.style.display = 'block';
+                        vrButton.style.background = 'rgba(34, 139, 34, 0.8)';
+                        vrButton.textContent = '🥽 VR Headset';
+                    } else {
+                        vrButton.textContent = '🥽 VR Headset';
+                        vrButton.style.background = 'rgba(74, 144, 226, 0.8)';
                     }
+                }, 1000);
+            }
+            
+            enterVRMode() {
+                if (this.aframeScene && this.aframeScene.sceneEl) {
+                    // Přepnutí do A-Frame módu
+                    this.canvas.style.display = 'none';
+                    this.aframeScene.classList.add('active');
+                    
+                    // Spuštění VR módu
+                    setTimeout(() => {
+                        this.aframeScene.sceneEl.enterVR();
+                    }, 500);
+                    
+                    console.log('✅ VR mód spuštěn přes A-Frame');
                 } else {
-                    document.getElementById('vrHeadsetButton').style.display = 'none';
+                    alert('A-Frame VR není dostupný');
                 }
-            }
-            
-            async enterVRMode() {
-                if (!('xr' in navigator)) {
-                    alert('WebXR není podporováno v tomto prohlížeči');
-                    return;
-                }
-                
-                try {
-                    // Vyžádat VR session
-                    this.xrSession = await navigator.xr.requestSession('immersive-vr', {
-                        requiredFeatures: ['local-floor']
-                    });
-                    
-                    // Vytvoření WebGL kontextu pro VR
-                    this.xrCanvas = document.createElement('canvas');
-                    this.gl = this.xrCanvas.getContext('webgl', { 
-                        xrCompatible: true,
-                        antialias: true,
-                        alpha: false
-                    });
-                    
-                    if (!this.gl) {
-                        throw new Error('WebGL není podporováno');
-                    }
-                    
-                    // Nastavení XR layer
-                    await this.gl.makeXRCompatible();
-                    const layer = new XRWebGLLayer(this.xrSession, this.gl);
-                    this.xrSession.updateRenderState({ baseLayer: layer });
-                    
-                    // Získání reference space
-                    this.xrRefSpace = await this.xrSession.requestReferenceSpace('local-floor');
-                    
-                    // Spuštění render loop
-                    this.xrSession.requestAnimationFrame(this.onXRFrame.bind(this));
-                    
-                    // Event listenery pro VR session
-                    this.xrSession.addEventListener('end', this.onVRSessionEnd.bind(this));
-                    
-                    console.log('✅ VR session spuštěna');
-                    
-                } catch (error) {
-                    console.error('Chyba při spouštění VR módu:', error);
-                    alert('Nepodařilo se spustit VR mód: ' + error.message);
-                }
-            }
-            
-            onXRFrame(time, frame) {
-                if (!this.xrSession || !this.image || !this.image.complete) {
-                    return;
-                }
-                
-                const session = this.xrSession;
-                const pose = frame.getViewerPose(this.xrRefSpace);
-                
-                if (pose) {
-                    const layer = session.renderState.baseLayer;
-                    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, layer.framebuffer);
-                    
-                    // Vyčištění framebufferu
-                    this.gl.clearColor(0, 0, 0, 1);
-                    this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
-                    
-                    // Render pro každé oko
-                    for (const view of pose.views) {
-                        const viewport = layer.getViewport(view);
-                        this.gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
-                        
-                        this.renderEyeInVR(view);
-                    }
-                }
-                
-                session.requestAnimationFrame(this.onXRFrame.bind(this));
-            }
-            
-            renderEyeInVR(view) {
-                // Zde implementujeme render 180° stereo obrázku pro VR
-                // Pro zjednodušení použijeme texture mapping na sphere nebo cylinder
-                
-                const eyeIndex = view.eye === 'left' ? 0 : 1;
-                const imageWidth = this.image.width / 2; // Stereo obrázek má dvě poloviny
-                
-                // Jednoduchá implementace - vytvoření textury z obrázku
-                if (!this.vrTexture) {
-                    this.createVRTexture();
-                }
-                
-                // Zde by měl být komplexní 3D render, pro demonstraci použijeme 2D canvas
-                this.renderStereoToCanvas(eyeIndex);
-            }
-            
-            createVRTexture() {
-                this.vrTexture = this.gl.createTexture();
-                this.gl.bindTexture(this.gl.TEXTURE_2D, this.vrTexture);
-                this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, this.image);
-                this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE);
-                this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE);
-                this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
-                this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
-            }
-            
-            renderStereoToCanvas(eyeIndex) {
-                // Fallback render pro VR - zobrazí odpovídající oko ze stereo obrázku
-                const eyeWidth = this.image.width / 2;
-                const sourceX = eyeIndex * eyeWidth;
-                
-                // Render na canvas (zjednodušená implementace)
-                const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCanvas.width = eyeWidth;
-                tempCanvas.height = this.image.height;
-                
-                tempCtx.drawImage(
-                    this.image,
-                    sourceX, 0, eyeWidth, this.image.height,
-                    0, 0, eyeWidth, this.image.height
-                );
-            }
-            
-            onVRSessionEnd() {
-                this.xrSession = null;
-                this.xrRefSpace = null;
-                this.gl = null;
-                if (this.vrTexture) {
-                    this.gl.deleteTexture(this.vrTexture);
-                    this.vrTexture = null;
-                }
-                console.log('✅ VR session ukončena');
             }
             
             exitVRMode() {
-                if (this.xrSession) {
-                    this.xrSession.end();
+                if (this.aframeScene && this.aframeScene.sceneEl) {
+                    this.aframeScene.sceneEl.exitVR();
+                    this.aframeScene.classList.remove('active');
+                    this.canvas.style.display = 'block';
+                    this.render();
                 }
             }
             
             initEventListeners() {
-                // Mouse events pro desktop
+                // Mouse events pro desktop canvas
                 this.canvas.addEventListener('mousedown', (e) => {
                     this.isDragging = true;
                     this.lastMouseX = e.clientX;
@@ -898,7 +828,6 @@
                     this.rotationY += deltaX * 0.5;
                     this.rotationX += deltaY * 0.5;
                     
-                    // Omezení vertikální rotace
                     this.rotationX = Math.max(-90, Math.min(90, this.rotationX));
                     
                     this.lastMouseX = e.clientX;
@@ -911,7 +840,7 @@
                     this.isDragging = false;
                 });
                 
-                // Touch events pro mobil
+                // Touch events
                 this.canvas.addEventListener('touchstart', (e) => {
                     e.preventDefault();
                     if (e.touches.length === 1) {
@@ -944,7 +873,7 @@
                     this.isDragging = false;
                 });
                 
-                // Wheel event pro zoom
+                // Wheel pro zoom
                 this.canvas.addEventListener('wheel', (e) => {
                     e.preventDefault();
                     this.fov += e.deltaY * 0.1;
@@ -952,17 +881,15 @@
                     this.render();
                 });
                 
-                // Gyroscope pro mobil (pokud je dostupný)
-                if ('DeviceOrientationEvent' in window) {
-                    window.addEventListener('deviceorientation', (e) => {
-                        if (this.viewMode === 'stereo' && !this.isDragging) {
-                            // Použití gyroskopu pro VR pohyb
-                            if (e.beta !== null && e.gamma !== null) {
-                                this.rotationX = e.beta - 90; // Korekce orientace
-                                this.rotationY = e.gamma;
-                                this.render();
-                            }
-                        }
+                // A-Frame event listenery
+                if (this.aframeScene) {
+                    this.aframeScene.addEventListener('enter-vr', () => {
+                        console.log('✅ Vstup do VR módu');
+                    });
+                    
+                    this.aframeScene.addEventListener('exit-vr', () => {
+                        console.log('✅ Výstup z VR módu');
+                        this.exitVRMode();
                     });
                 }
             }
@@ -978,8 +905,32 @@
                 this.image = new Image();
                 this.image.crossOrigin = 'anonymous';
                 this.image.onload = () => {
+                    // Nastavení obrázku pro canvas render
                     this.render();
+                    
+                    // Nastavení obrázku pro A-Frame VR
+                    if (this.vrStereoImage) {
+                        this.vrStereoImage.src = imageSrc;
+                        
+                        // Počkáme na načtení a nastavíme materiál
+                        this.vrStereoImage.onload = () => {
+                            if (this.vrSphere) {
+                                // Pro stereo 180° - použijeme jen levou polovinu pro preview
+                                this.vrSphere.setAttribute('material', {
+                                    src: `#vrStereoImage`,
+                                    side: 'back',
+                                    shader: 'flat'
+                                });
+                                
+                                // Nastavení UV mapování pro stereo
+                                this.setupStereoMapping();
+                                
+                                console.log('✅ VR texture načtena');
+                            }
+                        };
+                    }
                 };
+                
                 this.image.onerror = () => {
                     console.error('Chyba při načítání VR obrázku:', imageSrc);
                     this.ctx.fillStyle = '#333';
@@ -989,11 +940,55 @@
                     this.ctx.textAlign = 'center';
                     this.ctx.fillText('Chyba při načítání obrázku', this.canvas.width/2, this.canvas.height/2);
                 };
+                
                 this.image.src = imageSrc;
+            }
+            
+            setupStereoMapping() {
+                // Přidáme custom shader pro stereo mapping
+                if (this.vrSphere && window.AFRAME) {
+                    AFRAME.registerShader('stereo180', {
+                        schema: {
+                            src: {type: 'map'},
+                            eye: {type: 'string', default: 'left'}
+                        },
+                        
+                        fragmentShader: `
+                            uniform sampler2D src;
+                            uniform float eye;
+                            varying vec2 vUv;
+                            
+                            void main() {
+                                vec2 uv = vUv;
+                                // Pro stereo obrázek - levá polovina pro levé oko, pravá pro pravé
+                                if (eye > 0.5) {
+                                    uv.x = uv.x * 0.5 + 0.5; // Pravá polovina
+                                } else {
+                                    uv.x = uv.x * 0.5; // Levá polovina
+                                }
+                                gl_FragColor = texture2D(src, uv);
+                            }
+                        `
+                    });
+                    
+                    // Aplikujeme stereo shader
+                    this.vrSphere.setAttribute('material', {
+                        shader: 'stereo180',
+                        src: '#vrStereoImage',
+                        eye: 'left' // Můžeme přepínat mezi 'left' a 'right'
+                    });
+                }
             }
             
             setViewMode(mode) {
                 this.viewMode = mode;
+                if (mode === 'stereo') {
+                    this.canvas.style.display = 'block';
+                    this.aframeScene.classList.remove('active');
+                } else {
+                    this.canvas.style.display = 'block';
+                    this.aframeScene.classList.remove('active');
+                }
                 this.render();
             }
             
@@ -1005,6 +1000,72 @@
                 if (this.viewMode === 'mono') {
                     this.renderMono();
                 } else {
+                    this.renderStereo();
+                }
+            }
+            
+            renderMono() {
+                const scale = Math.min(
+                    this.canvas.width / this.image.width,
+                    this.canvas.height / this.image.height
+                );
+                
+                const width = this.image.width * scale;
+                const height = this.image.height * scale;
+                const x = (this.canvas.width - width) / 2;
+                const y = (this.canvas.height - height) / 2;
+                
+                this.ctx.drawImage(this.image, x, y, width, height);
+            }
+            
+            renderStereo() {
+                const imageWidth = this.image.width;
+                const imageHeight = this.image.height;
+                const eyeWidth = imageWidth / 2;
+                
+                const normalizedRotY = ((this.rotationY % 180) + 180) % 180;
+                const normalizedRotX = this.rotationX;
+                
+                const sourceX = (normalizedRotY / 180) * eyeWidth * 0.5;
+                const fovScale = this.fov / 90;
+                const viewWidth = Math.min(eyeWidth * fovScale, eyeWidth);
+                const viewHeight = Math.min(imageHeight * fovScale, imageHeight);
+                
+                const verticalOffset = Math.max(0, (imageHeight - viewHeight) / 2 + (normalizedRotX / 90) * (imageHeight - viewHeight) / 4);
+                
+                try {
+                    // Levé oko
+                    this.ctx.drawImage(
+                        this.image,
+                        Math.max(0, Math.min(sourceX, eyeWidth - viewWidth)), 
+                        Math.max(0, Math.min(verticalOffset, imageHeight - viewHeight)), 
+                        viewWidth, viewHeight,
+                        0, 0, this.canvas.width / 2, this.canvas.height
+                    );
+                    
+                    // Pravé oko
+                    this.ctx.drawImage(
+                        this.image,
+                        eyeWidth + Math.max(0, Math.min(sourceX, eyeWidth - viewWidth)), 
+                        Math.max(0, Math.min(verticalOffset, imageHeight - viewHeight)), 
+                        viewWidth, viewHeight,
+                        this.canvas.width / 2, 0, this.canvas.width / 2, this.canvas.height
+                    );
+                    
+                    // Jemná rozdělící čára
+                    this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                    this.ctx.lineWidth = 1;
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(this.canvas.width / 2, 0);
+                    this.ctx.lineTo(this.canvas.width / 2, this.canvas.height);
+                    this.ctx.stroke();
+                    
+                } catch (error) {
+                    console.error('Chyba při renderování stereo pohledu:', error);
+                    this.renderMono();
+                }
+            }
+        } {
                     this.renderStereo();
                 }
             }
