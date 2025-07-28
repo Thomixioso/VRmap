@@ -7,6 +7,16 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <script type="module" src="https://stereo-img.steren.fr/stereo-img.js"></script>
+    
+    <!-- Zkopírováno z demo: Polyfill pro WebXR (zajišťuje VR kompatibilitu) -->
+    <script src='https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.js'></script>
+    <script>
+        window.polyfill = new WebXRPolyfill();  // Inicializace polyfillu pro VR podporu
+    </script>
+    
+    <!-- Volitelně: Přidej A-Frame pro lepší VR (odkomentuj, pokud stereo-img nefunguje dobře) -->
+    <!-- <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script> -->
+    
     <style>
         #map { height: 400px; }
         #detailsContainer { margin-top: 20px; }
@@ -121,18 +131,27 @@
         function openVRView(imagePath) {
             try {
                 const vrContainer = document.getElementById('vrContainer');
-                vrContainer.innerHTML += `<stereo-img src="${imagePath}"></stereo-img>`;
+                
+                // Zkopírováno/inspirováno z demo: Vytvoř <stereo-img> s atributy type a angle pro lepší kompatibilitu
+                const stereoImg = document.createElement('stereo-img');
+                stereoImg.setAttribute('src', imagePath);
+                stereoImg.setAttribute('type', 'left-right');  // Změň na 'vr', 'top-bottom' nebo jiný podle tvých obrázků (potlačí varování)
+                stereoImg.setAttribute('angle', '180');  // Předpokládám 180° VR; změň na 360 pro plné panorama
+                vrContainer.appendChild(stereoImg);
+                
                 vrContainer.classList.add('active');
 
-                // Spustit WebXR session, pokud je dostupná
+                // Spustit WebXR session (polyfill zajistí kompatibilitu)
                 if (navigator.xr) {
                     navigator.xr.requestSession('immersive-vr').then(session => {
                         xrSession = session;
-                        // Můžeš přidat další setup, např. přiřazení k canvasu
+                        // Přiřaď session k rendereru, pokud potřeba (z demo inspirace)
                     }).catch(err => {
                         console.error('XR session failed:', err);
                         alert('Nepodařilo se spustit VR session. Zkus to v jiném prohlížeči.');
                     });
+                } else {
+                    console.warn('WebXR není podporováno, polyfill by měl pomoci.');
                 }
             } catch (e) {
                 console.error('Chyba při otevírání VR:', e);
