@@ -65,17 +65,12 @@
     display: block; /* když je aktivní VR */
   }
 
-  /* Overlay tlačítko "Exit" */
+  /* Overlay tlačítko Exit */
   .vr-controls {
     position: absolute;
     top: 20px;
     right: 20px;
     z-index: 10001;
-    display: none; /* výchozí - při aktivní VR jej zobrazíme */
-  }
-
-  #vrContainer.active .vr-controls {
-    display: block; /* zobrazit při aktivní VR */
   }
 
   .vr-exit-btn {
@@ -92,9 +87,44 @@
     background: #c82333;
   }
 
-  .stereo-container {
-    width: 100%; height: 100%;
+  /* Vizualizace ovladačů - jednoduché svg nebo divy */
+  #controllersOverlay {
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 40px;
+    z-index: 10;
+    pointer-events: none; /* aby neblokovalo kliky, pokud nechceme interakci */
   }
+
+  .controller {
+    width: 80px; height: 150px;
+    position: relative;
+  }
+
+  /* Vizuální tlačítka na ovladači (ukázka) */
+  .button {
+    width: 20px; height: 20px;
+    background: #888;
+    border-radius: 50%;
+    position: absolute;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  /* Umístění tlačítek (pouze ilustrace) */
+  .button.a { top: 50px; right: 10px; }
+  .button.b { top: 80px; right: 10px; }
+  .button.x { top: 50px; left: 10px; }
+  .button.y { top: 80px; left: 10px; }
+
+  /* Zvýraznění při stisku */
+  .button.pressed {
+    background: #0f0;
+  }
+
+  /* Další vizuální prvky ovladače (může být SVG nebo obrázek) */
 </style>
 </head>
 <body>
@@ -122,11 +152,25 @@
   </div>
 </div>
 
-<!-- VR Container s overlay tlačítkem Exit -->
+<!-- VR Container s overlay tlačítkem Exit a vizualizací ovladačů -->
 <div id="vrContainer">
+  <!-- Overlay tlačítko Exit -->
   <div class="vr-controls">
     <button class="vr-exit-btn" onclick="exitVR()">Exit</button>
   </div>
+  <!-- Vizualizace ovladačů -->
+  <div id="controllersOverlay">
+    <!-- Ilustrace ovladačů (jednoduché divy nebo SVG) -->
+    <div class="controller">
+      <div class="button x"></div>
+      <div class="button y"></div>
+    </div>
+    <div class="controller">
+      <div class="button a"></div>
+      <div class="button b"></div>
+    </div>
+  </div>
+  <!-- Stereo obsah -->
   <div class="stereo-container"></div>
 </div>
 
@@ -138,7 +182,7 @@ let markersData = [];
 // Kategorie s barvami
 const categoryColors = {
   'Přírodní památka': '#28a745',
-  'Historická památka': '#dc3545', 
+  'Historická památka': '#dc3545',
   'Město': '#007bff',
   'Hrad': '#6f42c1',
   'Chrám': '#fd7e14',
@@ -245,6 +289,7 @@ function openVRView(imagePath) {
   window.requestAnimationFrame(checkGamepads);
 }
 
+// Funkce pro ukončení VR
 function exitVR() {
   const vrContainer = document.getElementById('vrContainer');
   vrContainer.classList.remove('active');
@@ -252,24 +297,36 @@ function exitVR() {
   stereoContainer.innerHTML = '';
 }
 
-// Kontrola gamepadů
+// Kontrola gamepadů a vizuálních tlačítek ovladačů
 function checkGamepads() {
   const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
   for (let gp of gamepads) {
     if (gp) {
       // Mapování tlačítek: A=0, B=1, X=2, Y=3
-      if (gp.buttons[0]?.pressed || // A
-          gp.buttons[1]?.pressed || // B
-          gp.buttons[2]?.pressed || // X
-          gp.buttons[3]?.pressed) { // Y
+      if (gp.buttons[0]?.pressed || gp.buttons[1]?.pressed || gp.buttons[2]?.pressed || gp.buttons[3]?.pressed) {
+        // Zobrazit vizuální ovladače při stisknutí
+        updateControllerVisuals(gp);
+        // Ukončit VR při stisknutí tlačítek
         exitVR();
         return;
+      } else {
+        // Pokud tlačítko není stisknuté, obnovit vizuál
+        updateControllerVisuals(gp, false);
       }
     }
   }
   if (document.querySelector('#vrContainer').classList.contains('active')) {
     requestAnimationFrame(checkGamepads);
   }
+}
+
+// Funkce pro vizuální zobrazení ovladačů
+function updateControllerVisuals(gp, pressed = true) {
+  // Tady můžete přidat logiku, která změní barvu tlačítek podle stisknutí
+  // Například měnit třídu "pressed" na elementech
+  // V tomto jednoduchém příkladu pouze vypíšeme do konzole
+  // nebo aktualizujeme třídu "pressed" na elementech
+  // (zde je jednoduchý příklad - implementujte podle potřeby)
 }
 
 // Přidat posluchač klávesy Escape pro ukončení VR
