@@ -111,15 +111,18 @@
                 console.log('🗺️ Starting map initialization...');
                 initializeMap();
 
-                // Wait for map to load before creating VR display
+                // XR first, then create map display
+                console.log('🥽 Creating XR experience...');
+                const xrHelper = await scene.createDefaultXRExperienceAsync({
+                    floorMeshes: []
+                });
+
+                // Wait for XR and map to be ready
                 setTimeout(() => {
                     console.log('🎮 Creating VR map display...');
                     const mapContainer = document.getElementById('mapContainer');
-                    new HtmlMesh(mapContainer, scene);
+                    const htmlMesh = new HtmlMesh(mapContainer, scene, xrHelper);
                 }, 2000);
-
-                // XR
-                const xrHelper = await scene.createDefaultXRExperienceAsync();
 
                 return scene;
             };
@@ -200,10 +203,12 @@
                 }
             }
 
-            // HtmlMesh - creates interactive mesh with HTML content
+            // HtmlMesh - creates interactive mesh with HTML content + VR support
             class HtmlMesh {
-                constructor(domElement, scene) {
+                constructor(domElement, scene, xrHelper = null) {
                     this.domElement = domElement;
+                    this.scene = scene;
+                    this.xrHelper = xrHelper;
 
                     // Create texture and mesh
                     this.texture = new HtmlTexture(domElement, scene);
@@ -216,10 +221,19 @@
 
                     this.texture.update();
 
-                    // Setup interaction
-                    this.mesh.actionManager = new BABYLON.ActionManager(scene);
+                    // Setup desktop interaction
+                    this.setupDesktopInteraction();
+                    
+                    // Setup VR interaction if available
+                    if (xrHelper) {
+                        this.setupVRInteraction();
+                    }
+                }
 
-                    // Mouse events for map interaction
+                setupDesktopInteraction() {
+                    this.mesh.actionManager = new BABYLON.ActionManager(this.scene);
+
+                    // Mouse events for desktop
                     this.mesh.actionManager.registerAction(
                         new BABYLON.ExecuteCodeAction(
                             { trigger: BABYLON.ActionManager.OnPickDownTrigger },
@@ -249,21 +263,92 @@
                             }
                         )
                     );
+                }
 
-                    this.mesh.actionManager.registerAction(
+                setupVRInteraction() {
+                    console.log('🥽 Setting up VR interaction...');
+                    
+                    // Enable pointer selection for this mesh
+                    this.mesh.isPickable = true;
+                    
+                    // Add to XR pointer selection
+                    if (this.xrHelper.pointerSelection) {
+                        this.xrHelper.pointerSelection.attach();
+                        console.log('✅ VR pointer selection attached');
+                    }
+
+                    // Listen for XR controller events
+                    this.scene.actionManager = this.scene.actionManager || new BABYLON.ActionManager(this.scene);
+                    
+                    // VR controller pick events
+                    this.scene.actionManager.registerAction(
                         new BABYLON.ExecuteCodeAction(
-                            { trigger: BABYLON.ActionManager.OnPointerOverTrigger },
+                            { trigger: BABYLON.ActionManager.OnPickTrigger },
                             (evt) => {
-                                const coords = evt.additionalData.pickResult.getTextureCoordinates();
-                                this.htmlevent("mousemove", coords.x, 1 - coords.y);
+                                if (evt.meshUnderPointer === this.mesh) {
+                                    console.log('🎮 VR trigger pressed on map');
+                                    const coords = evt.additionalData.getTextureCoordinates();
+                                    if (coords) {
+                                        this.htmlevent("click", coords.x, 1 - coords.y);
+                                    }
+                                }
                             }
                         )
                     );
 
-                    this.mesh.pointerOverDisableMeshTesting = true;
+                    // XR input source events
+                    if (this.xrHelper.input) {
+                        this.xrHelper.input.onControllerAddedObservable.add((controller) => {
+                            console.log('🎮 VR Controller added:', controller.inputSource.handedness);
+                            
+                            controller.onMotionControllerInitObservable.add((motionController) => {
+                                console.log('🎮 Motion controller initialized');
+                                
+                                // Get main component (trigger)
+                                const mainComponent = motionController.getMainComponent();
+                                if (mainComponent) {
+                                    // Trigger press
+                                    mainComponent.onButtonStateChangedObservable.add((component) => {
+                                        if (component.pressed) {
+                                            console.log('🎮 VR Trigger pressed');
+                                            this.handleVRPointerEvent();
+                                        }
+                                    });
+                                }
+
+                                // Get squeeze component if available
+                                const squeezeComponent = motionController.getComponent("squeeze");
+                                if (squeezeComponent) {
+                                    squeezeComponent.onButtonStateChangedObservable.add((component) => {
+                                        if (component.pressed) {
+                                            console.log('🎮 VR Squeeze pressed');
+                                            this.handleVRPointerEvent();
+                                        }
+                                    });
+                                }
+                            });
+                        });
+                    }
+                }
+
+                handleVRPointerEvent() {
+                    // Cast ray from pointer to mesh
+                    const scene = this.scene;
+                    const ray = scene.createPickingRay(scene.pointerX, scene.pointerY, BABYLON.Matrix.Identity(), scene.activeCamera);
+                    const hit = scene.pickWithRay(ray);
+                    
+                    if (hit.hit && hit.pickedMesh === this.mesh) {
+                        const coords = hit.getTextureCoordinates();
+                        if (coords) {
+                            console.log('🎯 VR hit at:', coords.x, 1 - coords.y);
+                            this.htmlevent("click", coords.x, 1 - coords.y);
+                        }
+                    }
                 }
 
                 htmlevent(event, x, y) {
+                    console.log(`🖱️ HTML event: ${event} at ${x.toFixed(3)}, ${y.toFixed(3)}`);
+                    
                     const element = this.domElement;
                     const clientX = (x * element.offsetWidth) + element.offsetLeft;
                     const clientY = (y * element.offsetHeight) + element.offsetTop;
