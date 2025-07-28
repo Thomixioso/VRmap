@@ -127,13 +127,13 @@
             // Initialize Leaflet map
             let map;
             function initializeMap() {
-                console.log('🗺️ Initializing offline world map...');
+                console.log('🗺️ Initializing offline topographic map...');
                 
                 map = L.map('map', {
                     center: [49.75, 15.5], // Czech Republic center
-                    zoom: 4,
+                    zoom: 2,
                     minZoom: 0,
-                    maxZoom: 8,
+                    maxZoom: 3,
                     zoomControl: true,
                     attributionControl: false,
                     worldCopyJump: true,
@@ -141,36 +141,22 @@
                     maxBoundsViscosity: 1.0
                 });
 
-                console.log('📍 Map object created, adding layers...');
+                console.log('📍 Map object created, adding topographic layer...');
 
-                // Offline satellite base layer
-                const baseLayer = L.tileLayer('tiles_satellite_labeled/{z}/{x}/{y}.jpg', {
-                    attribution: 'ESRI World Imagery (Offline)',
-                    minZoom: 0,
-                    maxZoom: 8,
-                    maxNativeZoom: 6
-                });
-                
-                baseLayer.on('loading', () => console.log('🔄 Base layer loading...'));
-                baseLayer.on('load', () => console.log('✅ Base layer loaded'));
-                baseLayer.on('tileerror', (e) => console.log('❌ Base tile error:', e));
-                
-                baseLayer.addTo(map);
-
-                // Topographic overlay
-                const topoOverlay = L.tileLayer('tiles_topo_labeled/{z}/{x}/{y}.png', {
+                // Only topographic layer (GitHub available levels 0-3)
+                const topoLayer = L.tileLayer('tiles_topo_labeled/{z}/{x}/{y}.png', {
                     attribution: 'ESRI Topographic (Offline)',
                     minZoom: 0,
-                    maxZoom: 8,
-                    maxNativeZoom: 6,
-                    opacity: 0.7
+                    maxZoom: 3,
+                    maxNativeZoom: 3
                 });
                 
-                topoOverlay.on('loading', () => console.log('🔄 Topo overlay loading...'));
-                topoOverlay.on('load', () => console.log('✅ Topo overlay loaded'));
-                topoOverlay.on('tileerror', (e) => console.log('❌ Topo tile error:', e));
+                topoLayer.on('loading', () => console.log('🔄 Topo layer loading...'));
+                topoLayer.on('load', () => console.log('✅ Topo layer loaded'));
+                topoLayer.on('tileerror', (e) => console.log('❌ Topo tile error:', e.tile.src));
+                topoLayer.on('tileload', (e) => console.log('✅ Tile loaded:', e.tile.src));
                 
-                topoOverlay.addTo(map);
+                topoLayer.addTo(map);
 
                 // Map events
                 map.on('moveend', () => {
@@ -179,7 +165,7 @@
                     console.log(`🗺️ Map moved to: ${center.lat.toFixed(3)}, ${center.lng.toFixed(3)}, zoom: ${zoom}`);
                 });
 
-                console.log('✅ Offline map initialized with debug events');
+                console.log('✅ Offline topographic map initialized (levels 0-3)');
             }
 
             // HtmlTexture - converts HTML DOM to texture
