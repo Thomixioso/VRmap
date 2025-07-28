@@ -118,7 +118,6 @@
     position: fixed;
     top: 0;
     left: 0;
-
     width: 100%;
     height: 100%;
     background: black;
@@ -222,7 +221,7 @@ async function loadData() {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const data = await response.json();
-    markersData = data.locations || [];
+    markersData = data; // Změna: data jsou přímo array, ne data.locations
     
     updateStats();
     addMarkersToMap();
@@ -230,6 +229,7 @@ async function loadData() {
   } catch (error) {
     console.error('Chyba při načítání dat:', error);
     document.getElementById('imageContainer').innerHTML = 
+
       `<div class="error-message">
         <strong>Chyba při načítání dat:</strong> ${error.message}
         <br>Zkontrolujte, zda existuje soubor data.json ve stejné složce.
@@ -245,7 +245,8 @@ function updateStats() {
 // Přidání markerů na mapu
 function addMarkersToMap() {
   markersData.forEach((location, index) => {
-    const marker = L.marker([location.lat, location.lng]).addTo(map);
+    // Změna: používám location.lon místo location.lng
+    const marker = L.marker([location.lat, location.lon]).addTo(map);
     
     marker.bindPopup(`
       <div style="text-align: center; min-width: 200px;">
@@ -281,7 +282,7 @@ function showLocationDetails(index) {
     <div class="location-info">
       <h2 style="color: #333; margin-top: 0;">${location.name}</h2>
       <div class="coordinates">
-        📍 ${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}
+        📍 ${location.lat.toFixed(4)}, ${location.lon.toFixed(4)}
       </div>
       <div style="margin: 10px 0;">
         <span class="category-badge" style="background-color: ${categoryColors[location.category] || categoryColors['Další']}">
@@ -310,6 +311,7 @@ function openVRView(imagePath) {
   const vrContainer = document.getElementById('vrContainer');
   const stereoContainer = vrContainer.querySelector('.stereo-container');
   
+
   // Vytvoření stereo-img elementu se správnou syntaxí
   stereoContainer.innerHTML = `<stereo-img src="${imagePath}"></stereo-img>`;
   
@@ -319,7 +321,6 @@ function openVRView(imagePath) {
   // Zamezení scrollování stránky
   document.body.style.overflow = 'hidden';
 }
-
 
 function exitVR() {
   const vrContainer = document.getElementById('vrContainer');
@@ -370,5 +371,12 @@ window.addEventListener('resize', function() {
 
 
 
-	  
+
+
+
+
+
+
 	
+      
+	  
