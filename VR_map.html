@@ -11,6 +11,7 @@
     <!-- Babylon.js -->
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
     
     <style>
         body, html {
@@ -87,24 +88,21 @@
         // HtmlTexture class z index.html
         class HtmlTexture extends BABYLON.DynamicTexture {
             constructor(domElement, scene) {
-                super("HtmlTexture", html2canvas(domElement), scene);
+                super("HtmlTexture", {width: 512, height: 512}, scene);
                 this.domElement = domElement;
-
-                const observer = new MutationObserver(() => {
-                    if (!this.scheduleUpdate) {
-                        this.scheduleUpdate = setTimeout(() => this.update(), 16);
-                    }
-                });
-
-                const config = { attributes: true, childList: true, subtree: true, characterData: true };
-                observer.observe(domElement, config);
-                this.observer = observer;
+                this.updateTexture();
             }
 
-            update() {
-                html2canvas(this.domElement);
-                super.update();
-                this.scheduleUpdate = null;
+            async updateTexture() {
+                try {
+                    const canvas = await html2canvas(this.domElement);
+                    const ctx = this.getContext();
+                    ctx.clearRect(0, 0, 512, 512);
+                    ctx.drawImage(canvas, 0, 0, 512, 512);
+                    this.update();
+                } catch (e) {
+                    console.warn('html2canvas failed:', e);
+                }
             }
         }
 
@@ -120,43 +118,15 @@
                 this.material.diffuseTexture = this.texture;
                 this.mesh.material = this.material;
                 this.mesh.position = new BABYLON.Vector3(0, 2, 2);
-                
-                this.texture.update();
             }
-        }
-
-        // html2canvas funkce z index.html (zjednodušená)
-        const canvases = new WeakMap();
-        function html2canvas(element) {
-            const offset = element.getBoundingClientRect();
-            let canvas = canvases.get(element);
-
-            if (canvas === undefined) {
-                canvas = document.createElement('canvas');
-                canvas.width = offset.width;
-                canvas.height = offset.height;
-                canvases.set(element, canvas);
-            }
-
-            const context = canvas.getContext('2d');
-            context.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Základní vykreslení - jen screenshot elementu
-            try {
-                const rect = element.getBoundingClientRect();
-                context.fillStyle = '#f0f0f0';
-                context.fillRect(0, 0, canvas.width, canvas.height);
-                context.fillStyle = '#333';
-                context.font = '16px Arial';
-                context.fillText('Leaflet Map', 20, 30);
-            } catch (e) {
-                console.warn('html2canvas simplified version');
-            }
-
-            return canvas;
         }
 
         async function toggleVR() {
+            if (typeof BABYLON === 'undefined') {
+                alert('Babylon.js se ještě nenačítá...');
+                return;
+            }
+            
             if (!isVRMode) {
                 await enterVR();
             } else {
@@ -263,8 +233,10 @@
 
         // Inicializace
         window.addEventListener('load', () => {
-            initMap();
-            console.log("Aplikace připravena");
+            setTimeout(() => {
+                initMap();
+                console.log("Aplikace připravena");
+            }, 1000); // čekání na Babylon.js
         });
 
         // Cleanup
