@@ -1,282 +1,432 @@
-<!DOCTYPE html>
-<html lang="cs">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jednoduchá VR Mapa</title>
-    
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
-    <!-- Babylon.js -->
-    <script src="https://cdn.babylonjs.com/babylon.js"></script>
-    <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
-    <script src="https://cdn.babylonjs.com/WebXR/babylon.webxr.js"></script>
-    
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            font-family: Arial, sans-serif;
-        }
+<!doctype html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <title>VR World Map</title>
+
+        <!-- Babylon.js -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
+        <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
+        <script src="https://cdn.babylonjs.com/recast.js"></script>
+        <script src="https://cdn.babylonjs.com/ammo.js"></script>
+        <script src="https://cdn.babylonjs.com/havok/HavokPhysics_umd.js"></script>
+        <script src="https://cdn.babylonjs.com/cannon.js"></script>
+        <script src="https://cdn.babylonjs.com/Oimo.js"></script>
+        <script src="https://cdn.babylonjs.com/earcut.min.js"></script>
+        <script src="https://cdn.babylonjs.com/babylon.js"></script>
+        <script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+        <script src="https://cdn.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
+        <script src="https://cdn.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
+        <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+        <script src="https://cdn.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+        <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+        <script src="https://cdn.babylonjs.com/addons/babylonjs.addons.min.js"></script>
+        <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
         
-        #map {
-            width: 100%;
-            height: 100vh;
-        }
+        <!-- Leaflet -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+        <style>
+            html, body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+
+            #canvasZone {
+                width: 100%;
+                height: 100%;
+            }
+
+            #mapContainer {
+                width: 800px;
+                height: 600px;
+                background: #000;
+                border-radius: 10px;
+                overflow: hidden;
+                visibility: hidden;
+                position: absolute;
+                top: -9999px;
+            }
+
+            #map {
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
         
-        #vrCanvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 9999;
-            background: #000;
-            display: none;
-        }
-        
-        .vr-button {
-            position: fixed;
-            top: 15px;
-            right: 15px;
-            z-index: 1001;
-            padding: 12px 24px;
-            background: #007cff;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        
-        .vr-hidden {
-            display: none !important;
-        }
-    </style>
-</head>
-<body>
-    <!-- Mapa -->
-    <div id="map"></div>
-    
-    <!-- VR Button -->
-    <button class="vr-button" onclick="toggleVR()">🥽 Enter VR</button>
+        <!-- Hidden map container for VR -->
+        <div id="mapContainer">
+            <div id="map"></div>
+        </div>
 
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <script>
+            var canvas = document.getElementById("renderCanvas");
 
-    <script>
-        let map;
-        let isVRMode = false;
-        let vrEngine = null;
-        let vrScene = null;
-        let vrCanvas = null;
-        let xrExperience = null;
-        let htmlMesh = null;
-
-        // Inicializace mapy
-        function initMap() {
-            map = L.map('map').setView([50.0755, 14.4378], 6);
-            
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(map);
-        }
-
-        // Jednoduchá textura místo html2canvas
-        class SimpleMapTexture extends BABYLON.DynamicTexture {
-            constructor(scene) {
-                super("MapTexture", {width: 1024, height: 1024}, scene);
-                this.createMapTexture();
+            var startRenderLoop = function (engine, canvas) {
+                engine.runRenderLoop(function () {
+                    if (sceneToRender && sceneToRender.activeCamera) {
+                        sceneToRender.render();
+                    }
+                });
             }
 
-            createMapTexture() {
-                const ctx = this.getContext();
+            var engine = null;
+            var scene = null;
+            var sceneToRender = null;
+            var createDefaultEngine = function() { 
+                return new BABYLON.Engine(canvas, true, { 
+                    preserveDrawingBuffer: true, 
+                    stencil: true,  
+                    disableWebGL2Support: false
+                }); 
+            };
+
+            var createScene = async function () {
+                // Create basic Babylon Scene
+                var scene = new BABYLON.Scene(engine);
+
+                // Camera
+                var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 5, -10), scene);
+                camera.setTarget(BABYLON.Vector3.Zero());
+                camera.attachControl(canvas, true);
+
+                // Light
+                var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+                light.intensity = 0.7;
+
+                // Initialize map first
+                console.log('🗺️ Starting map initialization...');
+                initializeMap();
+
+                // Wait for map to load before creating VR display
+                setTimeout(() => {
+                    console.log('🎮 Creating VR map display...');
+                    const mapContainer = document.getElementById('mapContainer');
+                    new HtmlMesh(mapContainer, scene);
+                }, 2000);
+
+                // XR
+                const xrHelper = await scene.createDefaultXRExperienceAsync();
+
+                return scene;
+            };
+
+            // Initialize Leaflet map
+            let map;
+            function initializeMap() {
+                console.log('🗺️ Initializing offline world map...');
                 
-                // Pozadí
-                ctx.fillStyle = '#4a90e2';
-                ctx.fillRect(0, 0, 1024, 1024);
-                
-                // Mřížka jako mapa
-                ctx.strokeStyle = 'white';
-                ctx.lineWidth = 2;
-                for(let i = 0; i < 1024; i += 64) {
-                    ctx.beginPath();
-                    ctx.moveTo(i, 0);
-                    ctx.lineTo(i, 1024);
-                    ctx.stroke();
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(0, i);
-                    ctx.lineTo(1024, i);
-                    ctx.stroke();
-                }
-                
-                // Text
-                ctx.fillStyle = 'white';
-                ctx.font = '48px Arial';
-                ctx.fillText('VR Mapa', 400, 500);
-                ctx.font = '24px Arial';
-                ctx.fillText('Pan & Zoom s myší', 350, 550);
-                
-                this.update();
-                console.log("Jednoduchá mapa textura vytvořena");
-            }
-        }
-
-        // Jednoduchý mesh s mapou
-        class SimpleMapMesh {
-            constructor(scene) {
-                this.texture = new SimpleMapTexture(scene);
-                this.texture.hasAlpha = true;
-
-                this.mesh = BABYLON.MeshBuilder.CreatePlane("mapPlane", { height: 4, width: 6 });
-                this.material = new BABYLON.StandardMaterial("MapMat", scene);
-                this.material.diffuseTexture = this.texture;
-                this.material.emissiveTexture = this.texture;
-                this.material.emissiveColor = new BABYLON.Color3(0.3, 0.3, 0.3);
-                this.mesh.material = this.material;
-                this.mesh.position = new BABYLON.Vector3(0, 2, 3);
-                this.mesh.rotation.x = -Math.PI / 12;
-            }
-        }
-
-        async function toggleVR() {
-            if (typeof BABYLON === 'undefined') {
-                alert('Babylon.js se ještě nenačítá...');
-                return;
-            }
-            
-            if (!isVRMode) {
-                await enterVR();
-            } else {
-                exitVR();
-            }
-        }
-
-        async function enterVR() {
-            try {
-                // Vytvoření VR canvas
-                vrCanvas = document.createElement('canvas');
-                vrCanvas.id = 'vrCanvas';
-                vrCanvas.style.display = 'block';
-                document.body.appendChild(vrCanvas);
-
-                // Babylon.js engine a scéna
-                vrEngine = new BABYLON.Engine(vrCanvas, true);
-                vrScene = new BABYLON.Scene(vrEngine);
-
-                // Kamera
-                const camera = new BABYLON.ArcRotateCamera("camera", 0, 0, 10, BABYLON.Vector3.Zero(), vrScene);
-                camera.setPosition(new BABYLON.Vector3(0, 5, -10));
-                vrScene.activeCamera = camera;
-
-                // Osvětlení
-                new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), vrScene);
-
-                // Podlaha
-                const ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 20, height: 20}, vrScene);
-                const groundMat = new BABYLON.StandardMaterial("groundMat", vrScene);
-                groundMat.diffuseColor = new BABYLON.Color3(0.2, 0.2, 0.3);
-                ground.material = groundMat;
-
-                // Převod mapy na VR pomocí SimpleMapMesh
-                htmlMesh = new SimpleMapMesh(vrScene);
-
-                // Spustit render loop
-                vrEngine.runRenderLoop(() => {
-                    vrScene.render();
+                map = L.map('map', {
+                    center: [49.75, 15.5], // Czech Republic center
+                    zoom: 4,
+                    minZoom: 0,
+                    maxZoom: 8,
+                    zoomControl: true,
+                    attributionControl: false,
+                    worldCopyJump: true,
+                    maxBounds: [[-85, -Infinity], [85, Infinity]],
+                    maxBoundsViscosity: 1.0
                 });
 
-                // WebXR pro stereo rendering
-                try {
-                    xrExperience = await vrScene.createDefaultXRExperienceAsync({
-                        floorMeshes: [ground],
-                        requiredFeatures: ["local-floor"],
-                        optionalFeatures: ["hand-tracking"]
+                console.log('📍 Map object created, adding layers...');
+
+                // Offline satellite base layer
+                const baseLayer = L.tileLayer('tiles_satellite_labeled/{z}/{x}/{y}.jpg', {
+                    attribution: 'ESRI World Imagery (Offline)',
+                    minZoom: 0,
+                    maxZoom: 8,
+                    maxNativeZoom: 6
+                });
+                
+                baseLayer.on('loading', () => console.log('🔄 Base layer loading...'));
+                baseLayer.on('load', () => console.log('✅ Base layer loaded'));
+                baseLayer.on('tileerror', (e) => console.log('❌ Base tile error:', e));
+                
+                baseLayer.addTo(map);
+
+                // Topographic overlay
+                const topoOverlay = L.tileLayer('tiles_topo_labeled/{z}/{x}/{y}.png', {
+                    attribution: 'ESRI Topographic (Offline)',
+                    minZoom: 0,
+                    maxZoom: 8,
+                    maxNativeZoom: 6,
+                    opacity: 0.7
+                });
+                
+                topoOverlay.on('loading', () => console.log('🔄 Topo overlay loading...'));
+                topoOverlay.on('load', () => console.log('✅ Topo overlay loaded'));
+                topoOverlay.on('tileerror', (e) => console.log('❌ Topo tile error:', e));
+                
+                topoOverlay.addTo(map);
+
+                // Map events
+                map.on('moveend', () => {
+                    const center = map.getCenter();
+                    const zoom = map.getZoom();
+                    console.log(`🗺️ Map moved to: ${center.lat.toFixed(3)}, ${center.lng.toFixed(3)}, zoom: ${zoom}`);
+                });
+
+                console.log('✅ Offline map initialized with debug events');
+            }
+
+            // HtmlTexture - converts HTML DOM to texture
+            class HtmlTexture extends BABYLON.DynamicTexture {
+                constructor(domElement, scene) {
+                    super("HtmlTexture", html2canvas(domElement), scene);
+                    this.domElement = domElement;
+
+                    const observer = new MutationObserver(() => {
+                        if (!this.scheduleUpdate) {
+                            this.scheduleUpdate = setTimeout(() => this.update(), 16);
+                        }
                     });
+
+                    const config = { attributes: true, childList: true, subtree: true, characterData: true };
+                    observer.observe(domElement, config);
+                    this.observer = observer;
+                }
+
+                get width() {
+                    return this._canvas.width;
+                }
+
+                get height() {
+                    return this._canvas.height;
+                }
+
+                update() {
+                    html2canvas(this.domElement);
+                    super.update()
+                    this.scheduleUpdate = null;
+                }
+            }
+
+            // HtmlMesh - creates interactive mesh with HTML content
+            class HtmlMesh {
+                constructor(domElement, scene) {
+                    this.domElement = domElement;
+
+                    // Create texture and mesh
+                    this.texture = new HtmlTexture(domElement, scene);
+                    this.texture.hasAlpha = true;
+
+                    this.mesh = BABYLON.MeshBuilder.CreatePlane("mapPlane", { height: 6, width: 8 });
+                    this.material = new BABYLON.StandardMaterial("mapMaterial", scene);
+                    this.material.diffuseTexture = this.texture;
+                    this.mesh.material = this.material;
+
+                    this.texture.update();
+
+                    // Setup interaction
+                    this.mesh.actionManager = new BABYLON.ActionManager(scene);
+
+                    // Mouse events for map interaction
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            { trigger: BABYLON.ActionManager.OnPickDownTrigger },
+                            (evt) => {
+                                const coords = evt.additionalData.getTextureCoordinates();
+                                this.htmlevent("mousedown", coords.x, 1 - coords.y);
+                            }
+                        )
+                    );
+
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            { trigger: BABYLON.ActionManager.OnPickUpTrigger },
+                            (evt) => {
+                                const coords = evt.additionalData.getTextureCoordinates();
+                                this.htmlevent("mouseup", coords.x, 1 - coords.y);
+                            }
+                        )
+                    );
+
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            { trigger: BABYLON.ActionManager.OnPickTrigger },
+                            (evt) => {
+                                const coords = evt.additionalData.getTextureCoordinates();
+                                this.htmlevent("click", coords.x, 1 - coords.y);
+                            }
+                        )
+                    );
+
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            { trigger: BABYLON.ActionManager.OnPointerOverTrigger },
+                            (evt) => {
+                                const coords = evt.additionalData.pickResult.getTextureCoordinates();
+                                this.htmlevent("mousemove", coords.x, 1 - coords.y);
+                            }
+                        )
+                    );
+
+                    this.mesh.pointerOverDisableMeshTesting = true;
+                }
+
+                htmlevent(event, x, y) {
+                    const element = this.domElement;
+                    const clientX = (x * element.offsetWidth) + element.offsetLeft;
+                    const clientY = (y * element.offsetHeight) + element.offsetTop;
                     
-                    if (xrExperience.baseExperience) {
-                        // Přidat VR tlačítko do scény
-                        const vrButton = xrExperience.enterExitUI.activeButton;
-                        if (vrButton) {
-                            vrButton.style.display = 'block';
-                            console.log("WebXR tlačítko aktivní - klikněte pro stereo VR");
+                    const mouseEventInit = {
+                        clientX: clientX,
+                        clientY: clientY,
+                        view: element.ownerDocument.defaultView
+                    };
+
+                    const mouseEvent = new MouseEvent(event, mouseEventInit);
+                    
+                    // Find target element
+                    const rect = element.getBoundingClientRect();
+                    const realX = x * rect.width + rect.left;
+                    const realY = y * rect.height + rect.top;
+                    
+                    this.traverse(element, realX, realY, mouseEvent);
+                }
+
+                traverse(element, x, y, mouseEvent) {
+                    if (element.nodeType !== Node.TEXT_NODE && element.nodeType !== Node.COMMENT_NODE) {
+                        const rect = element.getBoundingClientRect();
+                        
+                        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                            element.dispatchEvent(mouseEvent);
+                        }
+
+                        for (let i = 0; i < element.childNodes.length; i++) {
+                            this.traverse(element.childNodes[i], x, y, mouseEvent);
                         }
                     }
-                } catch (xrError) {
-                    console.warn("WebXR není dostupný:", xrError);
-                    alert("Pro stereo VR potřebujete WebXR kompatibilní prohlížeč");
                 }
-
-                // Resize handler
-                window.addEventListener("resize", () => vrEngine.resize());
-
-                // Skrytí 2D mapy
-                document.getElementById('map').classList.add('vr-hidden');
-                document.querySelector('.vr-button').innerHTML = '🚪 Exit VR';
-                isVRMode = true;
-
-                console.log("VR režim spuštěn");
-
-            } catch (err) {
-                console.error("VR chyba:", err);
-                exitVR();
             }
-        }
 
-        function exitVR() {
-            try {
-                if (xrExperience) {
-                    xrExperience.dispose();
-                    xrExperience = null;
+            // Enhanced html2canvas for Leaflet maps
+            const canvases = new WeakMap();
+            function html2canvas(element) {
+                const offset = element.getBoundingClientRect();
+                let canvas = canvases.get(element);
+
+                if (canvas === undefined) {
+                    canvas = document.createElement('canvas');
+                    canvas.width = offset.width;
+                    canvas.height = offset.height;
+                    canvases.set(element, canvas);
                 }
+
+                const context = canvas.getContext('2d');
+                context.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Draw Leaflet map tiles
+                if (map && map.getContainer()) {
+                    try {
+                        // Get all tile images from Leaflet
+                        const mapContainer = map.getContainer();
+                        const tileImages = mapContainer.querySelectorAll('.leaflet-tile');
+                        
+                        console.log(`Found ${tileImages.length} tiles to render`);
+                        
+                        // Draw background
+                        context.fillStyle = '#1a1a1a';
+                        context.fillRect(0, 0, canvas.width, canvas.height);
+                        
+                        // Draw each tile
+                        tileImages.forEach(img => {
+                            if (img.complete && img.naturalHeight !== 0) {
+                                const rect = img.getBoundingClientRect();
+                                const containerRect = mapContainer.getBoundingClientRect();
+                                
+                                const x = rect.left - containerRect.left;
+                                const y = rect.top - containerRect.top;
+                                
+                                try {
+                                    context.drawImage(img, x, y, rect.width, rect.height);
+                                } catch (e) {
+                                    console.log('Error drawing tile:', e);
+                                }
+                            }
+                        });
+
+                        // Draw zoom controls and other overlays
+                        const overlays = mapContainer.querySelectorAll('.leaflet-control');
+                        overlays.forEach(overlay => {
+                            if (overlay.style.display !== 'none') {
+                                const rect = overlay.getBoundingClientRect();
+                                const containerRect = mapContainer.getBoundingClientRect();
+                                
+                                context.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                                context.fillRect(
+                                    rect.left - containerRect.left,
+                                    rect.top - containerRect.top,
+                                    rect.width,
+                                    rect.height
+                                );
+                            }
+                        });
+                        
+                    } catch (e) {
+                        console.log('Error rendering map:', e);
+                        // Fallback
+                        context.fillStyle = '#4a90e2';
+                        context.fillRect(0, 0, canvas.width, canvas.height);
+                        context.fillStyle = '#ffffff';
+                        context.font = '24px Arial';
+                        context.textAlign = 'center';
+                        context.fillText('Loading Map...', canvas.width / 2, canvas.height / 2);
+                    }
+                } else {
+                    // Map not ready yet
+                    context.fillStyle = '#333';
+                    context.fillRect(0, 0, canvas.width, canvas.height);
+                    context.fillStyle = '#fff';
+                    context.font = '20px Arial';
+                    context.textAlign = 'center';
+                    context.fillText('Initializing Map...', canvas.width / 2, canvas.height / 2);
+                }
+
+                return canvas;
+            }
+
+            // Initialize everything
+            window.initFunction = async function() {
+                var asyncEngineCreation = async function() {
+                    try {
+                        return createDefaultEngine();
+                    } catch(e) {
+                        console.log("Engine creation failed. Using default engine.");
+                        return createDefaultEngine();
+                    }
+                }
+
+                window.engine = await asyncEngineCreation();
+                if (!engine) throw 'Engine should not be null.';
                 
-                if (vrEngine) {
-                    vrEngine.dispose();
-                    vrEngine = null;
-                }
+                startRenderLoop(engine, canvas);
+                window.scene = createScene();
+            };
 
-                if (vrScene) {
-                    vrScene.dispose();
-                    vrScene = null;
-                }
+            initFunction().then(() => {
+                scene.then(returnedScene => { 
+                    sceneToRender = returnedScene; 
+                });
+            });
 
-                if (vrCanvas) {
-                    vrCanvas.remove();
-                    vrCanvas = null;
-                }
-
-                // Obnovit 2D mapu
-                document.getElementById('map').classList.remove('vr-hidden');
-                document.querySelector('.vr-button').innerHTML = '🥽 Enter VR';
-                isVRMode = false;
-
-                console.log("VR režim ukončen");
-
-            } catch (err) {
-                console.error('Chyba při ukončení VR:', err);
-                isVRMode = false;
-                document.querySelector('.vr-button').innerHTML = '🥽 Enter VR';
-            }
-        }
-
-        // Inicializace
-        window.addEventListener('load', () => {
-            setTimeout(() => {
-                initMap();
-                console.log("Aplikace připravena");
-            }, 1000); // čekání na Babylon.js
-        });
-
-        // Cleanup
-        window.addEventListener('beforeunload', () => {
-            if (isVRMode) {
-                exitVR();
-            }
-        });
-    </script>
-</body>
+            // Resize handler
+            window.addEventListener("resize", function () {
+                engine.resize();
+            });
+        </script>
+    </body>
 </html>
