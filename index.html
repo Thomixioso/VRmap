@@ -14,7 +14,7 @@
         window.polyfill = new WebXRPolyfill();  // Inicializace polyfillu pro VR podporu
     </script>
     
-    <!-- Volitelně: Přidej A-Frame pro lepší VR (odkomentuj, pokud stereo-img nefunguje dobře) -->
+    <!-- Odkomentuj pro přechod na A-Frame (doporučeno pro lepší kompatibilitu na Meta Quest) -->
     <!-- <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script> -->
     
     <style>
@@ -132,12 +132,10 @@
             try {
                 const vrContainer = document.getElementById('vrContainer');
                 
-                // Zkopírováno/inspirováno z demo: Vytvoř <stereo-img> s atributy type a angle pro lepší kompatibilitu
-                const stereoImg = document.createElement('stereo-img');
-                stereoImg.setAttribute('src', imagePath);
-                stereoImg.setAttribute('type', 'left-right');  // Změň na 'vr', 'top-bottom' nebo jiný podle tvých obrázků (potlačí varování)
-                stereoImg.setAttribute('angle', '180');  // Předpokládám 180° VR; změň na 360 pro plné panorama
-                vrContainer.appendChild(stereoImg);
+                // Fix chyby: Vytvářej element přes innerHTML místo createElement (obchází problém s atributy)
+                vrContainer.innerHTML += `
+                    <stereo-img src="${imagePath}" type="left-right" angle="180"></stereo-img>
+                `;  // Atributy přímo v stringu; změň 'left-right' nebo '180' podle tvých obrázků
                 
                 vrContainer.classList.add('active');
 
@@ -145,7 +143,6 @@
                 if (navigator.xr) {
                     navigator.xr.requestSession('immersive-vr').then(session => {
                         xrSession = session;
-                        // Přiřaď session k rendereru, pokud potřeba (z demo inspirace)
                     }).catch(err => {
                         console.error('XR session failed:', err);
                         alert('Nepodařilo se spustit VR session. Zkus to v jiném prohlížeči.');
@@ -155,13 +152,35 @@
                 }
             } catch (e) {
                 console.error('Chyba při otevírání VR:', e);
+                document.getElementById('errorMessage').innerHTML = '<p>Chyba: Nepodařilo se inicializovat VR element. Zkus přechod na A-Frame.</p>';
             }
         }
+
+        // Alternativa: Použij A-Frame místo stereo-img (odkomentuj a načti skript výše)
+        // function openVRView(imagePath) {
+        //     try {
+        //         const vrContainer = document.getElementById('vrContainer');
+        //         vrContainer.innerHTML += `
+        //             <a-scene>
+        //                 <a-sky src="${imagePath}" rotation="0 -90 0"></a-sky>  <!-- Pro 360°/VR obrázek -->
+        //             </a-scene>
+        //         `;
+        //         vrContainer.classList.add('active');
+        // 
+        //         if (navigator.xr) {
+        //             navigator.xr.requestSession('immersive-vr').then(session => {
+        //                 xrSession = session;
+        //             }).catch(err => console.error('XR session failed:', err));
+        //         }
+        //     } catch (e) {
+        //         console.error('Chyba při otevírání VR s A-Frame:', e);
+        //     }
+        // }
 
         function exitVR() {
             const vrContainer = document.getElementById('vrContainer');
             vrContainer.classList.remove('active');
-            vrContainer.innerHTML = '';  // Vyčistit obsah (včetně stereo-img)
+            vrContainer.innerHTML = '';  // Vyčistit obsah (včetně stereo-img nebo A-Frame)
 
             // Ukončit XR session, pokud existuje
             if (xrSession) {
