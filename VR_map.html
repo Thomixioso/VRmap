@@ -3,13 +3,10 @@
     <head>
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 
-        <title>Babylon.js VR Enhanced</title>
+        <title>Babylon.js with Leaflet World Map</title>
 
         <!-- Babylon.js -->
         <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
-        <!-- Leaflet CSS and JS -->
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
         <script src="https://cdn.babylonjs.com/recast.js"></script>
         <script src="https://cdn.babylonjs.com/ammo.js"></script>
@@ -26,6 +23,11 @@
         <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
         <script src="https://cdn.babylonjs.com/addons/babylonjs.addons.min.js"></script>
         <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+
+        <!-- Leaflet CSS -->
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <!-- Leaflet JS -->
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
         <style>
             html,
@@ -47,1396 +49,798 @@
                 width: 100%;
                 height: 100%;
             }
+
+            #mapContainer {
+                width: 600px;
+                height: 400px;
+                border: 2px solid #333;
+                border-radius: 8px;
+                background: white;
+                box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+                position: absolute;
+                top: -1000px; /* Initially hidden off-screen */
+                left: 0;
+            }
+
+            #map {
+                width: 100%;
+                height: 100%;
+                border-radius: 6px;
+            }
+
+            .map-controls {
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                background: rgba(255,255,255,0.9);
+                padding: 10px;
+                border-radius: 4px;
+                font-family: Arial, sans-serif;
+                font-size: 12px;
+                z-index: 1000;
+            }
+
+            .control-button {
+                display: block;
+                margin: 5px 0;
+                padding: 5px 10px;
+                background: #007cba;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                cursor: pointer;
+                font-size: 11px;
+            }
+
+            .control-button:hover {
+                background: #005a8b;
+            }
         </style>
     </head>
     <body>
         <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
+        
+        <!-- Hidden map container that will be rendered as texture -->
+        <div id="mapContainer">
+            <div class="map-controls">
+                <button class="control-button" onclick="zoomToPrague()">Praha</button>
+                <button class="control-button" onclick="zoomToLondon()">Londýn</button>
+                <button class="control-button" onclick="zoomToTokyo()">Tokio</button>
+                <button class="control-button" onclick="zoomToNewYork()">New York</button>
+                <button class="control-button" onclick="resetView()">Světová mapa</button>
+            </div>
+            <div id="map"></div>
+        </div>
+
         <script>
-                    var canvas = document.getElementById("renderCanvas");
+            var canvas = document.getElementById("renderCanvas");
+            var leafletMap;
+            var mapMesh;
 
-                    var startRenderLoop = function (engine, canvas) {
-                        engine.runRenderLoop(function () {
-                            if (sceneToRender && sceneToRender.activeCamera) {
-                                sceneToRender.render();
-                            }
-                        });
+            var startRenderLoop = function (engine, canvas) {
+                engine.runRenderLoop(function () {
+                    if (sceneToRender && sceneToRender.activeCamera) {
+                        sceneToRender.render();
                     }
-
-                    var engine = null;
-        var scene = null;
-        var sceneToRender = null;
-        var createDefaultEngine = function() { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true,  disableWebGL2Support: false}); };
-        
-        var createScene = async function () {
-    // load lil-gui for some sample HTML
-    await loadScript("https://cdn.jsdelivr.net/npm/lil-gui@0.19");
-    const GUI = lil.GUI;
-
-    // gui code borrowed from three.js examples
-    const parameters = {
-        radius: 0.6,
-        tube: 0.2,
-        tubularSegments: 150,
-        radialSegments: 20,
-        p: 2,
-        q: 3,
-        thickness: 0.5,
-        textureOffsetX: 0,
-        textureOffsetY: 0,
-        textureScale: 1.0,
-        // Map parameters
-        mapLat: 50.0755, // Prague coordinates
-        mapLng: 14.4378,
-        mapZoom: 1       // Start with zoom 1 (within 0-3 range)
-    };
-    
-    function onChange() {
-        console.log("GUI changed.");
-        // Update texture transformation when GUI changes
-        if (window.htmlMeshInstance && window.htmlMeshInstance.material) {
-            updateTextureTransform();
-        }
-        // Update map if map parameters changed
-        if (window.leafletMap) {
-            updateMap();
-        }
-    }
-    
-    function updateMap() {
-        if (window.leafletMap) {
-            window.leafletMap.setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
-        }
-    }
-    
-    function updateTextureTransform() {
-        if (window.htmlMeshInstance && window.htmlMeshInstance.material && window.htmlMeshInstance.material.diffuseTexture) {
-            const texture = window.htmlMeshInstance.material.diffuseTexture;
-            texture.uOffset = parameters.textureOffsetX;
-            texture.vOffset = parameters.textureOffsetY;
-            texture.uScale = parameters.textureScale;
-            texture.vScale = parameters.textureScale;
-        }
-    }
-    
-    const gui = new GUI({ width: 300 });
-    gui.add(parameters, 'radius', 0.0, 1.0).onChange(onChange);
-    gui.add(parameters, 'tube', 0.0, 1.0).onChange(onChange);
-    gui.add(parameters, 'tubularSegments', 10, 150, 1).onChange(onChange);
-    gui.add(parameters, 'radialSegments', 2, 20, 1).onChange(onChange);
-    gui.add(parameters, 'p', 1, 10, 1).onChange(onChange);
-    gui.add(parameters, 'q', 0, 10, 1).onChange(onChange);
-    gui.add(parameters, 'thickness', 0, 1).onChange(onChange);
-    
-    // Texture control parameters
-    const textureFolder = gui.addFolder('Texture Controls');
-    textureFolder.add(parameters, 'textureOffsetX', -2, 2, 0.01).onChange(onChange);
-    textureFolder.add(parameters, 'textureOffsetY', -2, 2, 0.01).onChange(onChange);
-    textureFolder.add(parameters, 'textureScale', 0.1, 3, 0.01).onChange(onChange);
-    
-    // Map control parameters - limited to available zoom levels
-    const mapFolder = gui.addFolder('World Map');
-    mapFolder.add(parameters, 'mapLat', -90, 90, 0.001).onChange(onChange).name('Latitude');
-    mapFolder.add(parameters, 'mapLng', -180, 180, 0.001).onChange(onChange).name('Longitude');
-    mapFolder.add(parameters, 'mapZoom', 0, 3, 1).onChange(onChange).name('Zoom Level (0-3)');
-    
-    // Create map container
-    const mapContainer = document.createElement('div');
-    mapContainer.id = 'mapContainer';
-    mapContainer.style.width = '280px';
-    mapContainer.style.height = '200px';
-    mapContainer.style.margin = '10px';
-    mapContainer.style.border = '1px solid #ccc';
-    mapContainer.style.borderRadius = '4px';
-    
-    // Add map container to GUI
-    const mapElement = mapFolder.add({ map: 'Interactive Map' }, 'map');
-    mapElement.domElement.appendChild(mapContainer);
-    
-    // Initialize Leaflet map
-    setTimeout(() => {
-        window.leafletMap = L.map('mapContainer', {
-            zoomControl: true,
-            attributionControl: false
-        }).setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
-        
-        // Use your GitHub offline tiles - corrected URL format
-        const githubTileLayer = L.tileLayer('https://github.com/Thomixioso/VRmap/raw/main/tiles_topo_labeled/{z}/{x}/{y}.png', {
-            maxZoom: 18,
-            minZoom: 0,
-            attribution: 'Custom Offline Tiles',
-            crossOrigin: 'anonymous',
-            // Error handling for missing tiles
-            errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI/hN0GUgAAAABJRU5ErkJggg=='
-        }).addTo(window.leafletMap);
-        
-        // Create offline tile canvas overlay
-        createOfflineTileCanvas();
-        
-        // Add a marker for current position
-        window.mapMarker = L.marker([parameters.mapLat, parameters.mapLng])
-            .addTo(window.leafletMap)
-            .bindPopup('Current Location');
-        
-        // Handle map events to update parameters
-        window.leafletMap.on('moveend', function() {
-            const center = window.leafletMap.getCenter();
-            parameters.mapLat = center.lat;
-            parameters.mapLng = center.lng;
-            if (window.mapMarker) {
-                window.mapMarker.setLatLng([center.lat, center.lng]);
+                });
             }
-            // Update the offline tile canvas
-            updateOfflineTileCanvas();
-            // Update GUI display (this will trigger the texture update)
-            gui.updateDisplay();
-        });
-        
-        window.leafletMap.on('zoomend', function() {
-            parameters.mapZoom = window.leafletMap.getZoom();
-            updateOfflineTileCanvas();
-            gui.updateDisplay();
-        });
-        
-        // Handle tile loading for canvas update
-        githubTileLayer.on('tileload', function() {
-            // Update canvas when tiles are loaded
-            setTimeout(() => updateOfflineTileCanvas(), 100);
-        });
-        
-        // Make map container draggable for VR interaction
-        mapContainer.style.cursor = 'grab';
-        
-        console.log("Leaflet map initialized with GitHub offline tiles");
-    }, 100);
-    
-    // Function to create offline tile canvas overlay
-    function createOfflineTileCanvas() {
-        const mapCanvas = document.createElement('canvas');
-        mapCanvas.width = 280;
-        mapCanvas.height = 200;
-        mapCanvas.style.position = 'absolute';
-        mapCanvas.style.top = '0';
-        mapCanvas.style.left = '0';
-        mapCanvas.style.pointerEvents = 'none';
-        mapCanvas.style.zIndex = '1000';
-        
-        const mapContainer = document.getElementById('mapContainer');
-        mapContainer.appendChild(mapCanvas);
-        
-        window.mapCanvas = mapCanvas;
-        updateOfflineTileCanvas();
-    }
-    
-    // Function to draw offline tiles onto canvas (for VR texture)
-    function updateOfflineTileCanvas() {
-        if (!window.mapCanvas || !window.leafletMap) return;
-        
-        const canvas = window.mapCanvas;
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
-        
-        // Clear canvas
-        ctx.clearRect(0, 0, width, height);
-        
-        // Get current map bounds and zoom (limited to 0-3)
-        const bounds = window.leafletMap.getBounds();
-        const zoom = Math.min(3, Math.max(0, Math.floor(parameters.mapZoom))); // Clamp to 0-3
-        const center = window.leafletMap.getCenter();
-        
-        // Calculate tile coordinates for current view
-        const tileSize = 256;
-        const numTiles = Math.pow(2, zoom);
-        
-        // Convert lat/lng to tile coordinates
-        function latLngToTile(lat, lng, zoom) {
-            const x = Math.floor((lng + 180) / 360 * Math.pow(2, zoom));
-            const y = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
-            return { x, y, z: zoom };
-        }
-        
-        // Get tiles that cover the current view
-        const centerTile = latLngToTile(center.lat, center.lng, zoom);
-        const tilesToLoad = [];
-        
-        // Load tiles in a 3x3 grid around center
-        for (let dx = -1; dx <= 1; dx++) {
-            for (let dy = -1; dy <= 1; dy++) {
-                const tileX = centerTile.x + dx;
-                const tileY = centerTile.y + dy;
-                
-                if (tileX >= 0 && tileX < numTiles && tileY >= 0 && tileY < numTiles) {
-                    tilesToLoad.push({ x: tileX, y: tileY, z: zoom });
-                }
-            }
-        }
-        
-        // Draw background
-        ctx.fillStyle = '#f0f8ff';
-        ctx.fillRect(0, 0, width, height);
-        
-        // Try to load and draw tiles
-        let tilesLoaded = 0;
-        const totalTiles = tilesToLoad.length;
-        
-        if (totalTiles === 0) {
-            // Fallback if no tiles
-            drawFallbackMap(ctx, width, height);
-            return;
-        }
-        
-        tilesToLoad.forEach(tile => {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
+
+            var engine = null;
+            var scene = null;
+            var sceneToRender = null;
+            var createDefaultEngine = function() { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true,  disableWebGL2Support: false}); };
             
-            img.onload = function() {
-                // Calculate where to draw this tile on the canvas
-                const tilePixelX = (tile.x - centerTile.x + 1) * (width / 3);
-                const tilePixelY = (tile.y - centerTile.y + 1) * (height / 3);
+            // Initialize Leaflet map
+            function initializeLeafletMap() {
+                leafletMap = L.map('map').setView([50.0755, 14.4378], 2); // Centered on Prague with world view
+
+                // Add OpenStreetMap tiles
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 18
+                }).addTo(leafletMap);
+
+                // Add some markers for interesting locations
+                var pragueMarker = L.marker([50.0755, 14.4378]).addTo(leafletMap)
+                    .bindPopup('Praha, Česká republika');
                 
-                try {
-                    ctx.drawImage(img, tilePixelX, tilePixelY, width / 3, height / 3);
-                } catch (e) {
-                    console.log('Could not draw offline tile:', e);
-                }
+                var londonMarker = L.marker([51.5074, -0.1278]).addTo(leafletMap)
+                    .bindPopup('Londýn, Velká Británie');
                 
-                tilesLoaded++;
-                if (tilesLoaded === totalTiles) {
-                    // All tiles loaded, add overlay info
-                    addMapOverlay(ctx, width, height);
-                }
+                var tokyoMarker = L.marker([35.6762, 139.6503]).addTo(leafletMap)
+                    .bindPopup('Tokio, Japonsko');
+                
+                var newYorkMarker = L.marker([40.7128, -74.0060]).addTo(leafletMap)
+                    .bindPopup('New York, USA');
+
+                // Force map to render properly
+                setTimeout(() => {
+                    leafletMap.invalidateSize();
+                }, 100);
+            }
+
+            // Map control functions
+            function zoomToPrague() {
+                leafletMap.setView([50.0755, 14.4378], 10);
+            }
+
+            function zoomToLondon() {
+                leafletMap.setView([51.5074, -0.1278], 10);
+            }
+
+            function zoomToTokyo() {
+                leafletMap.setView([35.6762, 139.6503], 10);
+            }
+
+            function zoomToNewYork() {
+                leafletMap.setView([40.7128, -74.0060], 10);
+            }
+
+            function resetView() {
+                leafletMap.setView([20, 0], 2);
+            }
+
+            var createScene = async function () {
+                // Initialize the Leaflet map first
+                initializeLeafletMap();
+
+                // This creates a basic Babylon Scene object (non-mesh)
+                var scene = new BABYLON.Scene(engine);
+
+                // This creates and positions a free camera (non-mesh)
+                var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 5, -10), scene);
+
+                // This targets the camera to scene origin
+                camera.setTarget(BABYLON.Vector3.Zero());
+
+                // This attaches the camera to the canvas
+                camera.attachControl(canvas, true);
+
+                // This creates a light, aiming 0,1,0 - to the sky (non-mesh)
+                var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+
+                // Default intensity is 1. Let's dim the light a small amount
+                light.intensity = 0.7;
+
+                // Create a texture from our Leaflet map
+                const mapContainer = document.getElementById('mapContainer');
+                mapMesh = new HtmlMesh(mapContainer, scene);
+
+                // Position the map mesh
+                mapMesh.mesh.position = new BABYLON.Vector3(0, 0, 0);
+
+                // XR
+                const xrHelper = await scene.createDefaultXRExperienceAsync();
+
+                return scene;
             };
-            
-            img.onerror = function() {
-                console.log(`Tile not found: ${tile.z}/${tile.x}/${tile.y}`);
-                tilesLoaded++;
-                if (tilesLoaded === totalTiles) {
-                    // Fallback if tiles fail to load
-                    drawFallbackMap(ctx, width, height);
+
+            // HtmlTexture converts a HTML DOM element into a texture using html2canvas
+            class HtmlTexture extends BABYLON.DynamicTexture {
+                constructor(domElement, scene) {
+                    super("HtmlTexture", html2canvas(domElement), scene);
+                    this.domElement = domElement;
+
+                    // Create an observer on the DOM, and run html2canvas update in the next loop
+                    const observer = new MutationObserver(() => {
+                        if (!this.scheduleUpdate) {
+                            // ideally should use xr.requestAnimationFrame, here setTimeout to avoid passing the renderer
+                            this.scheduleUpdate = setTimeout(() => this.update(), 16);
+                        }
+                    });
+
+                    const config = { attributes: true, childList: true, subtree: true, characterData: true };
+                    observer.observe(domElement, config);
+
+                    this.observer = observer;
                 }
-            };
-            
-            // Load tile from GitHub - correct raw.githubusercontent.com URL
-            const correctUrl = `https://raw.githubusercontent.com/Thomixioso/VRmap/main/tiles_topo_labeled/${tile.z}/${tile.x}/${tile.y}.png`;
-            
-            img.src = correctUrl;
-            
-            img.onerror = function() {
-                console.log(`Tile not found: ${tile.z}/${tile.x}/${tile.y}`);
-                tilesLoaded++;
-                if (tilesLoaded === totalTiles) {
-                    // Fallback if tiles fail to load
-                    drawFallbackMap(ctx, width, height);
+
+                get width() {
+                    return this._canvas.width;
                 }
-            };
-        });
-    }
-    
-    // Fallback map drawing function
-    function drawFallbackMap(ctx, width, height) {
-        // Ocean background
-        ctx.fillStyle = '#4a90e2';
-        ctx.fillRect(0, 0, width, height);
-        
-        // Simple land indication
-        ctx.fillStyle = '#90EE90';
-        ctx.fillRect(width * 0.2, height * 0.3, width * 0.6, height * 0.4);
-        
-        // Add text
-        ctx.fillStyle = 'white';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText('Offline Tiles Loading...', width / 2, height / 2);
-        
-        addMapOverlay(ctx, width, height);
-    }
-    
-    // Add map overlay information
-    function addMapOverlay(ctx, width, height) {
-        // Current position marker
-        ctx.fillStyle = '#e74c3c';
-        ctx.beginPath();
-        ctx.arc(width/2, height/2, 4, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Crosshair
-        ctx.strokeStyle = '#e74c3c';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(width/2 - 8, height/2);
-        ctx.lineTo(width/2 + 8, height/2);
-        ctx.moveTo(width/2, height/2 - 8);
-        ctx.lineTo(width/2, height/2 + 8);
-        ctx.stroke();
-        
-        // Coordinate info
-        ctx.fillStyle = 'rgba(0,0,0,0.7)';
-        ctx.fillRect(5, height - 25, 150, 20);
-        ctx.fillStyle = 'white';
-        ctx.font = '9px monospace';
-        ctx.textAlign = 'left';
-        ctx.fillText(`${parameters.mapLat.toFixed(4)}, ${parameters.mapLng.toFixed(4)}`, 8, height - 10);
-        
-        // Zoom level
-        ctx.fillRect(width - 60, 5, 55, 20);
-        ctx.fillStyle = 'white';
-        ctx.textAlign = 'center';
-        ctx.fillText(`Z: ${Math.floor(parameters.mapZoom)}`, width - 32, 18);
-    }
-    
-    // GUI is now visible both on screen and as texture in VR
-    // gui.domElement.style.visibility = 'hidden';
 
-    // This creates a basic Babylon Scene object (non-mesh)
-    var scene = new BABYLON.Scene(engine);
+                get height() {
+                    return this._canvas.height;
+                }
 
-    // This creates and positions a free camera (non-mesh)
-    var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 5, -10), scene);
-
-    // This targets the camera to scene origin
-    camera.setTarget(BABYLON.Vector3.Zero());
-
-    // This attaches the camera to the canvas
-    camera.attachControl(canvas, true);
-
-    // This creates a light, aiming 0,1,0 - to the sky (non-mesh)
-    var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
-
-    // Default intensity is 1. Let's dim the light a small amount
-    light.intensity = 0.7;
-
-    // create a texture from our dummy GUI above with background texture
-    const htmlMesh = new HtmlMesh(gui.domElement, scene);
-    window.htmlMeshInstance = htmlMesh; // Store reference for VR controls
-    
-    // Add background texture to the plane
-    addBackgroundTexture(htmlMesh, scene);
-
-    // XR
-    const xrHelper = await scene.createDefaultXRExperienceAsync();
-    
-    // Setup VR controller interactions
-    if (xrHelper) {
-        setupVRControls(xrHelper, parameters, updateTextureTransform);
-    }
-
-    return scene;
-};
-
-// Function to add background texture
-function addBackgroundTexture(htmlMesh, scene) {
-    // Create a procedural texture for background
-    const backgroundTexture = new BABYLON.DynamicTexture("backgroundTexture", {width: 512, height: 512}, scene);
-    
-    // Draw a simple grid pattern
-    const context = backgroundTexture.getContext();
-    context.fillStyle = "#2c3e50";
-    context.fillRect(0, 0, 512, 512);
-    
-    // Draw grid lines
-    context.strokeStyle = "#34495e";
-    context.lineWidth = 2;
-    for (let i = 0; i < 512; i += 32) {
-        context.beginPath();
-        context.moveTo(i, 0);
-        context.lineTo(i, 512);
-        context.stroke();
-        
-        context.beginPath();
-        context.moveTo(0, i);
-        context.lineTo(512, i);
-        context.stroke();
-    }
-    
-    // Add some decorative elements
-    context.fillStyle = "#3498db";
-    for (let i = 0; i < 10; i++) {
-        const x = Math.random() * 512;
-        const y = Math.random() * 512;
-        const radius = Math.random() * 20 + 5;
-        context.beginPath();
-        context.arc(x, y, radius, 0, Math.PI * 2);
-        context.fill();
-    }
-    
-    backgroundTexture.update();
-    
-    // Create a background plane behind the HTML mesh
-    const backgroundPlane = BABYLON.MeshBuilder.CreatePlane("backgroundPlane", { height: 5.2, width: 5.2 }, scene);
-    const backgroundMaterial = new BABYLON.StandardMaterial("backgroundMat", scene);
-    backgroundMaterial.diffuseTexture = backgroundTexture;
-    backgroundMaterial.emissiveTexture = backgroundTexture;
-    backgroundMaterial.emissiveColor = new BABYLON.Color3(0.3, 0.3, 0.3);
-    backgroundPlane.material = backgroundMaterial;
-    backgroundPlane.position.z = 0.01; // Slightly behind the HTML mesh
-    
-    // Make HTML texture semi-transparent
-    if (htmlMesh.material) {
-        htmlMesh.material.diffuseTexture.hasAlpha = true;
-        htmlMesh.material.useAlphaFromDiffuseTexture = true;
-    }
-}
-
-// Setup VR controller interactions for map navigation
-function setupVRControls(xrHelper, parameters, updateTextureTransform) {
-    let isDragging = false;
-    let lastControllerPosition = null;
-    let dragStartPosition = { offsetX: parameters.textureOffsetX, offsetY: parameters.textureOffsetY };
-    let isMapDragging = true; // Default to map dragging mode
-    let mapDragStart = { lat: parameters.mapLat, lng: parameters.mapLng };
-    
-    xrHelper.input.onControllerAddedObservable.add((controller) => {
-        controller.onMotionControllerInitObservable.add((motionController) => {
-            console.log("VR Controller connected:", motionController.handedness);
-            
-            // Handle trigger press for map navigation
-            const triggerComponent = motionController.getComponent("xr-standard-trigger");
-            if (triggerComponent) {
-                triggerComponent.onButtonStateChangedObservable.add((component) => {
-                    if (component.pressed) {
-                        // Start dragging
-                        isDragging = true;
-                        lastControllerPosition = controller.pointer.position.clone();
-                        dragStartPosition = { 
-                            offsetX: parameters.textureOffsetX, 
-                            offsetY: parameters.textureOffsetY 
-                        };
-                        mapDragStart = { 
-                            lat: parameters.mapLat, 
-                            lng: parameters.mapLng 
-                        };
-                        console.log("Started map navigation");
-                    } else {
-                        // Stop dragging
-                        isDragging = false;
-                        lastControllerPosition = null;
-                        console.log("Stopped map navigation");
-                    }
-                });
-            }
-            
-            // Handle squeeze for texture zoom out
-            const squeezeComponent = motionController.getComponent("xr-standard-squeeze");
-            if (squeezeComponent) {
-                squeezeComponent.onButtonStateChangedObservable.add((component) => {
-                    if (component.pressed) {
-                        // Zoom texture out
-                        parameters.textureScale = Math.max(0.1, parameters.textureScale - 0.1);
-                        updateTextureTransform();
-                        console.log("Texture zoom out, scale:", parameters.textureScale);
-                    }
-                });
-            }
-            
-            // Handle thumbstick for map zoom
-            const thumbstickComponent = motionController.getComponent("xr-standard-thumbstick");
-            if (thumbstickComponent) {
-                thumbstickComponent.onAxisValueChangedObservable.add((axes) => {
-                    // Use thumbstick Y axis for texture zoom
-                    if (Math.abs(axes.y) > 0.5) {
-                        const zoomSpeed = 0.02;
-                        if (axes.y > 0.5) {
-                            parameters.textureScale = Math.min(3.0, parameters.textureScale + zoomSpeed);
-                        } else if (axes.y < -0.5) {
-                            parameters.textureScale = Math.max(0.1, parameters.textureScale - zoomSpeed);
-                        }
-                        updateTextureTransform();
-                    }
-                    
-                    // Use thumbstick X axis for map zoom (limited to 0-3)
-                    if (Math.abs(axes.x) > 0.5 && window.leafletMap) {
-                        if (axes.x > 0.5) {
-                            parameters.mapZoom = Math.min(3, parameters.mapZoom + 0.1);
-                        } else if (axes.x < -0.5) {
-                            parameters.mapZoom = Math.max(0, parameters.mapZoom - 0.1);
-                        }
-                        const newZoom = Math.round(parameters.mapZoom);
-                        window.leafletMap.setZoom(newZoom);
-                        console.log("Map zoom changed to:", newZoom);
-                    }
-                });
-            }
-            
-            // Handle A/X button for reset
-            const aButtonComponent = motionController.getComponent("a-button") || motionController.getComponent("x-button");
-            if (aButtonComponent) {
-                aButtonComponent.onButtonStateChangedObservable.add((component) => {
-                    if (component.pressed) {
-                        // Reset texture transform
-                        parameters.textureOffsetX = 0;
-                        parameters.textureOffsetY = 0;
-                        parameters.textureScale = 1.0;
-                        updateTextureTransform();
-                        
-                        // Reset map to Prague with zoom 1 (within 0-3 range)
-                        parameters.mapLat = 50.0755;
-                        parameters.mapLng = 14.4378;
-                        parameters.mapZoom = 1;
-                        if (window.leafletMap) {
-                            window.leafletMap.setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
-                            if (window.mapMarker) {
-                                window.mapMarker.setLatLng([parameters.mapLat, parameters.mapLng]);
-                            }
-                        }
-                        console.log("Reset map to Prague and texture");
-                    }
-                });
-            }
-            
-            // Handle B/Y button for switching to texture dragging mode
-            const bButtonComponent = motionController.getComponent("b-button") || motionController.getComponent("y-button");
-            if (bButtonComponent) {
-                bButtonComponent.onButtonStateChangedObservable.add((component) => {
-                    if (component.pressed) {
-                        isMapDragging = !isMapDragging;
-                        console.log("Switched dragging mode:", isMapDragging ? "Map Navigation" : "Texture Pan");
-                    }
-                });
-            }
-            
-            // Handle menu button for map interactions
-            const menuComponent = motionController.getComponent("xr-standard-menu");
-            if (menuComponent) {
-                menuComponent.onButtonStateChangedObservable.add((component) => {
-                    if (component.pressed && window.leafletMap) {
-                        // Add a marker at current center
-                        const center = window.leafletMap.getCenter();
-                        L.marker([center.lat, center.lng])
-                            .addTo(window.leafletMap)
-                            .bindPopup(`VR Marker<br/>Lat: ${center.lat.toFixed(4)}<br/>Lng: ${center.lng.toFixed(4)}`)
-                            .openPopup();
-                        console.log("Added VR marker at:", center);
-                    }
-                });
-            }
-        });
-    });
-    
-    // Update dragging in render loop
-    engine.runRenderLoop(function() {
-        if (isDragging && lastControllerPosition && xrHelper.input.controllers.length > 0) {
-            const controller = xrHelper.input.controllers[0];
-            if (controller && controller.pointer) {
-                const currentPosition = controller.pointer.position;
-                const deltaX = currentPosition.x - lastControllerPosition.x;
-                const deltaY = currentPosition.y - lastControllerPosition.y;
-                
-                if (isMapDragging && window.leafletMap) {
-                    // Apply movement to map with appropriate sensitivity
-                    const mapSensitivity = 15.0; // Increased for better responsiveness
-                    const newLat = mapDragStart.lat - (deltaY * mapSensitivity);
-                    const newLng = mapDragStart.lng + (deltaX * mapSensitivity);
-                    
-                    // Clamp values to valid ranges
-                    parameters.mapLat = Math.max(-85, Math.min(85, newLat)); // Leaflet limit
-                    parameters.mapLng = Math.max(-180, Math.min(180, newLng));
-                    
-                    // Update map view
-                    window.leafletMap.setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
-                    if (window.mapMarker) {
-                        window.mapMarker.setLatLng([parameters.mapLat, parameters.mapLng]);
-                    }
-                } else {
-                    // Apply movement to texture offset
-                    const sensitivity = 2.0;
-                    parameters.textureOffsetX = dragStartPosition.offsetX + (deltaX * sensitivity);
-                    parameters.textureOffsetY = dragStartPosition.offsetY + (deltaY * sensitivity);
-                    updateTextureTransform();
+                update() {
+                    html2canvas(this.domElement);
+                    super.update()
+                    this.scheduleUpdate = null;
                 }
             }
-        }
-    });
-}
 
-// HtmlTexture converts a HTML DOM element into a texture using html2canvas
-class HtmlTexture extends BABYLON.DynamicTexture {
-    constructor(domElement, scene) {
-        super("HtmlTexture", html2canvas(domElement), scene);
-        this.domElement = domElement;
+            // creates a plane mesh and material with an attached HtmlTexture
+            // handles events for HTML interactions
+            class HtmlMesh { // TODO: derive from mesh class?
+                constructor(domElement, scene) {
+                    this.domElement = domElement;
 
-        // Create an observer on the DOM, and run html2canvas update in the next loop
-        const observer = new MutationObserver(() => {
+                    // create HTML texture
+                    this.texture = new HtmlTexture(domElement, scene);
+                    this.texture.hasAlpha = true;
 
-            if (!this.scheduleUpdate) {
-                // For map updates, use longer delay to allow tiles to load
-                const delay = this.domElement.querySelector('#mapContainer') ? 100 : 16;
-                this.scheduleUpdate = setTimeout(() => this.update(), delay);
+                    // create plane with appropriate aspect ratio for the map
+                    this.mesh = BABYLON.MeshBuilder.CreatePlane("plane", { height: 4, width: 6 });
+                    this.material = new BABYLON.StandardMaterial("Mat", scene);
+
+                    // create material
+                    this.material.diffuseTexture = this.texture;
+                    this.mesh.material = this.material;
+
+                    // remember to update or you will get NOTHING :)
+                    this.texture.update();
+
+                    // setup actions
+                    this.mesh.actionManager = new BABYLON.ActionManager(scene);
+
+                    // mousedown event on OnPickDownTrigger action
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            {
+                                trigger: BABYLON.ActionManager.OnPickDownTrigger,
+                            },
+                            (evt) => {
+                                const htmlCoords = evt.additionalData.getTextureCoordinates();
+                                // XXX: y coordinates are inverted between browser and 3D
+                                htmlevent(this.domElement, "mousedown", htmlCoords.x, 1 - htmlCoords.y);
+                            },
+                        )
+                    );
+
+                    // mouseup event on OnPickUpTrigger action
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            {
+                                trigger: BABYLON.ActionManager.OnPickUpTrigger,
+                            },
+                            (evt) => {
+                                const htmlCoords = evt.additionalData.getTextureCoordinates();
+                                // XXX: y coordinates are inverted between browser and 3D
+                                htmlevent(this.domElement, "mouseup", htmlCoords.x, 1 - htmlCoords.y);
+                            },
+                        )
+                    );
+
+                    // click event on OnPickTrigger action
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            {
+                                trigger: BABYLON.ActionManager.OnPickTrigger,
+                            },
+                            (evt) => {
+                                const htmlCoords = evt.additionalData.getTextureCoordinates();
+                                // XXX: y coordinates are inverted between browser and 3D
+                                htmlevent(this.domElement, "click", htmlCoords.x, 1 - htmlCoords.y);
+                            },
+                        )
+                    );
+
+                    // mousemove event on OnPointerOverTrigger action
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            {
+                                trigger: BABYLON.ActionManager.OnPointerOverTrigger,
+                            },
+                            (evt) => {
+                                // XXX: additionalData is structured different for mousemove
+                                const htmlCoords = evt.additionalData.pickResult.getTextureCoordinates();
+                                // XXX: y coordinates are inverted between browser and 3D
+                                htmlevent(this.domElement, "mousemove", htmlCoords.x, 1 - htmlCoords.y);
+                            },
+                        )
+                    );
+
+                    // if you set AbstractMesh.pointerOverDisableMeshTesting to
+                    // true, this trigger will be triggered every time you move the
+                    // mouse and you are still over the mesh 
+                    this.mesh.pointerOverDisableMeshTesting = true;
+                }
             }
 
-        });
-
-        const config = { attributes: true, childList: true, subtree: true, characterData: true };
-        observer.observe(domElement, config);
-
-        this.observer = observer;
-        
-        // Set up periodic updates for dynamic content like maps
-        this.periodicUpdate = setInterval(() => {
-            if (this.domElement.querySelector('#mapContainer')) {
-                this.update();
-            }
-        }, 500); // Update every 500ms for map content
-    }
-
-    get width() {
-        return this._canvas.width;
-    }
-
-    get height() {
-        return this._canvas.height;
-    }
-
-    update() {
-        html2canvas(this.domElement);
-        super.update()
-        this.scheduleUpdate = null;
-    }
-    
-    dispose() {
-        super.dispose();
-        if (this.observer) {
-            this.observer.disconnect();
-        }
-        if (this.periodicUpdate) {
-            clearInterval(this.periodicUpdate);
-        }
-    }
-}
-
-// creates a plane mesh and material with an attached HtmlTexture
-// handles events for HTML interactions
-class HtmlMesh { // TODO: derive from mesh class?
-    constructor(domElement, scene) {
-        this.domElement = domElement;
-
-        // create HTML texture
-        this.texture = new HtmlTexture(domElement, scene);
-        this.texture.hasAlpha = true;
-
-        // create plane
-        this.mesh = BABYLON.MeshBuilder.CreatePlane("plane", { height: 5, width: 5 });
-        this.material = new BABYLON.StandardMaterial("Mat", scene);
-
-        // create material
-        this.material.diffuseTexture = this.texture;
-        this.material.useAlphaFromDiffuseTexture = true;
-        this.material.backFaceCulling = false; // Allow viewing from both sides
-        this.mesh.material = this.material;
-
-        // remember to update or you will get NOTHING :)
-        this.texture.update();
-
-        // setup actions
-        this.mesh.actionManager = new BABYLON.ActionManager(scene);
-
-        // mousedown event on OnPickDownTrigger action
-        this.mesh.actionManager.registerAction(
-            new BABYLON.ExecuteCodeAction(
-                {
-                    trigger: BABYLON.ActionManager.OnPickDownTrigger,
-                },
-                (evt) => {
-                    const htmlCoords = evt.additionalData.getTextureCoordinates();
-                    // XXX: y coordinates are inverted between browser and 3D
-                    htmlevent(this.domElement, "mousedown", htmlCoords.x, 1 - htmlCoords.y);
-                },
-            )
-        );
-
-        // mouseup event on OnPickUpTrigger action
-        this.mesh.actionManager.registerAction(
-            new BABYLON.ExecuteCodeAction(
-                {
-                    trigger: BABYLON.ActionManager.OnPickUpTrigger,
-                },
-                (evt) => {
-                    const htmlCoords = evt.additionalData.getTextureCoordinates();
-                    // XXX: y coordinates are inverted between browser and 3D
-                    htmlevent(this.domElement, "mouseup", htmlCoords.x, 1 - htmlCoords.y);
-                },
-            )
-        );
-
-        // click event on OnPickTrigger action
-        this.mesh.actionManager.registerAction(
-            new BABYLON.ExecuteCodeAction(
-                {
-                    trigger: BABYLON.ActionManager.OnPickTrigger,
-                },
-                (evt) => {
-                    const htmlCoords = evt.additionalData.getTextureCoordinates();
-                    // XXX: y coordinates are inverted between browser and 3D
-                    htmlevent(this.domElement, "click", htmlCoords.x, 1 - htmlCoords.y);
-                },
-            )
-        );
-
-        // mousemove event on OnPointerOverTrigger action
-        this.mesh.actionManager.registerAction(
-            new BABYLON.ExecuteCodeAction(
-                {
-                    trigger: BABYLON.ActionManager.OnPointerOverTrigger,
-                },
-                (evt) => {
-                    // XXX: additionalData is structured different for mousemove
-                    const htmlCoords = evt.additionalData.pickResult.getTextureCoordinates();
-                    // XXX: y coordinates are inverted between browser and 3D
-                    htmlevent(this.domElement, "mousemove", htmlCoords.x, 1 - htmlCoords.y);
-                },
-            )
-        );
-
-        // if you set AbstractMesh.pointerOverDisableMeshTesting to
-        // true, this trigger will be triggered every time you move the
-        // mouse and you are still over the mesh 
-        this.mesh.pointerOverDisableMeshTesting = true;
-    }
-}
-
-// loads a js module
-const loadScript = (FILE_URL, async = true, type = "text/javascript") => {
-    return new Promise((resolve, reject) => {
-        try {
-            const scriptEle = document.createElement("script");
-            scriptEle.type = type;
-            scriptEle.async = async;
-            scriptEle.src =FILE_URL;
-
-            scriptEle.addEventListener("load", (ev) => {
-                resolve({ status: true });
-            });
-
-            scriptEle.addEventListener("error", (ev) => {
-                reject({
-                    status: false,
-                    message: `Failed to load the script ${FILE_URL}`
-                });
-            });
-
-            document.body.appendChild(scriptEle);
-        } catch (error) {
-            reject(error);
-        }
-    });
-};
-
-// borrowed from three.js with very slight modifications
-const canvases = new WeakMap();
-function html2canvas(element) {
-
-    // TODO: move to relevant code block below
-    const range = document.createRange();
-
-    function Clipper(context) {
-
-        const clips = [];
-        let isClipping = false;
-
-        function doClip() {
-
-            if (isClipping) {
-
-                isClipping = false;
-                context.restore();
-
-            }
-
-            if (clips.length === 0) return;
-
-            let minX = - Infinity, minY = - Infinity;
-            let maxX = Infinity, maxY = Infinity;
-
-            for (let i = 0; i < clips.length; i++) {
-
-                const clip = clips[i];
-
-                minX = Math.max(minX, clip.x);
-                minY = Math.max(minY, clip.y);
-                maxX = Math.min(maxX, clip.x + clip.width);
-                maxY = Math.min(maxY, clip.y + clip.height);
-
-            }
-
-            context.save();
-            context.beginPath();
-            context.rect(minX, minY, maxX - minX, maxY - minY);
-            context.clip();
-
-            isClipping = true;
-
-        }
-
-        return {
-
-            add: function (clip) {
-
-                clips.push(clip);
-                doClip();
-
-            },
-
-            remove: function () {
-
-                clips.pop();
-                doClip();
-
-            }
-
-        };
-
-    }
-
-    function drawText(style, x, y, string) {
-
-        if (string !== '') {
-
-            if (style.textTransform === 'uppercase') {
-
-                string = string.toUpperCase();
-
-            }
-
-            context.font = style.fontWeight + ' ' + style.fontSize + ' ' + style.fontFamily;
-            context.textBaseline = 'top';
-            context.fillStyle = style.color;
-            context.fillText(string, x, y + parseFloat(style.fontSize) * 0.1);
-
-        }
-
-    }
-
-    function buildRectPath(x, y, w, h, r) {
-
-        if (w < 2 * r) r = w / 2;
-        if (h < 2 * r) r = h / 2;
-
-        context.beginPath();
-        context.moveTo(x + r, y);
-        context.arcTo(x + w, y, x + w, y + h, r);
-        context.arcTo(x + w, y + h, x, y + h, r);
-        context.arcTo(x, y + h, x, y, r);
-        context.arcTo(x, y, x + w, y, r);
-        context.closePath();
-
-    }
-
-    function drawBorder(style, which, x, y, width, height) {
-
-        const borderWidth = style[which + 'Width'];
-        const borderStyle = style[which + 'Style'];
-        const borderColor = style[which + 'Color'];
-
-        if (borderWidth !== '0px' && borderStyle !== 'none' && borderColor !== 'transparent' && borderColor !== 'rgba(0, 0, 0, 0)') {
-
-            context.strokeStyle = borderColor;
-            context.lineWidth = parseFloat(borderWidth);
-            context.beginPath();
-            context.moveTo(x, y);
-            context.lineTo(x + width, y + height);
-            context.stroke();
-
-        }
-
-    }
-
-    function drawElement(element, style) {
-
-        let x = 0, y = 0, width = 0, height = 0;
-
-        if (element.nodeType === Node.TEXT_NODE) {
-
-            // text
-
-            range.selectNode(element);
-
-            const rect = range.getBoundingClientRect();
-
-            x = rect.left - offset.left - 0.5;
-            y = rect.top - offset.top - 0.5;
-            width = rect.width;
-            height = rect.height;
-
-            drawText(style, x, y, element.nodeValue.trim());
-
-        } else if (element.nodeType === Node.COMMENT_NODE) {
-
-            return;
-
-        } else if (element instanceof HTMLCanvasElement) {
-
-            // Canvas element
-            if (element.style.display === 'none') return;
-
-            const rect = element.getBoundingClientRect();
-
-            x = rect.left - offset.left - 0.5;
-            y = rect.top - offset.top - 0.5;
-            width = rect.width;
-            height = rect.height;
-
-            context.save();
-            try {
-                // Draw the canvas content directly
-                context.drawImage(element, x, y, width, height);
-            } catch (e) {
-                // If canvas drawing fails, draw a placeholder
-                context.fillStyle = '#f0f0f0';
-                context.fillRect(x, y, width, height);
-                context.strokeStyle = '#ccc';
-                context.strokeRect(x, y, width, height);
-                
-                // Add text indicating it's a map
-                context.fillStyle = '#666';
-                context.font = '12px Arial';
-                context.textAlign = 'center';
-                context.fillText('Interactive Map', x + width/2, y + height/2);
-            }
-            context.restore();
-
-        } else if (element instanceof HTMLImageElement) {
-
-            if (element.style.display === 'none') return;
-
-            const rect = element.getBoundingClientRect();
-
-            x = rect.left - offset.left - 0.5;
-            y = rect.top - offset.top - 0.5;
-            width = rect.width;
-            height = rect.height;
-
-            context.drawImage(element, x, y, width, height);
-
-        } else {
-
-            if (element.style.display === 'none') return;
-
-            const rect = element.getBoundingClientRect();
-
-            x = rect.left - offset.left - 0.5;
-            y = rect.top - offset.top - 0.5;
-            width = rect.width;
-            height = rect.height;
-
-            style = window.getComputedStyle(element);
-
-            // Special handling for full map container with procedural overlay
-            if (element.id === 'fullMapContainer' || element.classList.contains('leaflet-container')) {
-                // Draw map background
-                context.fillStyle = '#e8f4f8';
-                context.fillRect(x, y, width, height);
-                
-                // Try to capture the procedural overlay canvas
-                const overlayCanvas = element.querySelector('canvas');
-                if (overlayCanvas && overlayCanvas === window.mapOverlayCanvas) {
+            // loads a js module
+            // from https://www.educative.io/answers/how-to-dynamically-load-a-js-file-in-javascript
+            const loadScript = (FILE_URL, async = true, type = "text/javascript") => {
+                return new Promise((resolve, reject) => {
                     try {
-                        // Draw the procedural overlay directly (no CORS issues)
-                        context.drawImage(overlayCanvas, x, y, width, height);
-                    } catch (e) {
-                        console.log('Could not draw overlay canvas:', e);
-                        // Draw fallback topographic pattern
-                        drawFallbackTopographic(context, x, y, width, height);
-                    }
-                } else {
-                    // Draw fallback topographic pattern
-                    drawFallbackTopographic(context, x, y, width, height);
-                }
-                
-                // Try to draw Leaflet controls that don't have CORS issues
-                const zoomControl = element.querySelector('.leaflet-control-zoom');
-                if (zoomControl) {
-                    const controlRect = zoomControl.getBoundingClientRect();
-                    const controlX = controlRect.left - offset.left - 0.5;
-                    const controlY = controlRect.top - offset.top - 0.5;
-                    
-                    context.fillStyle = 'rgba(255,255,255,0.9)';
-                    context.fillRect(controlX, controlY, controlRect.width, controlRect.height);
-                    context.strokeStyle = '#ccc';
-                    context.strokeRect(controlX, controlY, controlRect.width, controlRect.height);
-                    
-                    // Draw + and - symbols
-                    context.fillStyle = '#333';
-                    context.font = '16px Arial';
-                    context.textAlign = 'center';
-                    context.fillText('+', controlX + controlRect.width/2, controlY + 15);
-                    context.fillText('−', controlX + controlRect.width/2, controlY + 35);
-                }
-                
-                // Draw custom info control
-                const customControl = element.querySelector('.custom-control');
-                if (customControl) {
-                    const infoRect = customControl.getBoundingClientRect();
-                    const infoX = infoRect.left - offset.left - 0.5;
-                    const infoY = infoRect.top - offset.top - 0.5;
-                    
-                    context.fillStyle = 'rgba(255,255,255,0.9)';
-                    context.fillRect(infoX, infoY, Math.min(infoRect.width, 120), Math.min(infoRect.height, 80));
-                    context.strokeStyle = '#ccc';
-                    context.strokeRect(infoX, infoY, Math.min(infoRect.width, 120), Math.min(infoRect.height, 80));
-                    
-                    // Add coordinate text
-                    context.fillStyle = '#333';
-                    context.font = '9px monospace';
-                    context.textAlign = 'left';
-                    
-                    if (window.leafletMap) {
-                        const center = window.leafletMap.getCenter();
-                        const zoom = window.leafletMap.getZoom();
-                        const lines = [
-                            'Coordinates:',
-                            `Lat: ${center.lat.toFixed(4)}`,
-                            `Lng: ${center.lng.toFixed(4)}`,
-                            `Zoom: ${zoom}`,
-                            'VR Controls:',
-                            'Trigger: Pan',
-                            'Thumbstick: Zoom'
-                        ];
-                        
-                        lines.forEach((line, i) => {
-                            if (i < 7) { // Limit lines to fit
-                                context.fillText(line, infoX + 3, infoY + 10 + i * 10);
-                            }
+                        const scriptEle = document.createElement("script");
+                        scriptEle.type = type;
+                        scriptEle.async = async;
+                        scriptEle.src =FILE_URL;
+
+                        scriptEle.addEventListener("load", (ev) => {
+                            resolve({ status: true });
                         });
+
+                        scriptEle.addEventListener("error", (ev) => {
+                            reject({
+                                status: false,
+                                message: `Failed to load the script ${FILE_URL}`
+                            });
+                        });
+
+                        document.body.appendChild(scriptEle);
+                    } catch (error) {
+                        reject(error);
                     }
-                }
-                
-                // Add map attribution
-                context.fillStyle = 'rgba(0,0,0,0.1)';
-                context.fillRect(x + 10, y + height - 25, 150, 15);
-                context.fillStyle = 'white';
-                context.font = '9px Arial';
-                context.textAlign = 'left';
-                context.fillText('Procedural Topographic Map', x + 12, y + height - 15);
-                
-                return; // Skip normal element processing
-            }
-            
-            // Helper function to draw fallback topographic pattern
-            function drawFallbackTopographic(ctx, x, y, width, height) {
-                // Gradient background
-                const gradient = ctx.createLinearGradient(x, y, x + width, y + height);
-                gradient.addColorStop(0, '#e8f4f8');
-                gradient.addColorStop(0.3, '#d4f1d4');
-                gradient.addColorStop(0.6, '#b8d4b8');
-                gradient.addColorStop(1, '#8fbc8f');
-                
-                ctx.fillStyle = gradient;
-                ctx.fillRect(x, y, width, height);
-                
-                // Simple contour lines
-                ctx.strokeStyle = 'rgba(139, 69, 19, 0.4)';
-                ctx.lineWidth = 1;
-                
-                for (let i = 0; i < 5; i++) {
-                    const yPos = y + (height / 6) * (i + 1);
-                    ctx.beginPath();
-                    ctx.moveTo(x, yPos);
-                    for (let xPos = x; xPos < x + width; xPos += 10) {
-                        const wave = Math.sin((xPos - x) / 20 + i) * 3;
-                        ctx.lineTo(xPos, yPos + wave);
+                });
+            };
+
+            // borrowed from three.js with very slight modifications
+            // https://github.com/mrdoob/three.js/blob/43fbcefc202c176b6fc221c439e8dbdf85788679/examples/jsm/interactive/HTMLMesh.js#L125
+            const canvases = new WeakMap();
+            function html2canvas(element) {
+
+                // TODO: move to relevant code block below
+                const range = document.createRange();
+
+                function Clipper(context) {
+
+                    const clips = [];
+                    let isClipping = false;
+
+                    function doClip() {
+
+                        if (isClipping) {
+
+                            isClipping = false;
+                            context.restore();
+
+                        }
+
+                        if (clips.length === 0) return;
+
+                        let minX = - Infinity, minY = - Infinity;
+                        let maxX = Infinity, maxY = Infinity;
+
+                        for (let i = 0; i < clips.length; i++) {
+
+                            const clip = clips[i];
+
+                            minX = Math.max(minX, clip.x);
+                            minY = Math.max(minY, clip.y);
+                            maxX = Math.min(maxX, clip.x + clip.width);
+                            maxY = Math.min(maxY, clip.y + clip.height);
+
+                        }
+
+                        context.save();
+                        context.beginPath();
+                        context.rect(minX, minY, maxX - minX, maxY - minY);
+                        context.clip();
+
+                        isClipping = true;
+
                     }
-                    ctx.stroke();
-                }
-                
-                // Add some terrain features
-                ctx.fillStyle = 'rgba(139, 69, 19, 0.2)';
-                for (let i = 0; i < 8; i++) {
-                    const spotX = x + (width * Math.sin(i)) / 2 + width / 2;
-                    const spotY = y + (height * Math.cos(i * 1.3)) / 2 + height / 2;
-                    const radius = 8 + Math.sin(i) * 5;
-                    
-                    ctx.beginPath();
-                    ctx.arc(spotX, spotY, radius, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            }
 
-            // Get the border of the element used for fill and border
+                    return {
 
-            buildRectPath(x, y, width, height, parseFloat(style.borderRadius));
+                        add: function (clip) {
 
-            const backgroundColor = style.backgroundColor;
+                            clips.push(clip);
+                            doClip();
 
-            if (backgroundColor !== 'transparent' && backgroundColor !== 'rgba(0, 0, 0, 0)') {
+                        },
 
-                context.fillStyle = backgroundColor;
-                context.fill();
+                        remove: function () {
 
-            }
+                            clips.pop();
+                            doClip();
 
-            // If all the borders match then stroke the round rectangle
+                        }
 
-            const borders = ['borderTop', 'borderLeft', 'borderBottom', 'borderRight'];
-
-            let match = true;
-            let prevBorder = null;
-
-            for (const border of borders) {
-
-                if (prevBorder !== null) {
-
-                    match = (style[border + 'Width'] === style[prevBorder + 'Width']) &&
-                        (style[border + 'Color'] === style[prevBorder + 'Color']) &&
-                        (style[border + 'Style'] === style[prevBorder + 'Style']);
+                    };
 
                 }
 
-                if (match === false) break;
+                function drawText(style, x, y, string) {
 
-                prevBorder = border;
+                    if (string !== '') {
 
-            }
+                        if (style.textTransform === 'uppercase') {
 
-            if (match === true) {
+                            string = string.toUpperCase();
 
-                // They all match so stroke the rectangle from before allows for border-radius
+                        }
 
-                const width = parseFloat(style.borderTopWidth);
+                        context.font = style.fontWeight + ' ' + style.fontSize + ' ' + style.fontFamily;
+                        context.textBaseline = 'top';
+                        context.fillStyle = style.color;
+                        context.fillText(string, x, y + parseFloat(style.fontSize) * 0.1);
 
-                if (style.borderTopWidth !== '0px' && style.borderTopStyle !== 'none' && style.borderTopColor !== 'transparent' && style.borderTopColor !== 'rgba(0, 0, 0, 0)') {
-
-                    context.strokeStyle = style.borderTopColor;
-                    context.lineWidth = width;
-                    context.stroke();
+                    }
 
                 }
 
-            } else {
+                function buildRectPath(x, y, w, h, r) {
 
-                // Otherwise draw individual borders
+                    if (w < 2 * r) r = w / 2;
+                    if (h < 2 * r) r = h / 2;
 
-                drawBorder(style, 'borderTop', x, y, width, 0);
-                drawBorder(style, 'borderLeft', x, y, 0, height);
-                drawBorder(style, 'borderBottom', x, y + height, width, 0);
-                drawBorder(style, 'borderRight', x + width, y, 0, height);
+                    context.beginPath();
+                    context.moveTo(x + r, y);
+                    context.arcTo(x + w, y, x + w, y + h, r);
+                    context.arcTo(x + w, y + h, x, y + h, r);
+                    context.arcTo(x, y + h, x, y, r);
+                    context.arcTo(x, y, x + w, y, r);
+                    context.closePath();
 
-            }
+                }
 
-            if (element instanceof HTMLInputElement) {
+                function drawBorder(style, which, x, y, width, height) {
 
-                let accentColor = style.accentColor;
+                    const borderWidth = style[which + 'Width'];
+                    const borderStyle = style[which + 'Style'];
+                    const borderColor = style[which + 'Color'];
 
-                if (accentColor === undefined || accentColor === 'auto') accentColor = style.color;
+                    if (borderWidth !== '0px' && borderStyle !== 'none' && borderColor !== 'transparent' && borderColor !== 'rgba(0, 0, 0, 0)') {
 
-                // TODO
-                // color.set(accentColor);
-
-                // const luminance = Math.sqrt(0.299 * (color.r ** 2) +
-                // 0.587 * (color.g ** 2) + 0.114 * (color.b ** 2));
-                const luminance = 0;
-                const accentTextColor = luminance < 0.5 ? 'white' : '#111111';
-
-                if (element.type === 'radio') {
-
-                    buildRectPath(x, y, width, height, height);
-
-                    context.fillStyle = 'white';
-                    context.strokeStyle = accentColor;
-                    context.lineWidth = 1;
-                    context.fill();
-                    context.stroke();
-
-                    if (element.checked) {
-
-                        buildRectPath(x + 2, y + 2, width - 4, height - 4, height);
-
-                        context.fillStyle = accentColor;
-                        context.strokeStyle = accentTextColor;
-                        context.lineWidth = 2;
-                        context.fill();
+                        context.strokeStyle = borderColor;
+                        context.lineWidth = parseFloat(borderWidth);
+                        context.beginPath();
+                        context.moveTo(x, y);
+                        context.lineTo(x + width, y + height);
                         context.stroke();
 
                     }
 
                 }
 
-                if (element.type === 'checkbox') {
+                function drawElement(element, style) {
 
-                    buildRectPath(x, y, width, height, 2);
+                    let x = 0, y = 0, width = 0, height = 0;
 
-                    context.fillStyle = element.checked ? accentColor : 'white';
-                    context.strokeStyle = element.checked ? accentTextColor : accentColor;
-                    context.lineWidth = 1;
-                    context.stroke();
-                    context.fill();
+                    if (element.nodeType === Node.TEXT_NODE) {
 
-                    if (element.checked) {
+                        // text
 
-                        const currentTextAlign = context.textAlign;
+                        range.selectNode(element);
 
-                        context.textAlign = 'center';
+                        const rect = range.getBoundingClientRect();
 
-                        const properties = {
-                            color: accentTextColor,
-                            fontFamily: style.fontFamily,
-                            fontSize: height + 'px',
-                            fontWeight: 'bold'
-                        };
+                        x = rect.left - offset.left - 0.5;
+                        y = rect.top - offset.top - 0.5;
+                        width = rect.width;
+                        height = rect.height;
 
-                        drawText(properties, x + (width / 2), y, '✔');
+                        drawText(style, x, y, element.nodeValue.trim());
 
-                        context.textAlign = currentTextAlign;
+                    } else if (element.nodeType === Node.COMMENT_NODE) {
+
+                        return;
+
+                    } else if (element instanceof HTMLCanvasElement) {
+
+                        // Canvas element
+                        if (element.style.display === 'none') return;
+
+                        const rect = element.getBoundingClientRect();
+
+                        x = rect.left - offset.left - 0.5;
+                        y = rect.top - offset.top - 0.5;
+
+                        context.save();
+                        const dpr = window.devicePixelRatio;
+                        context.scale(1 / dpr, 1 / dpr);
+                        context.drawImage(element, x, y);
+                        context.restore();
+
+                    } else if (element instanceof HTMLImageElement) {
+
+                        if (element.style.display === 'none') return;
+
+                        const rect = element.getBoundingClientRect();
+
+                        x = rect.left - offset.left - 0.5;
+                        y = rect.top - offset.top - 0.5;
+                        width = rect.width;
+                        height = rect.height;
+
+                        context.drawImage(element, x, y, width, height);
+
+                    } else {
+
+                        if (element.style.display === 'none') return;
+
+                        const rect = element.getBoundingClientRect();
+
+                        x = rect.left - offset.left - 0.5;
+                        y = rect.top - offset.top - 0.5;
+                        width = rect.width;
+                        height = rect.height;
+
+                        style = window.getComputedStyle(element);
+
+                        // Get the border of the element used for fill and border
+
+                        buildRectPath(x, y, width, height, parseFloat(style.borderRadius));
+
+                        const backgroundColor = style.backgroundColor;
+
+                        if (backgroundColor !== 'transparent' && backgroundColor !== 'rgba(0, 0, 0, 0)') {
+
+                            context.fillStyle = backgroundColor;
+                            context.fill();
+
+                        }
+
+                        // If all the borders match then stroke the round rectangle
+
+                        const borders = ['borderTop', 'borderLeft', 'borderBottom', 'borderRight'];
+
+                        let match = true;
+                        let prevBorder = null;
+
+                        for (const border of borders) {
+
+                            if (prevBorder !== null) {
+
+                                match = (style[border + 'Width'] === style[prevBorder + 'Width']) &&
+                                    (style[border + 'Color'] === style[prevBorder + 'Color']) &&
+                                    (style[border + 'Style'] === style[prevBorder + 'Style']);
+
+                            }
+
+                            if (match === false) break;
+
+                            prevBorder = border;
+
+                        }
+
+                        if (match === true) {
+
+                            // They all match so stroke the rectangle from before allows for border-radius
+
+                            const width = parseFloat(style.borderTopWidth);
+
+                            if (style.borderTopWidth !== '0px' && style.borderTopStyle !== 'none' && style.borderTopColor !== 'transparent' && style.borderTopColor !== 'rgba(0, 0, 0, 0)') {
+
+                                context.strokeStyle = style.borderTopColor;
+                                context.lineWidth = width;
+                                context.stroke();
+
+                            }
+
+                        } else {
+
+                            // Otherwise draw individual borders
+
+                            drawBorder(style, 'borderTop', x, y, width, 0);
+                            drawBorder(style, 'borderLeft', x, y, 0, height);
+                            drawBorder(style, 'borderBottom', x, y + height, width, 0);
+                            drawBorder(style, 'borderRight', x + width, y, 0, height);
+
+                        }
+
+                        if (element instanceof HTMLInputElement) {
+
+                            let accentColor = style.accentColor;
+
+                            if (accentColor === undefined || accentColor === 'auto') accentColor = style.color;
+
+                            // TODO
+                            // color.set(accentColor);
+
+                            // const luminance = Math.sqrt(0.299 * (color.r ** 2) +
+                            // 0.587 * (color.g ** 2) + 0.114 * (color.b ** 2));
+                            const luminance = 0;
+                            const accentTextColor = luminance < 0.5 ? 'white' : '#111111';
+
+                            if (element.type === 'radio') {
+
+                                buildRectPath(x, y, width, height, height);
+
+                                context.fillStyle = 'white';
+                                context.strokeStyle = accentColor;
+                                context.lineWidth = 1;
+                                context.fill();
+                                context.stroke();
+
+                                if (element.checked) {
+
+                                    buildRectPath(x + 2, y + 2, width - 4, height - 4, height);
+
+                                    context.fillStyle = accentColor;
+                                    context.strokeStyle = accentTextColor;
+                                    context.lineWidth = 2;
+                                    context.fill();
+                                    context.stroke();
+
+                                }
+
+                            }
+
+                            if (element.type === 'checkbox') {
+
+                                buildRectPath(x, y, width, height, 2);
+
+                                context.fillStyle = element.checked ? accentColor : 'white';
+                                context.strokeStyle = element.checked ? accentTextColor : accentColor;
+                                context.lineWidth = 1;
+                                context.stroke();
+                                context.fill();
+
+                                if (element.checked) {
+
+                                    const currentTextAlign = context.textAlign;
+
+                                    context.textAlign = 'center';
+
+                                    const properties = {
+                                        color: accentTextColor,
+                                        fontFamily: style.fontFamily,
+                                        fontSize: height + 'px',
+                                        fontWeight: 'bold'
+                                    };
+
+                                    drawText(properties, x + (width / 2), y, '✔');
+
+                                    context.textAlign = currentTextAlign;
+
+                                }
+
+                            }
+
+                            if (element.type === 'range') {
+
+                                const [min, max, value] = ['min', 'max', 'value'].map(property => parseFloat(element[property]));
+                                const position = ((value - min) / (max - min)) * (width - height);
+
+                                buildRectPath(x, y + (height / 4), width, height / 2, height / 4);
+                                context.fillStyle = accentTextColor;
+                                context.strokeStyle = accentColor;
+                                context.lineWidth = 1;
+                                context.fill();
+                                context.stroke();
+
+                                buildRectPath(x, y + (height / 4), position + (height / 2), height / 2, height / 4);
+                                context.fillStyle = accentColor;
+                                context.fill();
+
+                                buildRectPath(x + position, y, height, height, height / 2);
+                                context.fillStyle = accentColor;
+                                context.fill();
+
+                            }
+
+                            if (element.type === 'color' || element.type === 'text' || element.type === 'number') {
+
+                                clipper.add({ x: x, y: y, width: width, height: height });
+
+                                drawText(style, x + parseInt(style.paddingLeft), y + parseInt(style.paddingTop), element.value);
+
+                                clipper.remove();
+
+                            }
+
+                        }
 
                     }
 
-                }
+                    /*
+                    // debug
+                    context.strokeStyle = '#' + Math.random().toString( 16 ).slice( - 3 );
+                    context.strokeRect( x - 0.5, y - 0.5, width + 1, height + 1 );
+                    */
 
-                if (element.type === 'range') {
+                    const isClipping = style.overflow === 'auto' || style.overflow === 'hidden';
 
-                    const [min, max, value] = ['min', 'max', 'value'].map(property => parseFloat(element[property]));
-                    const position = ((value - min) / (max - min)) * (width - height);
+                    if (isClipping) clipper.add({ x: x, y: y, width: width, height: height });
 
-                    buildRectPath(x, y + (height / 4), width, height / 2, height / 4);
-                    context.fillStyle = accentTextColor;
-                    context.strokeStyle = accentColor;
-                    context.lineWidth = 1;
-                    context.fill();
-                    context.stroke();
+                    for (let i = 0; i < element.childNodes.length; i++) {
 
-                    buildRectPath(x, y + (height / 4), position + (height / 2), height / 2, height / 4);
-                    context.fillStyle = accentColor;
-                    context.fill();
+                        drawElement(element.childNodes[i], style);
 
-                    buildRectPath(x + position, y, height, height, height / 2);
-                    context.fillStyle = accentColor;
-                    context.fill();
+                    }
+
+                    if (isClipping) clipper.remove();
 
                 }
 
-                if (element.type === 'color' || element.type === 'text' || element.type === 'number') {
+                const offset = element.getBoundingClientRect();
 
-                    clipper.add({ x: x, y: y, width: width, height: height });
+                let canvas = canvases.get(element);
 
-                    drawText(style, x + parseInt(style.paddingLeft), y + parseInt(style.paddingTop), element.value);
+                if (canvas === undefined) {
 
-                    clipper.remove();
+                    canvas = document.createElement('canvas');
+                    canvas.width = offset.width;
+                    canvas.height = offset.height;
+                    console.log(`initial size: ${canvas.width}x${canvas.height}`)
+                    canvases.set(element, canvas);
 
                 }
 
+                const context = canvas.getContext('2d'/*, { alpha: false }*/);
+
+                const clipper = new Clipper(context);
+
+                // console.time( 'drawElement' );
+
+                context.clearRect(0, 0, canvas.width, canvas.height);
+
+                drawElement(element);
+
+                // console.timeEnd( 'drawElement' );
+
+                return canvas;
             }
 
-        }
+            function htmlevent(element, event, x, y) {
+                const mouseEventInit = {
+                    clientX: (x * element.offsetWidth) + element.offsetLeft,
+                    clientY: (y * element.offsetHeight) + element.offsetTop,
+                    view: element.ownerDocument.defaultView
+                };
 
-        /*
-        // debug
-        context.strokeStyle = '#' + Math.random().toString( 16 ).slice( - 3 );
-        context.strokeRect( x - 0.5, y - 0.5, width + 1, height + 1 );
-        */
+                const m = new MouseEvent(event, mouseEventInit);
+                window.dispatchEvent(m);
 
-        const isClipping = style.overflow === 'auto' || style.overflow === 'hidden';
+                const rect = element.getBoundingClientRect();
 
-        if (isClipping) clipper.add({ x: x, y: y, width: width, height: height });
+                x = x * rect.width + rect.left;
+                y = y * rect.height + rect.top;
 
-        for (let i = 0; i < element.childNodes.length; i++) {
+                function traverse(element) {
 
-            drawElement(element.childNodes[i], style);
+                    if (element.nodeType !== Node.TEXT_NODE && element.nodeType !== Node.COMMENT_NODE) {
+                        const rect = element.getBoundingClientRect();
 
-        }
+                        if (x > rect.left && x < rect.right && y > rect.top && y < rect.bottom) {
+                            element.dispatchEvent(new MouseEvent(event, mouseEventInit));
 
-        if (isClipping) clipper.remove();
+                            if (element instanceof HTMLInputElement && element.type === 'range' && (event === 'mousedown' || event === 'click')) {
+                                const [min, max] = ['min', 'max'].map(property => parseFloat(element[property]));
 
-    }
+                                const width = rect.width;
+                                const offsetX = x - rect.x;
+                                const proportion = offsetX / width;
+                                element.value = min + (max - min) * proportion;
+                                element.dispatchEvent(new InputEvent('input', { bubbles: true }));
+                            }
+                        }
 
-    const offset = element.getBoundingClientRect();
-
-    let canvas = canvases.get(element);
-
-    if (canvas === undefined) {
-
-        canvas = document.createElement('canvas');
-        canvas.width = offset.width;
-        canvas.height = offset.height;
-        console.log(`initial size: ${canvas.width}x${canvas.height}`)
-        canvases.set(element, canvas);
-
-    }
-
-    const context = canvas.getContext('2d'/*, { alpha: false }*/);
-
-    const clipper = new Clipper(context);
-
-    // console.time( 'drawElement' );
-
-    context.clearRect(0, 0, canvas.width, canvas.height);
-
-    drawElement(element);
-
-    // console.timeEnd( 'drawElement' );
-
-    return canvas;
-}
-
-function htmlevent(element, event, x, y) {
-    const mouseEventInit = {
-        clientX: (x * element.offsetWidth) + element.offsetLeft,
-        clientY: (y * element.offsetHeight) + element.offsetTop,
-        view: element.ownerDocument.defaultView
-    };
-
-    const m = new MouseEvent(event, mouseEventInit);
-    window.dispatchEvent(m);
-
-    const rect = element.getBoundingClientRect();
-
-    x = x * rect.width + rect.left;
-    y = y * rect.height + rect.top;
-
-    function traverse(element) {
-
-        if (element.nodeType !== Node.TEXT_NODE && element.nodeType !== Node.COMMENT_NODE) {
-            const rect = element.getBoundingClientRect();
-
-            if (x > rect.left && x < rect.right && y > rect.top && y < rect.bottom) {
-                element.dispatchEvent(new MouseEvent(event, mouseEventInit));
-
-                if (element instanceof HTMLInputElement && element.type === 'range' && (event === 'mousedown' || event === 'click')) {
-                    const [min, max] = ['min', 'max'].map(property => parseFloat(element[property]));
-
-                    const width = rect.width;
-                    const offsetX = x - rect.x;
-                    const proportion = offsetX / width;
-                    element.value = min + (max - min) * proportion;
-                    element.dispatchEvent(new InputEvent('input', { bubbles: true }));
-                }
-            }
-
-            for (let i = 0; i < element.childNodes.length; i++) {
-                traverse(element.childNodes[i]);
-            }
-        }
-    }
-
-    traverse(element);
-}
-                window.initFunction = async function() {
-                    
-                    
-                    
-                    var asyncEngineCreation = async function() {
-                        try {
-                        return createDefaultEngine();
-                        } catch(e) {
-                        console.log("the available createEngine function failed. Creating the default engine instead");
-                        return createDefaultEngine();
+                        for (let i = 0; i < element.childNodes.length; i++) {
+                            traverse(element.childNodes[i]);
                         }
                     }
+                }
 
-                    window.engine = await asyncEngineCreation();
-                    
-                    const engineOptions = window.engine.getCreationOptions?.();
-                    if (!engineOptions || engineOptions.audioEngine !== false) {
-                        
+                traverse(element);
+            }
+
+            window.initFunction = async function() {
+                
+                var asyncEngineCreation = async function() {
+                    try {
+                    return createDefaultEngine();
+                    } catch(e) {
+                    console.log("the available createEngine function failed. Creating the default engine instead");
+                    return createDefaultEngine();
                     }
-        if (!engine) throw 'engine should not be null.';
-        startRenderLoop(engine, canvas);
-        window.scene = createScene();};
-        initFunction().then(() => {scene.then(returnedScene => { sceneToRender = returnedScene; });
-        
-                    });
+                }
 
-                    // Resize
-                    window.addEventListener("resize", function () {
-                        engine.resize();
-                    });
-        </script>
-    </body>
-</html>
+                window.engine = await asyncEngineCreation();
+                
+                const engineOptions = window.engine.getCreationOptions?.();
+                if (!engineOptions || engineOptions.audioEngine !== false) {
+                    
+                }
+                if (!engine) throw 'engine should not be null.';
+                startRenderLoop(engine, canvas);
+                window.scene = createScene();
+            };
+            
+            initFunction().then(() => {
+                scene.then(returnedScene => { 
+                    sceneToRender = returnedScene; 
+                });
+            });
+
+            // Resize
+            window.addEventListener("resize", function () {
+                engine.resize();
+                if (leafletMap) {
+                    leafletMap.invalidateSize();
+                }
+            });
