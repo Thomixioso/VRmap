@@ -501,18 +501,59 @@
     <script>
         console.log('🚀 Spouštím 2D satelitní mapu s VR obsahem...');
         
-        // Inicializace mapy
+        // Inicializace mapy s přemapovanými zoom levely
         const map = L.map('map', {
             center: [49.75, 15.5], // Střed ČR
-            zoom: 4,
-            minZoom: 3,
-            maxZoom: 8,
+            zoom: 2, // Výchozí zoom (odpovídá původnímu zoom 4)
+            minZoom: 0, // Minimální zoom (odpovídá původnímu zoom 3)
+            maxZoom: 4, // Maximální zoom (odpovídá původnímu zoom 8, ale interpolujeme od 4 do 6)
             zoomControl: true,
             attributionControl: true,
             worldCopyJump: true,
             maxBounds: [[-85, -Infinity], [85, Infinity]],
             maxBoundsViscosity: 1.0
         });
+
+        // Funkce pro přemapování zoom levelů
+        function remapZoomLevel(displayZoom) {
+            // Přemapování: display zoom 0-4 -> tile zoom 3-6
+            // 0 -> 3, 1 -> 4, 2 -> 5, 3 -> 6, 4 -> 6 (interpolace)
+            if (displayZoom <= 1) {
+                return Math.floor(displayZoom + 3); // 0->3, 1->4
+            } else if (displayZoom <= 2) {
+                return 5; // zoom 2 -> tile level 5
+            } else {
+                return 6; // zoom 3,4 -> tile level 6 (interpolace bude v tile URL)
+            }
+        }
+
+        // Custom tile layer s přemapováním
+        L.TileLayer.Remapped = L.TileLayer.extend({
+            getTileUrl: function(coords) {
+                const displayZoom = coords.z;
+                const realTileZoom = remapZoomLevel(displayZoom);
+                
+                // Pro interpolaci od zoom 3+ používáme nejvyšší dostupnou úroveň (6)
+                const tileZoom = Math.min(realTileZoom, 6);
+                
+                // Přepočet souřadnic pro vyšší tile level
+                const scale = Math.pow(2, displayZoom - (tileZoom - 3));
+                const scaledX = Math.floor(coords.x / scale);
+                const scaledY = Math.floor(coords.y / scale);
+                
+                return L.Util.template(this._url, L.extend({
+                    s: this._getSubdomain(coords),
+                    z: tileZoom,
+                    x: scaledX,
+                    y: scaledY
+                }, this.options));
+            }
+        });
+
+        // Factory funkce pro custom tile layer  
+        L.tileLayer.remapped = function(url, options) {
+            return new L.TileLayer.Remapped(url, options);
+        };
 
         // Markery
         let markersGroup = L.layerGroup().addTo(map);
@@ -524,32 +565,32 @@
         let borderColor = '#ffffff';
         let currentOverlayLayer = null;
 
-        // Podkladová mapa - satelitní
-        const baseLayer = L.tileLayer('tiles_satellite_labeled/{z}/{x}/{y}.jpg', {
-            attribution: 'ESRI World Imagery s popisky (Offline)',
-            minZoom: 3,
-            maxZoom: 8,
-            maxNativeZoom: 6,
+        // Podkladová mapa - satelitní s přemapováním
+        const baseLayer = L.tileLayer.remapped('tiles_satellite_labeled/{z}/{x}/{y}.jpg', {
+            attribution: 'ESRI World Imagery s popisky (Offline) - Remapped zoom',
+            minZoom: 0,
+            maxZoom: 4,
+            maxNativeZoom: 6, // Nejvyšší dostupná úroveň dlaždic
             className: 'base-layer-filtered'
         });
         baseLayer.addTo(map);
 
-        // Overlay vrstvy
+        // Overlay vrstvy s přemapováním
         function createOverlayLayer(layerKey) {
             const overlayLayers = {
-                topo_labeled: L.tileLayer('tiles_topo_labeled/{z}/{x}/{y}.png', {
-                    attribution: 'ESRI Topographic s popisky',
-                    minZoom: 3,
-                    maxZoom: 8,
+                topo_labeled: L.tileLayer.remapped('tiles_topo_labeled/{z}/{x}/{y}.png', {
+                    attribution: 'ESRI Topographic s popisky - Remapped',
+                    minZoom: 0,
+                    maxZoom: 4,
                     maxNativeZoom: 6,
                     opacity: 0.7,
                     className: 'overlay-layer-filtered blend-multiply'
                 }),
                 
-                streets_labeled: L.tileLayer('tiles_streets_labeled/{z}/{x}/{y}.png', {
-                    attribution: 'OpenStreetMap s popisky',
-                    minZoom: 3,
-                    maxZoom: 8,
+                streets_labeled: L.tileLayer.remapped('tiles_streets_labeled/{z}/{x}/{y}.png', {
+                    attribution: 'OpenStreetMap s popisky - Remapped',
+                    minZoom: 0,
+                    maxZoom: 4,
                     maxNativeZoom: 6,
                     opacity: 0.7,
                     className: 'overlay-layer-filtered blend-multiply'
@@ -646,9 +687,10 @@
                 
                 updateInfo(`✅ Načteno ${data.length} VR míst z JSON`);
                 
-                // Centrace mapy na první marker
+                // Centrace mapy na první marker s přemapovaným zoomem
                 if (data.length > 0) {
-                    map.setView([data[0].lat, data[0].lon], 6);
+                    // Přemapování: původní zoom 6 -> nový zoom 3
+                    map.setView([data[0].lat, data[0].lon], 3);
                 }
                 
             } catch (error) {
@@ -814,7 +856,7 @@
             document.getElementById('markerText').value = '';
             
             updateInfo(`✅ Marker "${text}" přidán`);
-            map.setView([lat, lng], Math.max(map.getZoom(), 6));
+            map.setView([lat, lng], Math.max(map.getZoom(), 3)); // Přemapovaný zoom
         }
 
         function clearMarkers() {
@@ -988,12 +1030,19 @@
         function updateInfo(message) {
             const infoText = document.getElementById('infoText');
             const timestamp = new Date().toLocaleTimeString();
+            const displayZoom = map.getZoom();
+            const realTileZoom = remapZoomLevel(displayZoom);
+            
             infoText.innerHTML = `${message}<br><small style="color: #888;">${timestamp}</small><br><br>
             <strong>Ovládání:</strong><br>
             • Kliknutí = GPS souřadnice<br>
             • Drag = posouvání mapy<br>
             • Kolečko = zoom<br>
             • Dvojklik = rychlý zoom<br><br>
+            <strong>Zoom info:</strong><br>
+            • Display zoom: ${displayZoom} → Tile zoom: ${realTileZoom}<br>
+            • Range: 0-4 (remapped from 3-6)<br>
+            • Interpolace od zoom 3+<br><br>
             <strong>VR Obsah:</strong><br>
             • 🏰 Hrady (hnědé markery)<br>
             • 🏛️ Historické místa (modré)<br>
