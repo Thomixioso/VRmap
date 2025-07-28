@@ -501,10 +501,10 @@
     <script>
         console.log('🚀 Spouštím 2D satelitní mapu s VR obsahem...');
         
-        // Inicializace mapy
+        // Inicializace mapy s bližším výchozím zoomem
         const map = L.map('map', {
             center: [49.75, 15.5], // Střed ČR
-            zoom: 4,
+            zoom: 5, // Výchozí zoom blíž (místo 4)
             minZoom: 3,
             maxZoom: 8,
             zoomControl: true,
@@ -524,33 +524,33 @@
         let borderColor = '#ffffff';
         let currentOverlayLayer = null;
 
-        // Podkladová mapa - satelitní
+        // Podkladová mapa - satelitní s interpolací od úrovně 4
         const baseLayer = L.tileLayer('tiles_satellite_labeled/{z}/{x}/{y}.jpg', {
-            attribution: 'ESRI World Imagery s popisky (Offline)',
+            attribution: 'ESRI World Imagery s popisky (Offline) - Interpolace od lvl 4',
             minZoom: 3,
             maxZoom: 8,
-            maxNativeZoom: 6,
+            maxNativeZoom: 4, // Interpolace od úrovně 4 místo 6
             className: 'base-layer-filtered'
         });
         baseLayer.addTo(map);
 
-        // Overlay vrstvy
+        // Overlay vrstvy s interpolací od úrovně 4
         function createOverlayLayer(layerKey) {
             const overlayLayers = {
                 topo_labeled: L.tileLayer('tiles_topo_labeled/{z}/{x}/{y}.png', {
-                    attribution: 'ESRI Topographic s popisky',
+                    attribution: 'ESRI Topographic s popisky - Interpolace od lvl 4',
                     minZoom: 3,
                     maxZoom: 8,
-                    maxNativeZoom: 6,
+                    maxNativeZoom: 4, // Interpolace od úrovně 4
                     opacity: 0.7,
                     className: 'overlay-layer-filtered blend-multiply'
                 }),
                 
                 streets_labeled: L.tileLayer('tiles_streets_labeled/{z}/{x}/{y}.png', {
-                    attribution: 'OpenStreetMap s popisky',
+                    attribution: 'OpenStreetMap s popisky - Interpolace od lvl 4',
                     minZoom: 3,
                     maxZoom: 8,
-                    maxNativeZoom: 6,
+                    maxNativeZoom: 4, // Interpolace od úrovně 4
                     opacity: 0.7,
                     className: 'overlay-layer-filtered blend-multiply'
                 })
@@ -646,9 +646,9 @@
                 
                 updateInfo(`✅ Načteno ${data.length} VR míst z JSON`);
                 
-                // Centrace mapy na první marker
+                // Centrace mapy na první marker s bližším zoomem
                 if (data.length > 0) {
-                    map.setView([data[0].lat, data[0].lon], 6);
+                    map.setView([data[0].lat, data[0].lon], 7); // Blíž k markeru
                 }
                 
             } catch (error) {
@@ -659,7 +659,7 @@
             }
         }
 
-        // VR funkce s oficiální stereo-img podle dokumentace
+        // VR funkce s opravou stereo-img zobrazení
         function openVR(name, imagePath, category, index) {
             const modal = document.getElementById('vrModal');
             const vrImage = document.getElementById('vrImage');
@@ -673,47 +673,63 @@
                 <strong>Stereo formát:</strong> Auto-detekce (VR180, left-right, fisheye)<br>
                 <strong>VR headsety:</strong> Quest, HTC Vive, Cardboard<br>
                 <strong>Ovládání:</strong> Myš/dotyky + gyroscope<br>
-                <strong>Escape:</strong> Zavření VR módu
+                <strong>Fullscreen:</strong> Klik na obrázek pro VR mód
             `;
             
             // Zobrazení modal
             modal.style.display = 'block';
             
-            // Nastavení stereo-img podle oficiální dokumentace
+            // Oprava stereo-img zobrazení
             setTimeout(() => {
-                // Základní atributy podle dokumentace
-                vrImage.setAttribute('src', imagePath);
+                console.log('🔄 Nastavuji stereo-img src:', imagePath);
                 
-                // Auto-detekce typu (VR photo, left-right, fisheye atd.)
-                // stereo-img automaticky detekuje typ z EXIF dat
-                
-                // Přidání wiggle efektu pro 2D náhled
-                vrImage.setAttribute('wiggle', 'enabled');
-                
-                // Zobrazení
+                // Nejdříve zobrazíme element
                 vrImage.style.display = 'block';
                 
-                // Event listenery pro stereo-img
+                // Pak nastavíme src atribut
+                vrImage.src = imagePath;
+                
+                // Alternativně můžeme také explicitně nastavit typ
+                // Pro 180° stereo obrázky
+                vrImage.setAttribute('type', 'left-right');
+                vrImage.setAttribute('angle', '180');
+                
+                // Wiggle efekt pro 2D náhled
+                vrImage.setAttribute('wiggle', 'enabled');
+                
+                // Event listenery
                 vrImage.addEventListener('load', () => {
-                    console.log('✅ Stereo obrázek načten:', imagePath);
+                    console.log('✅ Stereo obrázek úspěšně načten');
+                    vrDescription.innerHTML += '<br><br><span style="color: #32CD32;">✅ VR obrázek načten</span>';
                 });
                 
                 vrImage.addEventListener('error', (e) => {
                     console.error('❌ Chyba při načítání stereo obrázku:', e);
-                    vrDescription.innerHTML += '<br><br><span style="color: #ff6b6b;">⚠️ Chyba při načítání VR obrázku</span>';
+                    vrDescription.innerHTML += '<br><br><span style="color: #ff6b6b;">❌ Chyba při načítání VR obrázku</span>';
+                    
+                    // Fallback - zkusíme zobrazit jako normální img
+                    const fallbackImg = document.createElement('img');
+                    fallbackImg.src = imagePath;
+                    fallbackImg.style.width = '100%';
+                    fallbackImg.style.height = '100%';
+                    fallbackImg.style.objectFit = 'contain';
+                    
+                    // Nahradíme stereo-img běžným img elementem
+                    vrImage.style.display = 'none';
+                    vrImage.parentNode.appendChild(fallbackImg);
                 });
                 
-                // Automatický fullscreen při detekci VR headsetu
-                if ('xr' in navigator) {
-                    navigator.xr.isSessionSupported('immersive-vr').then(supported => {
-                        if (supported) {
-                            vrDescription.innerHTML += '<br><br><span style="color: #32CD32;">🥽 VR headset detekován</span>';
-                        }
-                    });
-                }
+                // Fullscreen při kliku
+                vrImage.addEventListener('click', () => {
+                    if (modal.requestFullscreen) {
+                        modal.requestFullscreen().catch(err => {
+                            console.log('Fullscreen není dostupný:', err);
+                        });
+                    }
+                });
                 
                 console.log('✅ Stereo-img inicializován pro:', name);
-            }, 100);
+            }, 200); // Delší timeout pro jistotu
             
             updateInfo(`🥽 VR stereo mód: ${name.replace(/_/g, ' ')}`);
         }
@@ -724,7 +740,12 @@
             
             modal.style.display = 'none';
             vrImage.style.display = 'none';
+            
+            // Vyčištění stereo-img atributů
             vrImage.removeAttribute('src');
+            vrImage.removeAttribute('type');
+            vrImage.removeAttribute('angle');
+            vrImage.removeAttribute('wiggle');
             
             // Ukončení fullscreen pokud je aktivní
             if (document.fullscreenElement) {
@@ -834,7 +855,7 @@
             document.getElementById('markerText').value = '';
             
             updateInfo(`✅ Marker "${text}" přidán`);
-            map.setView([lat, lng], Math.max(map.getZoom(), 6));
+            map.setView([lat, lng], Math.max(map.getZoom(), 7)); // Bližší zoom pro nové markery
         }
 
         function clearMarkers() {
@@ -1015,10 +1036,10 @@
             • Drag = posouvání mapy<br>
             • Kolečko = zoom<br>
             • Dvojklik = rychlý zoom<br><br>
-            <strong>Zoom:</strong> 3-8 (interpolace od úrovně 6)<br>
-            <strong>Hranice:</strong> Obrysy států (nastavitelná barva)<br>
-            <strong>Overlay:</strong> Města a topografie<br>
-            <strong>Filtry:</strong> Pokročilé color correction<br><br>
+            <strong>Zoom:</strong> 3-8 (interpolace od úrovně 4)<br>
+            <strong>Start zoom:</strong> 5 (blíž než dříve)<br>
+            <strong>Hranice:</strong> Obrysy států<br>
+            <strong>Overlay:</strong> Města a topografie<br><br>
             <strong>VR Obsah:</strong><br>
             • 🏰 Hrady (hnědé markery)<br>
             • 🏛️ Historické místa (modré)<br>
