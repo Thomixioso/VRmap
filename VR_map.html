@@ -159,14 +159,18 @@
             attributionControl: false
         }).setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
         
-        // Use a different tile provider that might be more CORS friendly
-        // or create a simple colored map
-        const tileLayer = L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==', {
+        // Use your GitHub offline tiles
+        const githubTileLayer = L.tileLayer('https://raw.githubusercontent.com/Thomixioso/VRmap/main/tiles_topo_labeled/{z}/{x}/{y}.png', {
             maxZoom: 18,
-        });
+            minZoom: 0,
+            attribution: 'Custom Offline Tiles',
+            crossOrigin: 'anonymous', // This might help with CORS
+            // Error handling for missing tiles
+            errorTileUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAI/hN0GUgAAAABJRU5ErkJggg=='
+        }).addTo(window.leafletMap);
         
-        // Create a simple procedural map instead
-        createSimpleMap();
+        // Create offline tile canvas overlay
+        createOfflineTileCanvas();
         
         // Add a marker for current position
         window.mapMarker = L.marker([parameters.mapLat, parameters.mapLng])
@@ -181,26 +185,32 @@
             if (window.mapMarker) {
                 window.mapMarker.setLatLng([center.lat, center.lng]);
             }
-            // Update the procedural map
-            updateProceduralMap();
+            // Update the offline tile canvas
+            updateOfflineTileCanvas();
             // Update GUI display (this will trigger the texture update)
             gui.updateDisplay();
         });
         
         window.leafletMap.on('zoomend', function() {
             parameters.mapZoom = window.leafletMap.getZoom();
-            updateProceduralMap();
+            updateOfflineTileCanvas();
             gui.updateDisplay();
+        });
+        
+        // Handle tile loading for canvas update
+        githubTileLayer.on('tileload', function() {
+            // Update canvas when tiles are loaded
+            setTimeout(() => updateOfflineTileCanvas(), 100);
         });
         
         // Make map container draggable for VR interaction
         mapContainer.style.cursor = 'grab';
         
-        console.log("Leaflet map initialized with procedural tiles");
+        console.log("Leaflet map initialized with GitHub offline tiles");
     }, 100);
     
-    // Function to create a simple procedural map
-    function createSimpleMap() {
+    // Function to create offline tile canvas overlay
+    function createOfflineTileCanvas() {
         const mapCanvas = document.createElement('canvas');
         mapCanvas.width = 280;
         mapCanvas.height = 200;
@@ -214,128 +224,153 @@
         mapContainer.appendChild(mapCanvas);
         
         window.mapCanvas = mapCanvas;
-        updateProceduralMap();
+        updateOfflineTileCanvas();
     }
     
-    // Function to update the procedural map based on current view
-    function updateProceduralMap() {
-        if (!window.mapCanvas) return;
+    // Function to draw offline tiles onto canvas (for VR texture)
+    function updateOfflineTileCanvas() {
+        if (!window.mapCanvas || !window.leafletMap) return;
         
-        const ctx = window.mapCanvas.getContext('2d');
-        const width = window.mapCanvas.width;
-        const height = window.mapCanvas.height;
+        const canvas = window.mapCanvas;
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
         
         // Clear canvas
         ctx.clearRect(0, 0, width, height);
         
+        // Get current map bounds and zoom
+        const bounds = window.leafletMap.getBounds();
+        const zoom = Math.floor(parameters.mapZoom);
+        const center = window.leafletMap.getCenter();
+        
+        // Calculate tile coordinates for current view
+        const tileSize = 256;
+        const numTiles = Math.pow(2, zoom);
+        
+        // Convert lat/lng to tile coordinates
+        function latLngToTile(lat, lng, zoom) {
+            const x = Math.floor((lng + 180) / 360 * Math.pow(2, zoom));
+            const y = Math.floor((1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, zoom));
+            return { x, y, z: zoom };
+        }
+        
+        // Get tiles that cover the current view
+        const centerTile = latLngToTile(center.lat, center.lng, zoom);
+        const tilesToLoad = [];
+        
+        // Load tiles in a 3x3 grid around center
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                const tileX = centerTile.x + dx;
+                const tileY = centerTile.y + dy;
+                
+                if (tileX >= 0 && tileX < numTiles && tileY >= 0 && tileY < numTiles) {
+                    tilesToLoad.push({ x: tileX, y: tileY, z: zoom });
+                }
+            }
+        }
+        
+        // Draw background
+        ctx.fillStyle = '#f0f8ff';
+        ctx.fillRect(0, 0, width, height);
+        
+        // Try to load and draw tiles
+        let tilesLoaded = 0;
+        const totalTiles = tilesToLoad.length;
+        
+        if (totalTiles === 0) {
+            // Fallback if no tiles
+            drawFallbackMap(ctx, width, height);
+            return;
+        }
+        
+        tilesToLoad.forEach(tile => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
+            img.onload = function() {
+                // Calculate where to draw this tile on the canvas
+                const tilePixelX = (tile.x - centerTile.x + 1) * (width / 3);
+                const tilePixelY = (tile.y - centerTile.y + 1) * (height / 3);
+                
+                try {
+                    ctx.drawImage(img, tilePixelX, tilePixelY, width / 3, height / 3);
+                } catch (e) {
+                    console.log('Could not draw offline tile:', e);
+                }
+                
+                tilesLoaded++;
+                if (tilesLoaded === totalTiles) {
+                    // All tiles loaded, add overlay info
+                    addMapOverlay(ctx, width, height);
+                }
+            };
+            
+            img.onerror = function() {
+                console.log(`Tile not found: ${tile.z}/${tile.x}/${tile.y}`);
+                tilesLoaded++;
+                if (tilesLoaded === totalTiles) {
+                    // Fallback if tiles fail to load
+                    drawFallbackMap(ctx, width, height);
+                }
+            };
+            
+            // Load tile from GitHub
+            img.src = `https://raw.githubusercontent.com/Thomixioso/VRmap/main/tiles_topo_labeled/${tile.z}/${tile.x}/${tile.y}.png`;
+        });
+    }
+    
+    // Fallback map drawing function
+    function drawFallbackMap(ctx, width, height) {
         // Ocean background
         ctx.fillStyle = '#4a90e2';
         ctx.fillRect(0, 0, width, height);
         
-        // Simple land masses based on lat/lng
-        const centerLat = parameters.mapLat;
-        const centerLng = parameters.mapLng;
-        const zoom = parameters.mapZoom;
+        // Simple land indication
+        ctx.fillStyle = '#90EE90';
+        ctx.fillRect(width * 0.2, height * 0.3, width * 0.6, height * 0.4);
         
-        // Draw continents (very simplified)
-        ctx.fillStyle = '#8fbc8f';
+        // Add text
+        ctx.fillStyle = 'white';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Offline Tiles Loading...', width / 2, height / 2);
         
-        // Europe (around Prague)
-        if (centerLat > 40 && centerLat < 70 && centerLng > -10 && centerLng < 40) {
-            const europeX = (centerLng + 10) / 50 * width;
-            const europeY = (70 - centerLat) / 30 * height;
-            ctx.beginPath();
-            ctx.ellipse(europeX, europeY, 40 + zoom * 2, 30 + zoom * 1.5, 0, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        
-        // Asia
-        if (centerLat > 10 && centerLat < 70 && centerLng > 40 && centerLng < 150) {
-            const asiaX = (centerLng - 40) / 110 * width;
-            const asiaY = (70 - centerLat) / 60 * height;
-            ctx.beginPath();
-            ctx.ellipse(asiaX, asiaY, 60 + zoom * 3, 40 + zoom * 2, 0, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        
-        // North America
-        if (centerLat > 20 && centerLat < 70 && centerLng > -150 && centerLng < -60) {
-            const naX = (centerLng + 150) / 90 * width;
-            const naY = (70 - centerLat) / 50 * height;
-            ctx.beginPath();
-            ctx.ellipse(naX, naY, 50 + zoom * 2.5, 35 + zoom * 2, 0, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        
-        // Add some cities as dots
-        ctx.fillStyle = '#ff6b6b';
-        const citySize = Math.max(2, zoom / 3);
-        
-        // Major cities
-        const cities = [
-            { name: 'Prague', lat: 50.0755, lng: 14.4378 },
-            { name: 'London', lat: 51.5074, lng: -0.1278 },
-            { name: 'Paris', lat: 48.8566, lng: 2.3522 },
-            { name: 'New York', lat: 40.7128, lng: -74.0060 },
-            { name: 'Tokyo', lat: 35.6762, lng: 139.6503 }
-        ];
-        
-        cities.forEach(city => {
-            // Only show cities if they're roughly in view
-            const latDiff = Math.abs(city.lat - centerLat);
-            const lngDiff = Math.abs(city.lng - centerLng);
-            const viewRange = 50 / zoom;
-            
-            if (latDiff < viewRange && lngDiff < viewRange) {
-                const cityX = width/2 + (city.lng - centerLng) * (width / viewRange / 2);
-                const cityY = height/2 + (centerLat - city.lat) * (height / viewRange / 2);
-                
-                if (cityX >= 0 && cityX <= width && cityY >= 0 && cityY <= height) {
-                    ctx.beginPath();
-                    ctx.arc(cityX, cityY, citySize, 0, Math.PI * 2);
-                    ctx.fill();
-                    
-                    // City label
-                    if (zoom > 5) {
-                        ctx.fillStyle = '#333';
-                        ctx.font = '10px Arial';
-                        ctx.textAlign = 'center';
-                        ctx.fillText(city.name, cityX, cityY - citySize - 2);
-                        ctx.fillStyle = '#ff6b6b';
-                    }
-                }
-            }
-        });
-        
-        // Current location marker
+        addMapOverlay(ctx, width, height);
+    }
+    
+    // Add map overlay information
+    function addMapOverlay(ctx, width, height) {
+        // Current position marker
         ctx.fillStyle = '#e74c3c';
         ctx.beginPath();
-        ctx.arc(width/2, height/2, 5, 0, Math.PI * 2);
+        ctx.arc(width/2, height/2, 4, 0, Math.PI * 2);
         ctx.fill();
         
         // Crosshair
         ctx.strokeStyle = '#e74c3c';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(width/2 - 10, height/2);
-        ctx.lineTo(width/2 + 10, height/2);
-        ctx.moveTo(width/2, height/2 - 10);
-        ctx.lineTo(width/2, height/2 + 10);
+        ctx.moveTo(width/2 - 8, height/2);
+        ctx.lineTo(width/2 + 8, height/2);
+        ctx.moveTo(width/2, height/2 - 8);
+        ctx.lineTo(width/2, height/2 + 8);
         ctx.stroke();
         
         // Coordinate info
         ctx.fillStyle = 'rgba(0,0,0,0.7)';
         ctx.fillRect(5, height - 25, 150, 20);
         ctx.fillStyle = 'white';
-        ctx.font = '10px monospace';
+        ctx.font = '9px monospace';
         ctx.textAlign = 'left';
-        ctx.fillText(`${centerLat.toFixed(3)}, ${centerLng.toFixed(3)}`, 8, height - 10);
+        ctx.fillText(`${parameters.mapLat.toFixed(4)}, ${parameters.mapLng.toFixed(4)}`, 8, height - 10);
         
         // Zoom level
         ctx.fillRect(width - 60, 5, 55, 20);
         ctx.fillStyle = 'white';
         ctx.textAlign = 'center';
-        ctx.fillText(`Zoom: ${zoom}`, width - 32, 18);
+        ctx.fillText(`Z: ${Math.floor(parameters.mapZoom)}`, width - 32, 18);
     }
     
     // GUI is now visible both on screen and as texture in VR
@@ -954,21 +989,21 @@ function html2canvas(element) {
 
             // Special handling for Leaflet map container
             if (element.classList && (element.classList.contains('leaflet-container') || element.id === 'mapContainer')) {
-                // Find our procedural map canvas
+                // Find our offline tile canvas
                 const mapCanvas = element.querySelector('canvas');
                 if (mapCanvas) {
                     try {
-                        // Draw the procedural map canvas directly
+                        // Draw the offline tile canvas directly
                         context.drawImage(mapCanvas, x, y, width, height);
                     } catch (e) {
-                        console.log('Could not draw procedural map canvas:', e);
+                        console.log('Could not draw offline tile canvas:', e);
                         // Fallback to simple colored rectangle
                         context.fillStyle = '#4a90e2';
                         context.fillRect(x, y, width, height);
                         context.fillStyle = 'white';
                         context.font = '12px Arial';
                         context.textAlign = 'center';
-                        context.fillText('Procedural Map', x + width/2, y + height/2);
+                        context.fillText('Offline Map', x + width/2, y + height/2);
                     }
                 } else {
                     // Fallback if no canvas found
@@ -977,7 +1012,7 @@ function html2canvas(element) {
                     context.fillStyle = 'white';
                     context.font = '12px Arial';
                     context.textAlign = 'center';
-                    context.fillText('Loading Map...', x + width/2, y + height/2);
+                    context.fillText('Loading Tiles...', x + width/2, y + height/2);
                 }
                 
                 return; // Skip normal element processing
