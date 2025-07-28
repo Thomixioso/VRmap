@@ -348,52 +348,11 @@
             color: #4a90e2;
         }
         
-        .vr-viewer {
+        stereo-img {
             width: 100%;
             height: 100%;
-            position: relative;
-            overflow: hidden;
-            cursor: grab;
-        }
-        
-        .vr-viewer:active {
-            cursor: grabbing;
-        }
-        
-        .vr-canvas {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
-        
-        .vr-controls {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 10px;
-            z-index: 10001;
-        }
-        
-        .vr-button {
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.3s ease;
-        }
-        
-        .vr-button:hover {
-            background: rgba(74, 144, 226, 0.8);
-            transform: translateY(-2px);
-        }
-        
-        .vr-button.active {
-            background: rgba(74, 144, 226, 1);
+            max-width: 100vw;
+            max-height: 100vh;
         }
         
         /* Blend modes pro overlay vrstvy */
@@ -531,21 +490,14 @@
                 <h4 id="vrTitle">Načítám...</h4>
                 <p id="vrDescription">Příprava VR obsahu...</p>
             </div>
-            <div class="vr-viewer" id="vrViewer">
-                <canvas class="vr-canvas" id="vrCanvas"></canvas>
-            </div>
-            <div class="vr-controls">
-                <button class="vr-button" id="monoButton" onclick="setViewMode('mono')">2D pohled</button>
-                <button class="vr-button active" id="stereoButton" onclick="setViewMode('stereo')">VR pohled</button>
-                <button class="vr-button" id="vrHeadsetButton" onclick="enterVRHeadset()">🥽 VR Headset</button>
-                <button class="vr-button" id="fullscreenButton" onclick="toggleFullscreen()">Celá obrazovka</button>
-            </div>
+            <stereo-img id="vrImage" style="display: none;"></stereo-img>
         </div>
     </div>
     
     <div id="map"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script type="module" src="./stereo-img.js"></script>
     <script>
         console.log('🚀 Spouštím 2D satelitní mapu s VR obsahem...');
         
@@ -606,6 +558,15 @@
             
             return overlayLayers[layerKey] || null;
         }
+
+        // Načtení výchozí overlay vrstvy (topografická s městy)
+        setTimeout(() => {
+            currentOverlayLayer = createOverlayLayer('topo_labeled');
+            if (currentOverlayLayer) {
+                currentOverlayLayer.addTo(map);
+                console.log('✅ Výchozí overlay s městy načten');
+            }
+        }, 1000);
 
         // Vytvoření vlastních markerů podle kategorie
         function createCustomMarker(category) {
@@ -685,7 +646,7 @@
                 
                 updateInfo(`✅ Načteno ${data.length} VR míst z JSON`);
                 
-                // Center mapy na první marker
+                // Centrace mapy na první marker
                 if (data.length > 0) {
                     map.setView([data[0].lat, data[0].lon], 6);
                 }
@@ -698,95 +659,390 @@
             }
         }
 
-        // VR Viewer třída
-        class VRViewer {
-            constructor(canvas) {
-                this.canvas = canvas;
-                this.ctx = canvas.getContext('2d');
-                this.image = null;
-                this.viewMode = 'stereo';
-                this.isDragging = false;
-                this.lastMouseX = 0;
-                this.lastMouseY = 0;
-                this.rotationX = 0;
-                this.rotationY = 0;
-                this.fov = 90;
-                this.isVRMode = false;
-                
-                this.initEventListeners();
-                this.resize();
-                this.checkVRSupport();
-                
-                window.addEventListener('resize', () => this.resize());
-                this.setupDeviceOrientation();
-            }
+        // VR funkce s stereo-img
+        function openVR(name, imagePath, category, index) {
+            const modal = document.getElementById('vrModal');
+            const vrImage = document.getElementById('vrImage');
+            const vrTitle = document.getElementById('vrTitle');
+            const vrDescription = document.getElementById('vrDescription');
             
-            checkVRSupport() {
-                const vrButton = document.getElementById('vrHeadsetButton');
+            // Nastavení informací
+            vrTitle.textContent = name.replace(/_/g, ' ');
+            vrDescription.innerHTML = `
+                <strong>Kategorie:</strong> ${category.replace(/_/g, ' ')}<br>
+                <strong>Ovládání:</strong> Myš/dotyky pro otáčení<br>
+                <strong>VR mód:</strong> Kompatibilní s VR headsety<br>
+                <strong>Escape:</strong> Zavření VR módu
+            `;
+            
+            // Zobrazení modal
+            modal.style.display = 'block';
+            
+            // Nastavení stereo obrázku podle přiloženého příkladu
+            setTimeout(() => {
+                vrImage.setAttribute('src', imagePath);
+                vrImage.style.display = 'block';
                 
-                if ('xr' in navigator) {
-                    navigator.xr.isSessionSupported('immersive-vr').then(supported => {
-                        if (supported) {
-                            vrButton.style.display = 'block';
-                            vrButton.style.background = 'rgba(34, 139, 34, 0.8)';
-                            vrButton.textContent = '🥽 WebXR VR';
-                        } else {
-                            this.setupFallbackVR(vrButton);
-                        }
-                    }).catch(() => {
-                        this.setupFallbackVR(vrButton);
-                    });
-                } else if ('getVRDisplays' in navigator) {
-                    navigator.getVRDisplays().then(displays => {
-                        if (displays.length > 0) {
-                            vrButton.style.display = 'block';
-                            vrButton.style.background = 'rgba(34, 139, 34, 0.8)';
-                            vrButton.textContent = '🥽 WebVR';
-                        } else {
-                            this.setupFallbackVR(vrButton);
-                        }
-                    });
-                } else {
-                    this.setupFallbackVR(vrButton);
-                }
-            }
-            
-            setupFallbackVR(vrButton) {
-                vrButton.style.display = 'block';
-                vrButton.style.background = 'rgba(74, 144, 226, 0.8)';
-                vrButton.textContent = '🥽 Mobile VR';
-            }
-            
-            setupDeviceOrientation() {
-                if ('DeviceOrientationEvent' in window) {
-                    let permission = true;
-                    
-                    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                        permission = false;
-                    }
-                    
-                    if (permission) {
-                        window.addEventListener('deviceorientation', (e) => {
-                            if (this.isVRMode && !this.isDragging) {
-                                if (e.beta !== null && e.gamma !== null && e.alpha !== null) {
-                                    this.rotationX = Math.max(-90, Math.min(90, e.beta - 90));
-                                    this.rotationY = e.alpha || 0;
-                                    this.render();
-                                }
-                            }
+                // Pokus o přechod do fullscreen pro lepší VR zážitek
+                vrImage.addEventListener('click', () => {
+                    if (modal.requestFullscreen) {
+                        modal.requestFullscreen().catch(err => {
+                            console.log('Fullscreen není dostupný:', err);
                         });
                     }
-                }
+                });
+                
+                console.log('✅ Stereo VR obrázek načten:', imagePath);
+            }, 100);
+            
+            updateInfo(`🥽 VR mód: ${name.replace(/_/g, ' ')}`);
+        }
+
+        function closeVR() {
+            const modal = document.getElementById('vrModal');
+            const vrImage = document.getElementById('vrImage');
+            
+            modal.style.display = 'none';
+            vrImage.style.display = 'none';
+            vrImage.removeAttribute('src');
+            
+            // Ukončení fullscreen pokud je aktivní
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
             }
             
-            async enterVRMode() {
-                try {
-                    if ('xr' in navigator) {
-                        const session = await navigator.xr.requestSession('immersive-vr');
-                        this.startWebXRSession(session);
-                        return;
+            updateInfo('✅ VR mód ukončen');
+        }
+
+        // Funkce pro vytvoření opakujících se GeoJSON vrstev
+        function createRepeatingGeoJSONLayer(data, layerName, styles) {
+            const layersList = [];
+            
+            const layer = L.geoJSON(data, {
+                style: styles[layerName],
+                onEachFeature: function (feature, layer) {
+                    if (feature.properties) {
+                        const name = feature.properties.NAME || feature.properties.name || 'Neznámé';
+                        layer.bindPopup(`<strong>${name}</strong>`);
                     }
+                }
+            });
+            layersList.push(layer);
+            
+            for (let offset of [-360, 360]) {
+                const duplicatedData = JSON.parse(JSON.stringify(data));
+                duplicatedData.features.forEach(feature => {
+                    if (feature.geometry.type === 'Polygon') {
+                        feature.geometry.coordinates.forEach(ring => 
+                            ring.forEach(coord => coord[0] += offset)
+                        );
+                    } else if (feature.geometry.type === 'MultiPolygon') {
+                        feature.geometry.coordinates.forEach(polygon =>
+                            polygon.forEach(ring => 
+                                ring.forEach(coord => coord[0] += offset)
+                            )
+                        );
+                    }
+                });
+                
+                const duplicatedLayer = L.geoJSON(duplicatedData, {
+                    style: styles[layerName],
+                    onEachFeature: function (feature, layer) {
+                        if (feature.properties) {
+                            const name = feature.properties.NAME || feature.properties.name || 'Neznámé';
+                            layer.bindPopup(`<strong>${name}</strong>`);
+                        }
+                    }
+                });
+                layersList.push(duplicatedLayer);
+            }
+            
+            return L.layerGroup(layersList);
+        }
+
+        // Načtení hranic států
+        async function loadCountriesGeoJSON() {
+            try {
+                const response = await fetch('data/countries.geojson');
+                if (!response.ok) return;
+                
+                const data = await response.json();
+                console.log(`✅ Načteno: ${data.features.length} zemí`);
+                
+                const countryStyle = {
+                    fillColor: 'transparent',
+                    weight: 2,
+                    opacity: 0.8,
+                    color: borderColor,
+                    fillOpacity: 0
+                };
+
+                layers.countries = createRepeatingGeoJSONLayer(data, 'countries', {countries: countryStyle});
+                layers.countries.addTo(map);
+                
+            } catch (error) {
+                console.log('ℹ️ Hranice států nejsou dostupné');
+            }
+        }
+
+        // Markery
+        function addMarker() {
+            const lat = parseFloat(document.getElementById('markerLat').value);
+            const lng = parseFloat(document.getElementById('markerLng').value);
+            const text = document.getElementById('markerText').value || `Marker ${++markerCount}`;
+            
+            if (isNaN(lat) || isNaN(lng)) {
+                alert('Zadejte platné GPS souřadnice!');
+                return;
+            }
+            
+            if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+                alert('GPS souřadnice jsou mimo platný rozsah!');
+                return;
+            }
+            
+            const marker = L.marker([lat, lng]).addTo(markersGroup);
+            marker.bindPopup(`
+                <div style="color: #333; font-family: Arial, sans-serif;">
+                    <strong style="color: #4a90e2;">${text}</strong><br>
+                    <small>GPS: ${lat.toFixed(4)}, ${lng.toFixed(4)}</small>
+                </div>
+            `);
+            
+            document.getElementById('markerLat').value = '';
+            document.getElementById('markerLng').value = '';
+            document.getElementById('markerText').value = '';
+            
+            updateInfo(`✅ Marker "${text}" přidán`);
+            map.setView([lat, lng], Math.max(map.getZoom(), 6));
+        }
+
+        function clearMarkers() {
+            const count = markersGroup.getLayers().length;
+            markersGroup.clearLayers();
+            markerCount = 0;
+            dataMarkers = [];
+            updateInfo(`🗑️ Smazáno ${count} markerů`);
+            
+            // Znovu načíst data z JSON
+            setTimeout(loadDataFromJSON, 500);
+        }
+
+        // Event listenery pro ovládání
+        
+        // Barva hranic
+        document.getElementById('borderColor').addEventListener('change', function() {
+            borderColor = this.value;
+            if (layers.countries) {
+                map.removeLayer(layers.countries);
+                loadCountriesGeoJSON();
+            }
+            updateInfo(`🎨 Barva hranic změněna`);
+        });
+
+        // Checkbox hranice
+        document.getElementById('countries').addEventListener('change', function() {
+            if (this.checked && layers.countries) {
+                layers.countries.addTo(map);
+                updateInfo('🌍 Hranice států zobrazeny');
+            } else if (layers.countries) {
+                map.removeLayer(layers.countries);
+                updateInfo('🌍 Hranice států skryty');
+            }
+        });
+
+        // Overlay vrstva
+        document.getElementById('overlayLayer').addEventListener('change', function() {
+            const selectedOverlay = this.value;
+            
+            if (currentOverlayLayer) {
+                map.removeLayer(currentOverlayLayer);
+                currentOverlayLayer = null;
+            }
+            
+            if (selectedOverlay !== 'none') {
+                currentOverlayLayer = createOverlayLayer(selectedOverlay);
+                if (currentOverlayLayer) {
+                    const opacity = document.getElementById('overlayOpacity').value / 100;
+                    currentOverlayLayer.setOpacity(opacity);
+                    currentOverlayLayer.addTo(map);
                     
-                    if ('getVRDisplays' in navigator) {
-                        const displays = await navigator.getVRDisplays();
-                        if (displays.length > 0) {
+                    setTimeout(() => {
+                        const blendMode = document.getElementById('blendMode').value;
+                        const container = currentOverlayLayer.getContainer();
+                        if (container) {
+                            container.className = container.className.replace(/blend-\w+/g, '');
+                            container.classList.add(`blend-${blendMode}`);
+                        }
+                        applyOverlayFilters();
+                    }, 100);
+                    
+                    updateInfo(`🎨 Overlay: ${selectedOverlay}`);
+                }
+            } else {
+                updateInfo('🗺️ Overlay odstraněn');
+            }
+        });
+
+        // Blend mode
+        document.getElementById('blendMode').addEventListener('change', function() {
+            const blendMode = this.value;
+            if (currentOverlayLayer) {
+                const container = currentOverlayLayer.getContainer();
+                if (container) {
+                    container.className = container.className.replace(/blend-\w+/g, '');
+                    container.classList.add(`blend-${blendMode}`);
+                }
+            }
+            updateInfo(`🎨 Blend mode: ${blendMode}`);
+        });
+
+        // Opacity
+        document.getElementById('overlayOpacity').addEventListener('input', function() {
+            const opacity = this.value / 100;
+            document.getElementById('opacityValue').textContent = `${this.value}%`;
+            
+            if (currentOverlayLayer) {
+                currentOverlayLayer.setOpacity(opacity);
+            }
+        });
+
+        // Invert overlay
+        document.getElementById('invertOverlay').addEventListener('change', function() {
+            applyOverlayFilters();
+        });
+
+        // Color correction event listenery
+        document.getElementById('baseBrightness').addEventListener('input', function() {
+            document.getElementById('baseBrightnessValue').textContent = `${this.value}%`;
+            applyBaseFilters();
+        });
+
+        document.getElementById('baseContrast').addEventListener('input', function() {
+            document.getElementById('baseContrastValue').textContent = `${this.value}%`;
+            applyBaseFilters();
+        });
+
+        document.getElementById('baseSaturation').addEventListener('input', function() {
+            document.getElementById('baseSaturationValue').textContent = `${this.value}%`;
+            applyBaseFilters();
+        });
+
+        document.getElementById('baseHue').addEventListener('input', function() {
+            document.getElementById('baseHueValue').textContent = `${this.value}°`;
+            applyBaseFilters();
+        });
+
+        document.getElementById('overlayBrightness').addEventListener('input', function() {
+            document.getElementById('overlayBrightnessValue').textContent = `${this.value}%`;
+            applyOverlayFilters();
+        });
+
+        document.getElementById('overlayContrast').addEventListener('input', function() {
+            document.getElementById('overlayContrastValue').textContent = `${this.value}%`;
+            applyOverlayFilters();
+        });
+
+        document.getElementById('overlaySaturation').addEventListener('input', function() {
+            document.getElementById('overlaySaturationValue').textContent = `${this.value}%`;
+            applyOverlayFilters();
+        });
+
+        document.getElementById('overlayHue2').addEventListener('input', function() {
+            document.getElementById('overlayHueValue').textContent = `${this.value}°`;
+            applyOverlayFilters();
+        });
+
+        // Filter functions
+        function applyBaseFilters() {
+            const brightness = document.getElementById('baseBrightness').value;
+            const contrast = document.getElementById('baseContrast').value;
+            const saturation = document.getElementById('baseSaturation').value;
+            const hue = document.getElementById('baseHue').value;
+            
+            const filterValue = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg)`;
+            
+            const baseContainer = baseLayer.getContainer();
+            if (baseContainer) {
+                baseContainer.style.filter = filterValue;
+            }
+        }
+
+        function applyOverlayFilters() {
+            if (!currentOverlayLayer) return;
+            
+            const brightness = document.getElementById('overlayBrightness').value;
+            const contrast = document.getElementById('overlayContrast').value;
+            const saturation = document.getElementById('overlaySaturation').value;
+            const hue = document.getElementById('overlayHue2').value;
+            const invert = document.getElementById('invertOverlay').checked ? 1 : 0;
+            
+            const filterValue = `brightness(${brightness}%) contrast(${contrast}%) saturate(${saturation}%) hue-rotate(${hue}deg) invert(${invert})`;
+            
+            const overlayContainer = currentOverlayLayer.getContainer();
+            if (overlayContainer) {
+                overlayContainer.style.filter = filterValue;
+            }
+        }
+
+        function updateInfo(message) {
+            const infoText = document.getElementById('infoText');
+            const timestamp = new Date().toLocaleTimeString();
+            infoText.innerHTML = `${message}<br><small style="color: #888;">${timestamp}</small><br><br>
+            <strong>Ovládání:</strong><br>
+            • Kliknutí = GPS souřadnice<br>
+            • Drag = posouvání mapy<br>
+            • Kolečko = zoom<br>
+            • Dvojklik = rychlý zoom<br><br>
+            <strong>VR Obsah:</strong><br>
+            • 🏰 Hrady (hnědé markery)<br>
+            • 🏛️ Historické místa (modré)<br>
+            • 🌳 Parky (zelené)<br>
+            • Kliknutím zobrazíte 180° VR`;
+        }
+
+        // Map events
+        map.on('click', function(e) {
+            const lat = e.latlng.lat.toFixed(4);
+            const lng = e.latlng.lng.toFixed(4);
+            updateInfo(`📍 Kliknuto na: ${lat}, ${lng}`);
+            
+            document.getElementById('markerLat').value = lat;
+            document.getElementById('markerLng').value = lng;
+        });
+
+        map.on('zoomend', function() {
+            const zoom = map.getZoom();
+            updateInfo(`🔍 Zoom úroveň: ${zoom}`);
+        });
+
+        // Keyboard shortcuts pro VR modal
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeVR();
+            }
+        });
+
+        // Inicializace
+        async function initializeMap() {
+            console.log('🌍 Načítám hranice států...');
+            await loadCountriesGeoJSON();
+            
+            console.log('📊 Načítám data z JSON...');
+            await loadDataFromJSON();
+            
+            updateInfo('✅ 2D mapa s VR obsahem plně inicializována');
+        }
+
+        // Globální funkce pro VR (přístupné z popup)
+        window.openVR = openVR;
+        window.closeVR = closeVR;
+
+        // Spuštění
+        window.addEventListener('load', initializeMap);
+
+        console.log('✅ 2D mapa s stereo-img VR podporou připravena');
+    </script>
+</body>
+</html>
+            const lat =
