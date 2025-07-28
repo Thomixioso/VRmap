@@ -13,7 +13,7 @@
     padding: 20px;
     background-color: #f5f5f5;
   }
-  
+
   .container {
     max-width: 1200px;
     margin: 0 auto;
@@ -22,26 +22,26 @@
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     overflow: hidden;
   }
-  
+
   .header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     padding: 20px;
     text-align: center;
   }
-  
+
   #map { 
     height: 65vh; 
     width: 100%; 
   }
-  
+
   #imageContainer { 
     padding: 20px;
     text-align: center;
     min-height: 250px;
     background: #f8f9fa;
   }
-  
+
   #imageContainer img { 
     max-width: 100%; 
     max-height: 400px;
@@ -50,31 +50,34 @@
     border-radius: 8px;
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
   }
-  
-  /* VR Container */
+
+  /* VR overlay container */
   #vrContainer {
     display: none; /* výchozí skryto */
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
     background: black;
     z-index: 10000;
   }
-  
+
   #vrContainer.active {
     display: block; /* když je aktivní VR */
   }
-  
-  /* tlačítko Exit je vždy vidět, když je VR aktivní */
+
+  /* Overlay tlačítko "Exit" */
   .vr-controls {
     position: absolute;
     top: 20px;
     right: 20px;
     z-index: 10001;
+    display: none; /* výchozí - při aktivní VR jej zobrazíme */
   }
-  
+
+  #vrContainer.active .vr-controls {
+    display: block; /* zobrazit při aktivní VR */
+  }
+
   .vr-exit-btn {
     background: #dc3545;
     color: white;
@@ -88,9 +91,9 @@
   .vr-exit-btn:hover {
     background: #c82333;
   }
+
   .stereo-container {
-    width: 100%;
-    height: 100%;
+    width: 100%; height: 100%;
   }
 </style>
 </head>
@@ -100,7 +103,7 @@
     <h1>🗺️ Mapa zajímavých míst</h1>
     <p>Prozkoumejte zajímavá místa po celém světě</p>
   </div>
-  
+
   <div class="stats">
     <div class="stat-item">
       <strong id="totalLocations">0</strong>
@@ -111,18 +114,18 @@
       <div>Vybrané místo</div>
     </div>
   </div>
-  
+
   <div id="map"></div>
-  
+
   <div id="imageContainer">
     <div class="loading">🌍 Klikněte na marker na mapě pro zobrazení informací a obrázku</div>
   </div>
 </div>
 
-<!-- VR Container -->
+<!-- VR Container s overlay tlačítkem Exit -->
 <div id="vrContainer">
   <div class="vr-controls">
-    <button class="vr-exit-btn" onclick="exitVR()">Exit VR</button>
+    <button class="vr-exit-btn" onclick="exitVR()">Exit</button>
   </div>
   <div class="stereo-container"></div>
 </div>
@@ -144,6 +147,9 @@ const categoryColors = {
 
 // Inicializace mapy
 function initMap() {
+  if (map) {
+    map.remove();
+  }
   map = L.map('map').setView([50.0755, 14.4378], 6);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
@@ -239,7 +245,6 @@ function openVRView(imagePath) {
   window.requestAnimationFrame(checkGamepads);
 }
 
-// Funkce pro ukončení VR
 function exitVR() {
   const vrContainer = document.getElementById('vrContainer');
   vrContainer.classList.remove('active');
@@ -247,7 +252,7 @@ function exitVR() {
   stereoContainer.innerHTML = '';
 }
 
-// Kontrola gamepadů, pokud jsou tlačítka A, B, X nebo Y stisknutá, ukončit VR
+// Kontrola gamepadů
 function checkGamepads() {
   const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
   for (let gp of gamepads) {
@@ -258,11 +263,10 @@ function checkGamepads() {
           gp.buttons[2]?.pressed || // X
           gp.buttons[3]?.pressed) { // Y
         exitVR();
-        return; // ukončit kontrolu
+        return;
       }
     }
   }
-  // Pokud VR stále aktivní, kontrolovat znovu
   if (document.querySelector('#vrContainer').classList.contains('active')) {
     requestAnimationFrame(checkGamepads);
   }
@@ -282,34 +286,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initMap();
   loadData();
 });
-
-function initMap() {
-  if (map) {
-    map.remove();
-  }
-  map = L.map('map').setView([50.0755, 14.4378], 6);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors'
-  }).addTo(map);
-}
-
-// Načtení dat
-async function loadData() {
-  try {
-    const response = await fetch('data.json');
-    if (!response.ok) throw new Error(`HTTP error! ${response.status}`);
-    const data = await response.json();
-    markersData = data;
-    updateStats();
-    addMarkersToMap();
-  } catch (error) {
-    document.getElementById('imageContainer').innerHTML =
-      `<div class="error-message">
-        <strong>Chyba při načítání dat:</strong> ${error.message}
-        <br>Zkontrolujte, zda existuje soubor data.json ve stejné složce.
-      </div>`;
-  }
-}
 </script>
 </body>
 </html>
