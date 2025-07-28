@@ -11,11 +11,8 @@
     <!-- Zkopírováno z demo: Polyfill pro WebXR (zajišťuje VR kompatibilitu) -->
     <script src='https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.js'></script>
     <script>
-        window.polyfill = new WebXRPolyfill();  // Inicializace polyfillu pro VR podporu
+        window.polyfill = new WebXRPolyfill();  // Inicializace polyfillu pro VR podporu (přímo z demo)
     </script>
-    
-    <!-- Odkomentuj pro přechod na A-Frame (doporučeno pro lepší kompatibilitu na Meta Quest) -->
-    <!-- <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script> -->
     
     <style>
         #map { height: 400px; }
@@ -59,8 +56,6 @@
     <script>
         let map = L.map('map').setView([50.0755, 14.4378], 13);  // Výchozí pohled (např. Praha)
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-        let xrSession = null;  // Globální proměnná pro XR session
 
         // Fetch data.json s error handling
         fetch('data.json')
@@ -129,82 +124,32 @@
         }
 
         function openVRView(imagePath) {
-            try {
-                const vrContainer = document.getElementById('vrContainer');
-                
-                // Fix chyby: Vytvářej element přes innerHTML místo createElement (obchází problém s atributy)
-                vrContainer.innerHTML += `
-                    <stereo-img src="${imagePath}" type="left-right" angle="180"></stereo-img>
-                `;  // Atributy přímo v stringu; změň 'left-right' nebo '180' podle tvých obrázků
-                
-                vrContainer.classList.add('active');
-
-                // Spustit WebXR session (polyfill zajistí kompatibilitu)
-                if (navigator.xr) {
-                    navigator.xr.requestSession('immersive-vr').then(session => {
-                        xrSession = session;
-                    }).catch(err => {
-                        console.error('XR session failed:', err);
-                        alert('Nepodařilo se spustit VR session. Zkus to v jiném prohlížeči.');
-                    });
-                } else {
-                    console.warn('WebXR není podporováno, polyfill by měl pomoci.');
-                }
-            } catch (e) {
-                console.error('Chyba při otevírání VR:', e);
-                document.getElementById('errorMessage').innerHTML = '<p>Chyba: Nepodařilo se inicializovat VR element. Zkus přechod na A-Frame.</p>';
-            }
+            const vrContainer = document.getElementById('vrContainer');
+            
+            // Zkopírováno z demo: Jednoduché vložení <stereo-img> s atributy (minimální, jako v demo)
+            vrContainer.innerHTML += `
+                <stereo-img src="${imagePath}" type="left-right" angle="180"></stereo-img>
+            `;  // Změň 'left-right' nebo '180' podle tvých obrázků (jako v demo příkladech)
+            
+            vrContainer.classList.add('active');
         }
-
-        // Alternativa: Použij A-Frame místo stereo-img (odkomentuj a načti skript výše)
-        // function openVRView(imagePath) {
-        //     try {
-        //         const vrContainer = document.getElementById('vrContainer');
-        //         vrContainer.innerHTML += `
-        //             <a-scene>
-        //                 <a-sky src="${imagePath}" rotation="0 -90 0"></a-sky>  <!-- Pro 360°/VR obrázek -->
-        //             </a-scene>
-        //         `;
-        //         vrContainer.classList.add('active');
-        // 
-        //         if (navigator.xr) {
-        //             navigator.xr.requestSession('immersive-vr').then(session => {
-        //                 xrSession = session;
-        //             }).catch(err => console.error('XR session failed:', err));
-        //         }
-        //     } catch (e) {
-        //         console.error('Chyba při otevírání VR s A-Frame:', e);
-        //     }
-        // }
 
         function exitVR() {
             const vrContainer = document.getElementById('vrContainer');
             vrContainer.classList.remove('active');
-            vrContainer.innerHTML = '';  // Vyčistit obsah (včetně stereo-img nebo A-Frame)
-
-            // Ukončit XR session, pokud existuje
-            if (xrSession) {
-                xrSession.end().then(() => {
-                    xrSession = null;
-                }).catch(err => console.error('Chyba při ukončení XR session:', err));
-            }
+            vrContainer.innerHTML = '';  // Vyčistit obsah (jako v demo)
         }
 
-        // Opravený listener pro Escape klávesu
+        // Opravený listener pro Escape klávesu (volitelný, můžeš smazat)
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') exitVR();
         });
 
+        // Základní check gamepadů pro Quest ovladače (volitelný, můžeš smazat)
         function checkGamepads() {
             const gamepads = navigator.getGamepads();
             gamepads.forEach(gp => {
                 if (gp && gp.connected) {
-                    // Volitelné logování pro debugging (odkomentuj pro test)
-                    // gp.buttons.forEach((button, index) => {
-                    //     if (button.pressed) console.log(`Button ${index} pressed on ${gp.id}`);
-                    // });
-
-                    // Upravený mapping pro Meta Quest (primární/sekundární tlačítka)
                     if (gp.buttons[3]?.pressed || gp.buttons[4]?.pressed) {
                         exitVR();
                     }
@@ -212,8 +157,7 @@
             });
             setTimeout(checkGamepads, 100);
         }
-
-        checkGamepads();  // Spustit kontrolu gamepadů
+        checkGamepads();  // Spustit kontrolu
     </script>
 </body>
 </html>
