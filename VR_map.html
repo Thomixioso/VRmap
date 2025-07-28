@@ -160,7 +160,7 @@
         }).setView([parameters.mapLat, parameters.mapLng], parameters.mapZoom);
         
         // Use your GitHub offline tiles - corrected URL format
-        const githubTileLayer = L.tileLayer('https://github.com/Thomixioso/VRmap/raw/main/tiles_topo_labeled/{z}/{x}/{y}.png', {
+        const githubTileLayer = L.tileLayer('https://raw.githubusercontent.com/Thomixioso/VRmap/main/tiles_topo_labeled/{z}/{x}/{y}.png', {
             maxZoom: 18,
             minZoom: 0,
             attribution: 'Custom Offline Tiles',
