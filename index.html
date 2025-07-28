@@ -204,12 +204,13 @@ const categoryColors = {
   'Další': '#6c757d'
 };
 
-// Inicializace mapy
+// Inicializace mapy s topografickou vrstvou
 function initMap() {
   map = L.map('map').setView([50.0755, 14.4378], 6);
   
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors'
+  // Topografická mapa
+  L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+    attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
   }).addTo(map);
 }
 
@@ -221,15 +222,16 @@ async function loadData() {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const data = await response.json();
-    markersData = data; // Změna: data jsou přímo array, ne data.locations
+    markersData = data;
     
+
+
     updateStats();
     addMarkersToMap();
     
   } catch (error) {
     console.error('Chyba při načítání dat:', error);
     document.getElementById('imageContainer').innerHTML = 
-
       `<div class="error-message">
         <strong>Chyba při načítání dat:</strong> ${error.message}
         <br>Zkontrolujte, zda existuje soubor data.json ve stejné složce.
@@ -245,7 +247,6 @@ function updateStats() {
 // Přidání markerů na mapu
 function addMarkersToMap() {
   markersData.forEach((location, index) => {
-    // Změna: používám location.lon místo location.lng
     const marker = L.marker([location.lat, location.lon]).addTo(map);
     
     marker.bindPopup(`
@@ -257,27 +258,20 @@ function addMarkersToMap() {
             ${location.category}
           </span>
         </div>
-        <button onclick="showLocationDetails(${index})" 
-                style="background: #007bff; color: white; border: none; padding: 8px 16px; 
-                       border-radius: 4px; cursor: pointer; margin-top: 10px;">
-          Zobrazit detail
-        </button>
       </div>
     `);
     
-    marker.on('click', () => showLocationDetails(index));
+    // Přímé otevření VR při kliknutí na marker
+    marker.on('click', () => openVRViewDirectly(location));
   });
 }
 
-// Zobrazení detailu lokace
-function showLocationDetails(index) {
-  const location = markersData[index];
-  if (!location) return;
-  
+// Přímé otevření VR bez zobrazení detailu
+function openVRViewDirectly(location) {
   document.getElementById('selectedLocation').textContent = location.name;
   
+  // Aktualizace imageContainer pro případ návratu z VR
   const imageContainer = document.getElementById('imageContainer');
-  
   imageContainer.innerHTML = `
     <div class="location-info">
       <h2 style="color: #333; margin-top: 0;">${location.name}</h2>
@@ -304,10 +298,13 @@ function showLocationDetails(index) {
       </div>
     </div>
   `;
+  
+  // Okamžité otevření VR
+  openVRView(location.image);
 }
 
-// VR funkce
-function openVRView(imagePath) {
+// VR funkce s immersive módem
+async function openVRView(imagePath) {
   const vrContainer = document.getElementById('vrContainer');
   const stereoContainer = vrContainer.querySelector('.stereo-container');
   
@@ -320,6 +317,21 @@ function openVRView(imagePath) {
   
   // Zamezení scrollování stránky
   document.body.style.overflow = 'hidden';
+  
+  // Pokus o spuštění immersive VR módu pro Meta Quest
+  try {
+    if (navigator.xr) {
+      const session = await navigator.xr.requestSession('immersive-vr');
+      console.log('VR session started');
+      
+      // Posluchač pro ukončení VR session
+      session.addEventListener('end', () => {
+        exitVR();
+      });
+    }
+  } catch (error) {
+    console.log('Immersive VR not available, using regular stereo view:', error);
+  }
 }
 
 function exitVR() {
@@ -334,10 +346,22 @@ function exitVR() {
   // Vyčištění stereo vieweru
   const stereoContainer = vrContainer.querySelector('.stereo-container');
   stereoContainer.innerHTML = '';
+  
+  // Ukončení VR session pokud existuje
+  if (navigator.xr) {
+    navigator.xr.getSession().then(session => {
+      if (session) {
+        session.end();
+      }
+    }).catch(() => {
+      // Session neexistuje nebo již byla ukončena
+    });
+  }
 }
 
-// Keyboard shortcuts pro VR
+// Posluchače pro Meta Quest ovladače
 document.addEventListener('keydown', function(event) {
+  // Escape klávesa
   if (event.key === 'Escape') {
     const vrContainer = document.getElementById('vrContainer');
     if (vrContainer.classList.contains('active')) {
@@ -346,16 +370,119 @@ document.addEventListener('keydown', function(event) {
   }
 });
 
+// Gamepad API pro Meta Quest ovladače
+window.addEventListener('gamepadconnected', function(e) {
+  console.log('Gamepad connected:', e.gamepad);
+});
+
+function checkGamepadInput() {
+  const gamepads = navigator.getGamepads();
+  
+  for (let i = 0; i < gamepads.length; i++) {
+    const gamepad = gamepads[i];
+    if (gamepad) {
+      // Tlačítko X na Meta Quest ovladači (obvykle button index 3)
+      if (gamepad.buttons[3] && gamepad.buttons[3].pressed) {
+        const vrContainer = document.getElementById('vrContainer');
+        if (vrContainer.classList.contains('active')) {
+          exitVR();
+        }
+      }
+      
+      // Alternativně také menu tlačítko (button index 6)
+      if (gamepad.buttons[6] && gamepad.buttons[6].pressed) {
+        const vrContainer = document.getElementById('vrContainer');
+        if (vrContainer.classList.contains('active')) {
+          exitVR();
+        }
+      }
+    }
+  }
+}
+
+// Pravidelná kontrola gamepad inputu
+setInterval(checkGamepadInput, 100);
+
+// WebXR posluchače pro Meta Quest
+if (navigator.xr) {
+  navigator.xr.addEventListener('devicechange', () => {
+    console.log('XR device changed');
+  });
+}
+
 // Inicializace při načtení stránky
 document.addEventListener('DOMContentLoaded', function() {
   initMap();
   loadData();
+  
+  // Kontrola WebXR podpory
+  if (navigator.xr) {
+    navigator.xr.isSessionSupported('immersive-vr').then(supported => {
+      if (supported) {
+        console.log('Immersive VR is supported');
+
+
+      } else {
+        console.log('Immersive VR is not supported');
+      }
+    });
+  } else {
+    console.log('WebXR is not supported');
+  }
 });
 
 // Responsive behavior
 window.addEventListener('resize', function() {
   if (map) {
     map.invalidateSize();
+  }
+});
+
+// Touch události pro mobilní zařízení (Meta Quest browser)
+let touchStartTime = 0;
+document.addEventListener('touchstart', function(e) {
+  touchStartTime = Date.now();
+});
+
+document.addEventListener('touchend', function(e) {
+  const touchDuration = Date.now() - touchStartTime;
+  const vrContainer = document.getElementById('vrContainer');
+  
+  // Dlouhé stisknutí (1+ sekunda) pro exit z VR
+  if (touchDuration > 1000 && vrContainer.classList.contains('active')) {
+    exitVR();
+  }
+});
+
+// Dodatečná podpora pro Meta Quest specifické události
+document.addEventListener('selectstart', function(e) {
+  const vrContainer = document.getElementById('vrContainer');
+  if (vrContainer.classList.contains('active')) {
+    e.preventDefault();
+    exitVR();
+  }
+});
+
+// Podpora pro motion controllers
+function handleControllerInput(event) {
+  if (event.detail && event.detail.buttonPressed) {
+    const vrContainer = document.getElementById('vrContainer');
+    if (vrContainer.classList.contains('active')) {
+      // X button nebo menu button
+      if (event.detail.buttonIndex === 3 || event.detail.buttonIndex === 6) {
+        exitVR();
+      }
+    }
+  }
+}
+
+// Posluchač pro custom controller události
+document.addEventListener('controllerinput', handleControllerInput);
+
+// Fallback pro starší Meta Quest browsers
+document.addEventListener('vrdisplaypresentchange', function(event) {
+  if (!event.display.isPresenting) {
+    exitVR();
   }
 });
 </script>
@@ -373,10 +500,7 @@ window.addEventListener('resize', function() {
 
 
 
-
-
-
-
+	    
 	
-      
+	  
 	  
