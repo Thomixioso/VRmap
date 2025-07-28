@@ -316,23 +316,17 @@
                 }
             };
             
-            // Load tile from GitHub - corrected URL format
-            const primaryUrl = `https://github.com/Thomixioso/VRmap/raw/main/tiles_topo_labeled/${tile.z}/${tile.x}/${tile.y}.png`;
-            const fallbackUrl = `https://raw.githubusercontent.com/Thomixioso/VRmap/main/tiles_topo_labeled/${tile.z}/${tile.x}/${tile.y}.png`;
+            // Load tile from GitHub - correct raw.githubusercontent.com URL
+            const correctUrl = `https://raw.githubusercontent.com/Thomixioso/VRmap/main/tiles_topo_labeled/${tile.z}/${tile.x}/${tile.y}.png`;
             
-            // Try primary GitHub raw URL first
-            img.src = primaryUrl;
+            img.src = correctUrl;
             
-            // If primary fails, try raw.githubusercontent.com as fallback
-            const originalOnError = img.onerror;
             img.onerror = function() {
-                if (img.src === primaryUrl) {
-                    console.log(`Primary URL failed, trying fallback for tile: ${tile.z}/${tile.x}/${tile.y}`);
-                    img.src = fallbackUrl;
-                    img.onerror = originalOnError;
-                } else {
-                    console.log(`Both URLs failed for tile: ${tile.z}/${tile.x}/${tile.y}`);
-                    originalOnError.call(this);
+                console.log(`Tile not found: ${tile.z}/${tile.x}/${tile.y}`);
+                tilesLoaded++;
+                if (tilesLoaded === totalTiles) {
+                    // Fallback if tiles fail to load
+                    drawFallbackMap(ctx, width, height);
                 }
             };
         });
