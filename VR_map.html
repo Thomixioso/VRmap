@@ -95,7 +95,30 @@
             };
 
             var createScene = async function () {
-                // Create basic Babylon Scene
+                console.log('🗺️ Initializing map...');
+                
+                // Initialize Leaflet map first
+                const map = L.map('map', {
+                    center: [49.75, 15.5],
+                    zoom: 2,
+                    minZoom: 0,
+                    maxZoom: 3,
+                    zoomControl: true,
+                    attributionControl: false
+                });
+
+                // Add topographic layer
+                const topoLayer = L.tileLayer('tiles_topo_labeled/{z}/{x}/{y}.png', {
+                    attribution: 'ESRI Topographic (Offline)',
+                    minZoom: 0,
+                    maxZoom: 3,
+                    maxNativeZoom: 3
+                });
+                
+                topoLayer.on('tileload', () => console.log('✅ Tile loaded'));
+                topoLayer.addTo(map);
+
+                // This creates a basic Babylon Scene object
                 var scene = new BABYLON.Scene(engine);
 
                 // Camera
@@ -107,76 +130,24 @@
                 var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
                 light.intensity = 0.7;
 
-                // Initialize map first
-                console.log('🗺️ Starting map initialization...');
-                initializeMap();
+                // Create VR map display
+                const mapContainer = document.getElementById('mapContainer');
+                new HtmlMesh(mapContainer, scene);
 
-                // XR first, then create map display
-                console.log('🥽 Creating XR experience...');
-                const xrHelper = await scene.createDefaultXRExperienceAsync({
-                    floorMeshes: []
-                });
+                // XR
+                const xrHelper = await scene.createDefaultXRExperienceAsync();
 
-                // Wait for XR and map to be ready
-                setTimeout(() => {
-                    console.log('🎮 Creating VR map display...');
-                    const mapContainer = document.getElementById('mapContainer');
-                    const htmlMesh = new HtmlMesh(mapContainer, scene, xrHelper);
-                }, 2000);
-
+                console.log('✅ VR World Map ready');
                 return scene;
             };
 
-            // Initialize Leaflet map
-            let map;
-            function initializeMap() {
-                console.log('🗺️ Initializing offline topographic map...');
-                
-                map = L.map('map', {
-                    center: [49.75, 15.5], // Czech Republic center
-                    zoom: 2,
-                    minZoom: 0,
-                    maxZoom: 3,
-                    zoomControl: true,
-                    attributionControl: false,
-                    worldCopyJump: true,
-                    maxBounds: [[-85, -Infinity], [85, Infinity]],
-                    maxBoundsViscosity: 1.0
-                });
-
-                console.log('📍 Map object created, adding topographic layer...');
-
-                // Only topographic layer (GitHub available levels 0-3)
-                const topoLayer = L.tileLayer('tiles_topo_labeled/{z}/{x}/{y}.png', {
-                    attribution: 'ESRI Topographic (Offline)',
-                    minZoom: 0,
-                    maxZoom: 3,
-                    maxNativeZoom: 3
-                });
-                
-                topoLayer.on('loading', () => console.log('🔄 Topo layer loading...'));
-                topoLayer.on('load', () => console.log('✅ Topo layer loaded'));
-                topoLayer.on('tileerror', (e) => console.log('❌ Topo tile error:', e.tile.src));
-                topoLayer.on('tileload', (e) => console.log('✅ Tile loaded:', e.tile.src));
-                
-                topoLayer.addTo(map);
-
-                // Map events
-                map.on('moveend', () => {
-                    const center = map.getCenter();
-                    const zoom = map.getZoom();
-                    console.log(`🗺️ Map moved to: ${center.lat.toFixed(3)}, ${center.lng.toFixed(3)}, zoom: ${zoom}`);
-                });
-
-                console.log('✅ Offline topographic map initialized (levels 0-3)');
-            }
-
-            // HtmlTexture - converts HTML DOM to texture
+            // HtmlTexture converts a HTML DOM element into a texture using html2canvas
             class HtmlTexture extends BABYLON.DynamicTexture {
                 constructor(domElement, scene) {
                     super("HtmlTexture", html2canvas(domElement), scene);
                     this.domElement = domElement;
 
+                    // Create an observer on the DOM, and run html2canvas update in the next loop
                     const observer = new MutationObserver(() => {
                         if (!this.scheduleUpdate) {
                             this.scheduleUpdate = setTimeout(() => this.update(), 16);
@@ -203,184 +174,91 @@
                 }
             }
 
-            // HtmlMesh - creates interactive mesh with HTML content + VR support
+            // Creates a plane mesh and material with an attached HtmlTexture
+            // Handles events for HTML interactions
             class HtmlMesh {
-                constructor(domElement, scene, xrHelper = null) {
+                constructor(domElement, scene) {
                     this.domElement = domElement;
-                    this.scene = scene;
-                    this.xrHelper = xrHelper;
 
-                    // Create texture and mesh
+                    // create HTML texture
                     this.texture = new HtmlTexture(domElement, scene);
                     this.texture.hasAlpha = true;
 
-                    this.mesh = BABYLON.MeshBuilder.CreatePlane("mapPlane", { height: 6, width: 8 });
-                    this.material = new BABYLON.StandardMaterial("mapMaterial", scene);
+                    // create plane
+                    this.mesh = BABYLON.MeshBuilder.CreatePlane("plane", { height: 6, width: 8 });
+                    this.material = new BABYLON.StandardMaterial("Mat", scene);
+
+                    // create material
                     this.material.diffuseTexture = this.texture;
                     this.mesh.material = this.material;
 
+                    // remember to update or you will get NOTHING :)
                     this.texture.update();
 
-                    // Setup desktop interaction
-                    this.setupDesktopInteraction();
-                    
-                    // Setup VR interaction if available
-                    if (xrHelper) {
-                        this.setupVRInteraction();
-                    }
-                }
+                    // setup actions
+                    this.mesh.actionManager = new BABYLON.ActionManager(scene);
 
-                setupDesktopInteraction() {
-                    this.mesh.actionManager = new BABYLON.ActionManager(this.scene);
-
-                    // Mouse events for desktop
+                    // mousedown event on OnPickDownTrigger action
                     this.mesh.actionManager.registerAction(
                         new BABYLON.ExecuteCodeAction(
-                            { trigger: BABYLON.ActionManager.OnPickDownTrigger },
+                            {
+                                trigger: BABYLON.ActionManager.OnPickDownTrigger,
+                            },
                             (evt) => {
-                                const coords = evt.additionalData.getTextureCoordinates();
-                                this.htmlevent("mousedown", coords.x, 1 - coords.y);
-                            }
+                                const htmlCoords = evt.additionalData.getTextureCoordinates();
+                                // XXX: y coordinates are inverted between browser and 3D
+                                htmlevent(this.domElement, "mousedown", htmlCoords.x, 1 - htmlCoords.y);
+                            },
                         )
                     );
 
+                    // mouseup event on OnPickUpTrigger action
                     this.mesh.actionManager.registerAction(
                         new BABYLON.ExecuteCodeAction(
-                            { trigger: BABYLON.ActionManager.OnPickUpTrigger },
+                            {
+                                trigger: BABYLON.ActionManager.OnPickUpTrigger,
+                            },
                             (evt) => {
-                                const coords = evt.additionalData.getTextureCoordinates();
-                                this.htmlevent("mouseup", coords.x, 1 - coords.y);
-                            }
+                                const htmlCoords = evt.additionalData.getTextureCoordinates();
+                                // XXX: y coordinates are inverted between browser and 3D
+                                htmlevent(this.domElement, "mouseup", htmlCoords.x, 1 - htmlCoords.y);
+                            },
                         )
                     );
 
+                    // click event on OnPickTrigger action
                     this.mesh.actionManager.registerAction(
                         new BABYLON.ExecuteCodeAction(
-                            { trigger: BABYLON.ActionManager.OnPickTrigger },
+                            {
+                                trigger: BABYLON.ActionManager.OnPickTrigger,
+                            },
                             (evt) => {
-                                const coords = evt.additionalData.getTextureCoordinates();
-                                this.htmlevent("click", coords.x, 1 - coords.y);
-                            }
+                                const htmlCoords = evt.additionalData.getTextureCoordinates();
+                                // XXX: y coordinates are inverted between browser and 3D
+                                htmlevent(this.domElement, "click", htmlCoords.x, 1 - htmlCoords.y);
+                            },
                         )
                     );
-                }
 
-                setupVRInteraction() {
-                    console.log('🥽 Setting up VR interaction...');
-                    
-                    // Enable pointer selection for this mesh
-                    this.mesh.isPickable = true;
-                    
-                    // Add to XR pointer selection
-                    if (this.xrHelper.pointerSelection) {
-                        this.xrHelper.pointerSelection.attach();
-                        console.log('✅ VR pointer selection attached');
-                    }
-
-                    // Listen for XR controller events
-                    this.scene.actionManager = this.scene.actionManager || new BABYLON.ActionManager(this.scene);
-                    
-                    // VR controller pick events
-                    this.scene.actionManager.registerAction(
+                    // mousemove event on OnPointerOverTrigger action
+                    this.mesh.actionManager.registerAction(
                         new BABYLON.ExecuteCodeAction(
-                            { trigger: BABYLON.ActionManager.OnPickTrigger },
+                            {
+                                trigger: BABYLON.ActionManager.OnPointerOverTrigger,
+                            },
                             (evt) => {
-                                if (evt.meshUnderPointer === this.mesh) {
-                                    console.log('🎮 VR trigger pressed on map');
-                                    const coords = evt.additionalData.getTextureCoordinates();
-                                    if (coords) {
-                                        this.htmlevent("click", coords.x, 1 - coords.y);
-                                    }
-                                }
-                            }
+                                // XXX: additionalData is structured different for mousemove
+                                const htmlCoords = evt.additionalData.pickResult.getTextureCoordinates();
+                                // XXX: y coordinates are inverted between browser and 3D
+                                htmlevent(this.domElement, "mousemove", htmlCoords.x, 1 - htmlCoords.y);
+                            },
                         )
                     );
 
-                    // XR input source events
-                    if (this.xrHelper.input) {
-                        this.xrHelper.input.onControllerAddedObservable.add((controller) => {
-                            console.log('🎮 VR Controller added:', controller.inputSource.handedness);
-                            
-                            controller.onMotionControllerInitObservable.add((motionController) => {
-                                console.log('🎮 Motion controller initialized');
-                                
-                                // Get main component (trigger)
-                                const mainComponent = motionController.getMainComponent();
-                                if (mainComponent) {
-                                    // Trigger press
-                                    mainComponent.onButtonStateChangedObservable.add((component) => {
-                                        if (component.pressed) {
-                                            console.log('🎮 VR Trigger pressed');
-                                            this.handleVRPointerEvent();
-                                        }
-                                    });
-                                }
-
-                                // Get squeeze component if available
-                                const squeezeComponent = motionController.getComponent("squeeze");
-                                if (squeezeComponent) {
-                                    squeezeComponent.onButtonStateChangedObservable.add((component) => {
-                                        if (component.pressed) {
-                                            console.log('🎮 VR Squeeze pressed');
-                                            this.handleVRPointerEvent();
-                                        }
-                                    });
-                                }
-                            });
-                        });
-                    }
-                }
-
-                handleVRPointerEvent() {
-                    // Cast ray from pointer to mesh
-                    const scene = this.scene;
-                    const ray = scene.createPickingRay(scene.pointerX, scene.pointerY, BABYLON.Matrix.Identity(), scene.activeCamera);
-                    const hit = scene.pickWithRay(ray);
-                    
-                    if (hit.hit && hit.pickedMesh === this.mesh) {
-                        const coords = hit.getTextureCoordinates();
-                        if (coords) {
-                            console.log('🎯 VR hit at:', coords.x, 1 - coords.y);
-                            this.htmlevent("click", coords.x, 1 - coords.y);
-                        }
-                    }
-                }
-
-                htmlevent(event, x, y) {
-                    console.log(`🖱️ HTML event: ${event} at ${x.toFixed(3)}, ${y.toFixed(3)}`);
-                    
-                    const element = this.domElement;
-                    const clientX = (x * element.offsetWidth) + element.offsetLeft;
-                    const clientY = (y * element.offsetHeight) + element.offsetTop;
-                    
-                    const mouseEventInit = {
-                        clientX: clientX,
-                        clientY: clientY,
-                        view: element.ownerDocument.defaultView
-                    };
-
-                    const mouseEvent = new MouseEvent(event, mouseEventInit);
-                    
-                    // Find target element
-                    const rect = element.getBoundingClientRect();
-                    const realX = x * rect.width + rect.left;
-                    const realY = y * rect.height + rect.top;
-                    
-                    this.traverse(element, realX, realY, mouseEvent);
-                }
-
-                traverse(element, x, y, mouseEvent) {
-                    if (element.nodeType !== Node.TEXT_NODE && element.nodeType !== Node.COMMENT_NODE) {
-                        const rect = element.getBoundingClientRect();
-                        
-                        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-                            element.dispatchEvent(mouseEvent);
-                        }
-
-                        for (let i = 0; i < element.childNodes.length; i++) {
-                            this.traverse(element.childNodes[i], x, y, mouseEvent);
-                        }
-                    }
+                    // if you set AbstractMesh.pointerOverDisableMeshTesting to
+                    // true, this trigger will be triggered every time you move the
+                    // mouse and you are still over the mesh 
+                    this.mesh.pointerOverDisableMeshTesting = true;
                 }
             }
 
@@ -394,30 +272,28 @@
                     canvas = document.createElement('canvas');
                     canvas.width = offset.width;
                     canvas.height = offset.height;
+                    console.log(`Map canvas size: ${canvas.width}x${canvas.height}`);
                     canvases.set(element, canvas);
                 }
 
                 const context = canvas.getContext('2d');
                 context.clearRect(0, 0, canvas.width, canvas.height);
 
+                // Draw background
+                context.fillStyle = '#1a1a1a';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+
                 // Draw Leaflet map tiles
-                if (map && map.getContainer()) {
+                const mapContainer = element.querySelector('#map');
+                if (mapContainer) {
                     try {
-                        // Get all tile images from Leaflet
-                        const mapContainer = map.getContainer();
                         const tileImages = mapContainer.querySelectorAll('.leaflet-tile');
+                        console.log(`Rendering ${tileImages.length} tiles`);
                         
-                        console.log(`Found ${tileImages.length} tiles to render`);
-                        
-                        // Draw background
-                        context.fillStyle = '#1a1a1a';
-                        context.fillRect(0, 0, canvas.width, canvas.height);
-                        
-                        // Draw each tile
                         tileImages.forEach(img => {
                             if (img.complete && img.naturalHeight !== 0) {
                                 const rect = img.getBoundingClientRect();
-                                const containerRect = mapContainer.getBoundingClientRect();
+                                const containerRect = element.getBoundingClientRect();
                                 
                                 const x = rect.left - containerRect.left;
                                 const y = rect.top - containerRect.top;
@@ -430,71 +306,94 @@
                             }
                         });
 
-                        // Draw zoom controls and other overlays
-                        const overlays = mapContainer.querySelectorAll('.leaflet-control');
-                        overlays.forEach(overlay => {
-                            if (overlay.style.display !== 'none') {
-                                const rect = overlay.getBoundingClientRect();
-                                const containerRect = mapContainer.getBoundingClientRect();
-                                
-                                context.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                                context.fillRect(
-                                    rect.left - containerRect.left,
-                                    rect.top - containerRect.top,
-                                    rect.width,
-                                    rect.height
-                                );
-                            }
+                        // Draw zoom controls
+                        const controls = mapContainer.querySelectorAll('.leaflet-control');
+                        controls.forEach(control => {
+                            const rect = control.getBoundingClientRect();
+                            const containerRect = element.getBoundingClientRect();
+                            
+                            context.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                            context.fillRect(
+                                rect.left - containerRect.left,
+                                rect.top - containerRect.top,
+                                rect.width,
+                                rect.height
+                            );
                         });
                         
                     } catch (e) {
                         console.log('Error rendering map:', e);
                         // Fallback
                         context.fillStyle = '#4a90e2';
-                        context.fillRect(0, 0, canvas.width, canvas.height);
+                        context.fillRect(50, 50, canvas.width - 100, canvas.height - 100);
                         context.fillStyle = '#ffffff';
                         context.font = '24px Arial';
                         context.textAlign = 'center';
-                        context.fillText('Loading Map...', canvas.width / 2, canvas.height / 2);
+                        context.fillText('World Map', canvas.width / 2, canvas.height / 2);
                     }
-                } else {
-                    // Map not ready yet
-                    context.fillStyle = '#333';
-                    context.fillRect(0, 0, canvas.width, canvas.height);
-                    context.fillStyle = '#fff';
-                    context.font = '20px Arial';
-                    context.textAlign = 'center';
-                    context.fillText('Initializing Map...', canvas.width / 2, canvas.height / 2);
                 }
 
                 return canvas;
             }
 
-            // Initialize everything
+            function htmlevent(element, event, x, y) {
+                console.log(`🖱️ Map ${event} at ${x.toFixed(3)}, ${y.toFixed(3)}`);
+                
+                const mouseEventInit = {
+                    clientX: (x * element.offsetWidth) + element.offsetLeft,
+                    clientY: (y * element.offsetHeight) + element.offsetTop,
+                    view: element.ownerDocument.defaultView
+                };
+
+                const m = new MouseEvent(event, mouseEventInit);
+                window.dispatchEvent(m);
+
+                const rect = element.getBoundingClientRect();
+
+                x = x * rect.width + rect.left;
+                y = y * rect.height + rect.top;
+
+                function traverse(element) {
+                    if (element.nodeType !== Node.TEXT_NODE && element.nodeType !== Node.COMMENT_NODE) {
+                        const rect = element.getBoundingClientRect();
+
+                        if (x > rect.left && x < rect.right && y > rect.top && y < rect.bottom) {
+                            element.dispatchEvent(new MouseEvent(event, mouseEventInit));
+                        }
+
+                        for (let i = 0; i < element.childNodes.length; i++) {
+                            traverse(element.childNodes[i]);
+                        }
+                    }
+                }
+
+                traverse(element);
+            }
+
             window.initFunction = async function() {
                 var asyncEngineCreation = async function() {
                     try {
                         return createDefaultEngine();
                     } catch(e) {
-                        console.log("Engine creation failed. Using default engine.");
+                        console.log("Engine creation failed. Creating default engine instead");
                         return createDefaultEngine();
                     }
                 }
 
                 window.engine = await asyncEngineCreation();
-                if (!engine) throw 'Engine should not be null.';
                 
+                if (!engine) throw 'Engine should not be null.';
                 startRenderLoop(engine, canvas);
                 window.scene = createScene();
             };
-
+            
             initFunction().then(() => {
                 scene.then(returnedScene => { 
                     sceneToRender = returnedScene; 
                 });
             });
 
-            // Resize handler
+            // Resize
             window.addEventListener("resize", function () {
                 engine.resize();
             });
