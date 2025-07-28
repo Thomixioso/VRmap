@@ -3,12 +3,9 @@
     <head>
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 
-        <title>Babylon.js with Leaflet World Map</title>
+        <title>Babylon.js s Leaflet Mapou ve VR</title>
 
-        <!-- Leaflet CSS -->
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-        
-        <!-- Babylon.js -->
+        <!-- Babylon.js a závislosti (ponecháno beze změny) -->
         <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
         <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
         <script src="https://cdn.babylonjs.com/recast.js"></script>
@@ -26,9 +23,17 @@
         <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
         <script src="https://cdn.babylonjs.com/addons/babylonjs.addons.min.js"></script>
         <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+        
+        <!-- NOVINKA: Přidání Leaflet.js a jeho CSS -->
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+            integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+            crossorigin=""/>
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
 
-        <!-- Leaflet JS -->
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <!-- NOVINKA: Přidání html2canvas (je potřeba pro HtmlTexture) -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
         <style>
             html,
@@ -51,88 +56,25 @@
                 height: 100%;
             }
 
+            /* NOVINKA: Styl pro kontejner mapy. Musí mít fixní rozměry. */
+            /* Je umístěn mimo viditelnou oblast, protože ho vykreslujeme do textury. */
             #mapContainer {
-                width: 800px;
-                height: 600px;
-                border: 3px solid #333;
-                border-radius: 10px;
-                background: white;
-                box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+                width: 800px; /* Šířka textury */
+                height: 600px; /* Výška textury */
                 position: absolute;
-                top: 50px;
-                left: 50px;
-                z-index: 1000;
-            }
-
-            #map {
-                width: 100%;
-                height: calc(100% - 50px);
-                border-radius: 7px 7px 7px 7px;
-            }
-
-            .map-header {
-                height: 50px;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                border-radius: 7px 7px 0 0;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                padding: 0 15px;
-                color: white;
-                font-family: 'Arial', sans-serif;
-                font-weight: bold;
-                font-size: 16px;
-            }
-
-            .map-controls {
-                display: flex;
-                gap: 8px;
-            }
-
-            .control-button {
-                padding: 6px 12px;
-                background: rgba(255,255,255,0.2);
-                color: white;
-                border: 1px solid rgba(255,255,255,0.3);
-                border-radius: 5px;
-                cursor: pointer;
-                font-size: 12px;
-                font-weight: bold;
-                transition: all 0.3s ease;
-            }
-
-            .control-button:hover {
-                background: rgba(255,255,255,0.3);
-                transform: translateY(-1px);
-            }
-
-            .leaflet-control-attribution {
-                font-size: 10px;
+                left: -9999px; /* Schování mimo obrazovku */
+                top: 0;
+                background-color: #f0f0f0;
             }
         </style>
     </head>
     <body>
-        <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
-        
-        <!-- Map container that will be rendered as texture -->
-        <div id="mapContainer">
-            <div class="map-header">
-                <span>🌍 Mapa světa</span>
-                <div class="map-controls">
-                    <button class="control-button" onclick="zoomToPrague()">Praha</button>
-                    <button class="control-button" onclick="zoomToLondon()">Londýn</button>
-                    <button class="control-button" onclick="zoomToTokyo()">Tokio</button>
-                    <button class="control-button" onclick="zoomToNewYork()">New York</button>
-                    <button class="control-button" onclick="resetView()">Svět</button>
-                </div>
-            </div>
-            <div id="map"></div>
-        </div>
+        <!-- NOVINKA: Přidání kontejneru pro mapu -->
+        <div id="mapContainer"></div>
 
+        <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
         <script>
             var canvas = document.getElementById("renderCanvas");
-            var leafletMap;
-            var mapMesh;
 
             var startRenderLoop = function (engine, canvas) {
                 engine.runRenderLoop(function () {
@@ -145,361 +87,230 @@
             var engine = null;
             var scene = null;
             var sceneToRender = null;
-            var createDefaultEngine = function() { 
-                return new BABYLON.Engine(canvas, true, { 
-                    preserveDrawingBuffer: true, 
-                    stencil: true,  
-                    disableWebGL2Support: false
-                }); 
-            };
-            
-            // Initialize Leaflet map
-            function initializeLeafletMap() {
-                console.log("Initializing Leaflet map...");
-                
-                try {
-                    leafletMap = L.map('map', {
-                        center: [20, 0],
-                        zoom: 2,
-                        zoomControl: true,
-                        attributionControl: true
-                    });
+            var createDefaultEngine = function() { return new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true, stencil: true,  disableWebGL2Support: false}); };
 
-                    // Add OpenStreetMap tiles
-                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                        attribution: '© OpenStreetMap contributors',
-                        maxZoom: 18,
-                        minZoom: 1
-                    }).addTo(leafletMap);
-
-                    // Add markers for cities
-                    const pragueMarker = L.marker([50.0755, 14.4378]).addTo(leafletMap);
-                    pragueMarker.bindPopup('<b>Praha</b><br>Hlavní město České republiky');
-                    
-                    const londonMarker = L.marker([51.5074, -0.1278]).addTo(leafletMap);
-                    londonMarker.bindPopup('<b>Londýn</b><br>Hlavní město Velké Británie');
-                    
-                    const tokyoMarker = L.marker([35.6762, 139.6503]).addTo(leafletMap);
-                    tokyoMarker.bindPopup('<b>Tokio</b><br>Hlavní město Japonska');
-                    
-                    const newYorkMarker = L.marker([40.7128, -74.0060]).addTo(leafletMap);
-                    newYorkMarker.bindPopup('<b>New York</b><br>Největší město USA');
-
-                    // Force map to render properly
-                    setTimeout(() => {
-                        leafletMap.invalidateSize();
-                        console.log("Leaflet map initialized successfully");
-                    }, 500);
-                    
-                } catch (error) {
-                    console.error("Error initializing Leaflet map:", error);
-                }
-            }
-
-            // Map control functions
-            window.zoomToPrague = function() {
-                if (leafletMap) {
-                    leafletMap.setView([50.0755, 14.4378], 10);
-                }
-            }
-
-            window.zoomToLondon = function() {
-                if (leafletMap) {
-                    leafletMap.setView([51.5074, -0.1278], 10);
-                }
-            }
-
-            window.zoomToTokyo = function() {
-                if (leafletMap) {
-                    leafletMap.setView([35.6762, 139.6503], 10);
-                }
-            }
-
-            window.zoomToNewYork = function() {
-                if (leafletMap) {
-                    leafletMap.setView([40.7128, -74.0060], 10);
-                }
-            }
-
-            window.resetView = function() {
-                if (leafletMap) {
-                    leafletMap.setView([20, 0], 2);
-                }
-            }
-
+            // =========================================================================
+            // Hlavní funkce pro vytvoření scény - ZDE JSOU ZMĚNY
+            // =========================================================================
             var createScene = async function () {
-                console.log("Creating Babylon.js scene...");
-                
-                // Initialize the Leaflet map first and wait for it
-                initializeLeafletMap();
-                
-                // Wait a bit for the map to initialize
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Toto je náš nový HTML element, který chceme zobrazit ve VR
+                const mapElement = document.getElementById('mapContainer');
 
-                // This creates a basic Babylon Scene object (non-mesh)
+                // Inicializace Leaflet mapy
+                // 'map' je ID našeho divu, ale zde používáme přímo element
+                const map = L.map(mapElement, {
+                    // Důležité: Leaflet potřebuje vědět, že se nemá snažit o přímou interakci s GPU
+                    preferCanvas: true 
+                }).setView([50.0755, 14.4378], 13); // Praha jako výchozí bod
+
+                // Přidání vrstvy s dlaždicemi mapy (např. OpenStreetMap)
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                }).addTo(map);
+
+                // Přidání značky pro ukázku
+                L.marker([50.0755, 14.4378]).addTo(map)
+                    .bindPopup('Vítejte v Praze!')
+                    .openPopup();
+                
+                // --- Konec inicializace mapy ---
+
+                // Vytvoření základní Babylon scény
                 var scene = new BABYLON.Scene(engine);
 
-                // This creates and positions a free camera (non-mesh)
-                var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 1.6, -5), scene);
-
-                // This targets the camera to scene origin
+                // Kamera
+                var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 5, -10), scene);
                 camera.setTarget(BABYLON.Vector3.Zero());
-
-                // This attaches the camera to the canvas
                 camera.attachControl(canvas, true);
 
-                // This creates a light, aiming 0,1,0 - to the sky (non-mesh)
+                // Světlo
                 var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
-                light.intensity = 1.2;
+                light.intensity = 0.7;
 
-                // Add a directional light for better visibility
-                var dirLight = new BABYLON.DirectionalLight("dirLight", new BABYLON.Vector3(-1, -1, -1), scene);
-                dirLight.intensity = 0.8;
-
-                // Create a texture from our Leaflet map
-                const mapContainer = document.getElementById('mapContainer');
-                console.log("Creating HtmlMesh from map container...");
-                mapMesh = new HtmlMesh(mapContainer, scene);
-
-                // Position the map mesh in front of the camera (VR friendly position)
-                mapMesh.mesh.position = new BABYLON.Vector3(0, 1.6, 2);
+                // Vytvoření 3D objektu (plochy) s texturou naší mapy
+                // Použijeme `mapElement` místo `gui.domElement`
+                const htmlMesh = new HtmlMesh(mapElement, scene);
                 
-                // Add a subtle ground for reference
-                var ground = BABYLON.MeshBuilder.CreateGround("ground", {width: 20, height: 20}, scene);
-                var groundMaterial = new BABYLON.StandardMaterial("groundMat", scene);
-                groundMaterial.diffuseColor = new BABYLON.Color3(0.2, 0.3, 0.4);
-                groundMaterial.specularColor = new BABYLON.Color3(0, 0, 0);
-                ground.material = groundMaterial;
-                ground.position.y = -0.5;
+                // Upravíme velikost plochy, aby odpovídala poměru stran mapy (800x600 -> 4:3)
+                htmlMesh.mesh.scaling.y = 0.75;
+                
+                // Umístění plochy s mapou před kameru
+                htmlMesh.mesh.position = new BABYLON.Vector3(0, 2, 0);
 
-                console.log("Babylon.js scene created successfully");
 
-                // XR - comment out for now to test basic functionality
-                try {
-                    const xrHelper = await scene.createDefaultXRExperienceAsync();
-                    console.log("XR initialized successfully");
-                } catch (error) {
-                    console.log("XR not available or failed to initialize:", error);
-                }
+                // XR (VR)
+                const xrHelper = await scene.createDefaultXRExperienceAsync();
 
                 return scene;
             };
+            // =========================================================================
+            // Konec hlavní funkce
+            // =========================================================================
 
-            // HtmlTexture converts a HTML DOM element into a texture using html2canvas
-            class HtmlTexture extends BABYLON.DynamicTexture {
-                constructor(domElement, scene) {
-                    const canvas = html2canvas(domElement);
-                    super("HtmlTexture", canvas, scene);
-                    this.domElement = domElement;
 
-                    // Create an observer on the DOM, and run html2canvas update in the next loop
-                    const observer = new MutationObserver(() => {
-                        if (!this.scheduleUpdate) {
-                            this.scheduleUpdate = setTimeout(() => this.update(), 100);
-                        }
-                    });
-
-                    const config = { attributes: true, childList: true, subtree: true, characterData: true };
-                    observer.observe(domElement, config);
-
-                    this.observer = observer;
-                }
-
-                get width() {
-                    return this._canvas.width;
-                }
-
-                get height() {
-                    return this._canvas.height;
-                }
-
-                update() {
-                    const newCanvas = html2canvas(this.domElement);
-                    const context = this.getContext();
-                    context.clearRect(0, 0, this._canvas.width, this._canvas.height);
-                    context.drawImage(newCanvas, 0, 0);
-                    super.update();
-                    this.scheduleUpdate = null;
-                }
-            }
-
-            // creates a plane mesh and material with an attached HtmlTexture
-            class HtmlMesh {
-                constructor(domElement, scene) {
-                    this.domElement = domElement;
-
-                    // create HTML texture
-                    this.texture = new HtmlTexture(domElement, scene);
-                    this.texture.hasAlpha = true;
-
-                    // create plane with appropriate aspect ratio for the map (4:3 ratio)
-                    this.mesh = BABYLON.MeshBuilder.CreatePlane("mapPlane", { height: 3, width: 4 });
-                    this.material = new BABYLON.StandardMaterial("mapMaterial", scene);
-
-                    // create material with better VR visibility
-                    this.material.diffuseTexture = this.texture;
-                    this.material.emissiveTexture = this.texture;
-                    this.material.emissiveColor = new BABYLON.Color3(0.5, 0.5, 0.5);
-                    this.material.backFaceCulling = false; // Make it visible from both sides
-                    this.mesh.material = this.material;
-
-                    // remember to update or you will get NOTHING :)
-                    setTimeout(() => {
-                        this.texture.update();
-                    }, 500);
-
-                    // setup actions for interaction
-                    this.mesh.actionManager = new BABYLON.ActionManager(scene);
-
-                    // click event
-                    this.mesh.actionManager.registerAction(
-                        new BABYLON.ExecuteCodeAction(
-                            BABYLON.ActionManager.OnPickTrigger,
-                            (evt) => {
-                                const htmlCoords = evt.additionalData.getTextureCoordinates();
-                                console.log("Map clicked at:", htmlCoords);
-                                htmlevent(this.domElement, "click", htmlCoords.x, 1 - htmlCoords.y);
-                            }
-                        )
-                    );
-
-                    // hover effect
-                    this.mesh.actionManager.registerAction(
-                        new BABYLON.ExecuteCodeAction(
-                            BABYLON.ActionManager.OnPointerOverTrigger,
-                            () => {
-                                this.material.emissiveColor = new BABYLON.Color3(0.5, 0.5, 0.5);
-                            }
-                        )
-                    );
-
-                    this.mesh.actionManager.registerAction(
-                        new BABYLON.ExecuteCodeAction(
-                            BABYLON.ActionManager.OnPointerOutTrigger,
-                            () => {
-                                this.material.emissiveColor = new BABYLON.Color3(0.3, 0.3, 0.3);
-                            }
-                        )
-                    );
-                }
-            }
-
-            // Simplified html2canvas function
-            const canvases = new WeakMap();
-            function html2canvas(element) {
-                let canvas = canvases.get(element);
-                
-                if (!canvas) {
-                    const rect = element.getBoundingClientRect();
-                    canvas = document.createElement('canvas');
-                    canvas.width = rect.width || 800;
-                    canvas.height = rect.height || 600;
-                    canvases.set(element, canvas);
-                    console.log(`Canvas created: ${canvas.width}x${canvas.height}`);
-                }
-
-                const context = canvas.getContext('2d');
-                
-                // Clear canvas
-                context.clearRect(0, 0, canvas.width, canvas.height);
-                
-                // Fill with background color
-                context.fillStyle = '#e6f3ff';
-                context.fillRect(0, 0, canvas.width, canvas.height);
-                
-                // Draw header
-                const gradient = context.createLinearGradient(0, 0, canvas.width, 50);
-                gradient.addColorStop(0, '#667eea');
-                gradient.addColorStop(1, '#764ba2');
-                context.fillStyle = gradient;
-                context.fillRect(0, 0, canvas.width, 50);
-                
-                // Draw header text
-                context.fillStyle = 'white';
-                context.font = 'bold 16px Arial';
-                context.fillText('🌍 Mapa světa', 15, 30);
-                
-                // Draw map placeholder
-                context.fillStyle = '#a8d8f0';
-                context.fillRect(3, 53, canvas.width - 6, canvas.height - 56);
-                
-                // Draw border
-                context.strokeStyle = '#333';
-                context.lineWidth = 3;
-                context.strokeRect(0, 0, canvas.width, canvas.height);
-                
-                return canvas;
-            }
-
-            function htmlevent(element, event, x, y) {
-                console.log(`HTML event: ${event} at ${x}, ${y}`);
-                
+            // DOPLNĚNÁ FUNKCE: Simuluje události myši na HTML elementu
+            // Tato funkce je klíčová pro interakci s mapou ve VR
+            function htmlevent(element, eventType, x, y) {
                 const rect = element.getBoundingClientRect();
-                const clientX = x * rect.width + rect.left;
-                const clientY = y * rect.height + rect.top;
+                const clientX = rect.left + x * rect.width;
+                const clientY = rect.top + y * rect.height;
 
-                const mouseEvent = new MouseEvent(event, {
+                const eventInit = {
                     clientX: clientX,
                     clientY: clientY,
                     bubbles: true,
+                    cancelable: true,
+                    composed: true,
                     view: window
-                });
+                };
 
-                // Find the target element
-                const targetElement = document.elementFromPoint(clientX, clientY);
-                if (targetElement) {
-                    targetElement.dispatchEvent(mouseEvent);
-                }
-            }
-
-            // Initialize everything
-            window.initFunction = async function() {
-                console.log("Starting initialization...");
+                // Najdeme nejhlubší element na daných souřadnicích
+                let targetElement = document.elementFromPoint(clientX, clientY) || element;
                 
-                try {
-                    var asyncEngineCreation = async function() {
-                        try {
-                            return createDefaultEngine();
-                        } catch(e) {
-                            console.log("Default engine creation failed, trying fallback:", e);
-                            return createDefaultEngine();
-                        }
-                    }
-
-                    window.engine = await asyncEngineCreation();
-                    console.log("Babylon.js engine created");
-                    
-                    if (!engine) throw 'Engine should not be null.';
-                    
-                    startRenderLoop(engine, canvas);
-                    console.log("Render loop started");
-                    
-                    window.scene = await createScene();
-                    sceneToRender = window.scene;
-                    console.log("Scene initialized");
-                    
-                } catch (error) {
-                    console.error("Initialization failed:", error);
-                }
-            };
-            
-            // Start everything when DOM is ready
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', initFunction);
-            } else {
-                initFunction();
+                // Vytvoříme a odešleme událost
+                const event = new MouseEvent(eventType, eventInit);
+                targetElement.dispatchEvent(event);
             }
 
-            // Resize handler
-            window.addEventListener("resize", function () {
-                if (engine) {
-                    engine.resize();
+
+            // Třída HtmlTexture (mírně upravena pro lepší funkčnost)
+            class HtmlTexture extends BABYLON.DynamicTexture {
+                constructor(domElement, scene) {
+                    // html2canvas potřebuje čas, aby se mapa načetla, proto začneme s prázdným canvasem
+                    const tempCanvas = document.createElement("canvas");
+                    tempCanvas.width = domElement.clientWidth;
+                    tempCanvas.height = domElement.clientHeight;
+
+                    super("HtmlTexture", tempCanvas, scene, true);
+                    this.domElement = domElement;
+                    this._scene = scene;
+
+                    // Pravidelná aktualizace textury
+                    // Pro mapy je lepší pravidelná aktualizace než MutationObserver,
+                    // protože změny (posun, zoom) nemusí vždy vyvolat DOM mutaci.
+                    this._updateInterval = setInterval(() => this.update(), 250); // Aktualizace 4x za sekundu
                 }
-                if (leafletMap) {
-                    setTimeout(() => {
-                        leafletMap.invalidateSize();
-                    }, 100);
+
+                async update() {
+                    try {
+                        const canvas = await html2canvas(this.domElement, {
+                            useCORS: true, // Důležité pro načítání dlaždic mapy z cizí domény
+                            logging: false
+                        });
+                        // Aktualizujeme texturu v Babylon.js
+                        const textureContext = this.getContext();
+                        textureContext.drawImage(canvas, 0, 0);
+                        super.update();
+                    } catch (error) {
+                        console.error("html2canvas error:", error);
+                    }
                 }
+                
+                dispose() {
+                    clearInterval(this._updateInterval);
+                    super.dispose();
+                }
+            }
+
+
+            // Třída HtmlMesh (ponechána téměř beze změny, jen přidán wheel event)
+            class HtmlMesh {
+                constructor(domElement, scene) {
+                    this.domElement = domElement;
+                    this.texture = new HtmlTexture(domElement, scene);
+                    this.texture.hasAlpha = true;
+
+                    this.mesh = BABYLON.MeshBuilder.CreatePlane("htmlPlane", { height: 5, width: 5 }, scene);
+                    this.material = new BABYLON.StandardMaterial("htmlMat", scene);
+                    this.material.diffuseTexture = this.texture;
+                    this.material.emissiveColor = new BABYLON.Color3(0.2, 0.2, 0.2); // Zabrání úplnému zčernání ve stínu
+                    this.material.backFaceCulling = false;
+                    this.mesh.material = this.material;
+
+                    this.mesh.actionManager = new BABYLON.ActionManager(scene);
+
+                    const getHTMLCoords = (evt) => {
+                        const pickResult = evt.additionalData.pickResult || evt.additionalData;
+                        const htmlCoords = pickResult.getTextureCoordinates();
+                        if (!htmlCoords) return null;
+                        // Y souřadnice je v 3D a HTML obráceně
+                        return { x: htmlCoords.x, y: 1 - htmlCoords.y };
+                    };
+                    
+                    // Mousedown
+                    this.mesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickDownTrigger, (evt) => {
+                        const coords = getHTMLCoords(evt);
+                        if (coords) htmlevent(this.domElement, "mousedown", coords.x, coords.y);
+                    }));
+
+                    // Mouseup
+                    this.mesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickUpTrigger, (evt) => {
+                        const coords = getHTMLCoords(evt);
+                        if (coords) htmlevent(this.domElement, "mouseup", coords.x, coords.y);
+                    }));
+
+                    // Mousemove (pohyb pointeru)
+                    this.mesh.actionManager.registerAction(new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPointerOverTrigger, (evt) => {
+                        const coords = getHTMLCoords(evt);
+                        if (coords) htmlevent(this.domElement, "mousemove", coords.x, coords.y);
+                    }));
+                    this.mesh.pointerOverDisableMeshTesting = true;
+
+                    // NOVINKA: Zpracování kolečka myši pro zoomování mapy
+                    scene.onPointerObservable.add((pointerInfo) => {
+                        if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERWHEEL &&
+                            pointerInfo.pickInfo.hit &&
+                            pointerInfo.pickInfo.pickedMesh === this.mesh) {
+                            
+                            const event = new WheelEvent('wheel', {
+                                deltaY: pointerInfo.event.deltaY,
+                                bubbles: true,
+                                cancelable: true
+                            });
+                            this.domElement.dispatchEvent(event);
+                            pointerInfo.event.preventDefault(); // Zabrání zoomování kamery scény
+                        }
+                    });
+                }
+            }
+            
+            // Funkce `loadScript` nebyla kompletní, zde je její oprava
+            const loadScript = (FILE_URL, async = true, type = "text/javascript") => {
+                return new Promise((resolve, reject) => {
+                    try {
+                        const scriptEle = document.createElement("script");
+                        scriptEle.type = type;
+                        scriptEle.async = async;
+                        scriptEle.src = FILE_URL;
+                        scriptEle.onload = () => resolve(scriptEle);
+                        scriptEle.onerror = (error) => reject(error);
+                        document.body.appendChild(scriptEle);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            };
+
+            // Startovací logika (beze změny)
+            var initFunction = async function() {
+                var asyncEngineCreation = async function() {
+                    try {
+                        return createDefaultEngine();
+                    } catch(e) {
+                        console.log("the available createEngine function failed. Creating the default engine instead");
+                        return createDefaultEngine();
+                    }
+                }
+                engine = await asyncEngineCreation();
+                if (!engine) throw 'engine should not be null.';
+                startRenderLoop(engine, canvas);
+                scene = await createScene();
+                sceneToRender = scene;
+            };
+
+            initFunction().then(() => {
+                // Scéna je připravena
             });
         </script>
     </body>
