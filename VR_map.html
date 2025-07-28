@@ -1,1 +1,507 @@
+<!doctype html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+        <title>VR World Map</title>
 
+        <!-- Babylon.js -->
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.2/dat.gui.min.js"></script>
+        <script src="https://assets.babylonjs.com/generated/Assets.js"></script>
+        <script src="https://cdn.babylonjs.com/recast.js"></script>
+        <script src="https://cdn.babylonjs.com/ammo.js"></script>
+        <script src="https://cdn.babylonjs.com/havok/HavokPhysics_umd.js"></script>
+        <script src="https://cdn.babylonjs.com/cannon.js"></script>
+        <script src="https://cdn.babylonjs.com/Oimo.js"></script>
+        <script src="https://cdn.babylonjs.com/earcut.min.js"></script>
+        <script src="https://cdn.babylonjs.com/babylon.js"></script>
+        <script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+        <script src="https://cdn.babylonjs.com/proceduralTexturesLibrary/babylonjs.proceduralTextures.min.js"></script>
+        <script src="https://cdn.babylonjs.com/postProcessesLibrary/babylonjs.postProcess.min.js"></script>
+        <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.js"></script>
+        <script src="https://cdn.babylonjs.com/serializers/babylonjs.serializers.min.js"></script>
+        <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+        <script src="https://cdn.babylonjs.com/addons/babylonjs.addons.min.js"></script>
+        <script src="https://cdn.babylonjs.com/inspector/babylon.inspector.bundle.js"></script>
+        
+        <!-- Leaflet -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+
+        <style>
+            html, body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+
+            #canvasZone {
+                width: 100%;
+                height: 100%;
+            }
+
+            #mapContainer {
+                width: 800px;
+                height: 600px;
+                background: #000;
+                border-radius: 10px;
+                overflow: hidden;
+                visibility: hidden;
+                position: absolute;
+                top: -9999px;
+            }
+
+            #map {
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="canvasZone"><canvas id="renderCanvas"></canvas></div>
+        
+        <!-- Hidden map container for VR -->
+        <div id="mapContainer">
+            <div id="map"></div>
+        </div>
+
+        <script>
+            var canvas = document.getElementById("renderCanvas");
+
+            var startRenderLoop = function (engine, canvas) {
+                engine.runRenderLoop(function () {
+                    if (sceneToRender && sceneToRender.activeCamera) {
+                        sceneToRender.render();
+                    }
+                });
+            }
+
+            var engine = null;
+            var scene = null;
+            var sceneToRender = null;
+            var createDefaultEngine = function() { 
+                return new BABYLON.Engine(canvas, true, { 
+                    preserveDrawingBuffer: true, 
+                    stencil: true,  
+                    disableWebGL2Support: false
+                }); 
+            };
+
+            var createScene = async function () {
+                console.log('🚀 === SCENE CREATION START ===');
+                console.log('🗺️ Initializing map...');
+                
+                // Initialize Leaflet map first
+                const map = L.map('map', {
+                    center: [49.75, 15.5],
+                    zoom: 2,
+                    minZoom: 0,
+                    maxZoom: 3,
+                    zoomControl: true,
+                    attributionControl: false
+                });
+
+                console.log('🗺️ Leaflet map created');
+
+                // Add topographic layer
+                const topoLayer = L.tileLayer('tiles_topo_labeled/{z}/{x}/{y}.png', {
+                    attribution: 'ESRI Topographic (Offline)',
+                    minZoom: 0,
+                    maxZoom: 3,
+                    maxNativeZoom: 3
+                });
+                
+                topoLayer.on('tileload', (e) => console.log('✅ Tile loaded:', e.tile.src));
+                topoLayer.on('tileerror', (e) => console.log('❌ Tile error:', e.tile.src));
+                topoLayer.addTo(map);
+
+                console.log('🗺️ Topographic layer added');
+
+                // This creates a basic Babylon Scene object
+                console.log('🎬 Creating Babylon scene...');
+                var scene = new BABYLON.Scene(engine);
+
+                // Camera
+                var camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 5, -10), scene);
+                camera.setTarget(BABYLON.Vector3.Zero());
+                camera.attachControl(canvas, true);
+                console.log('📷 Camera created');
+
+                // Light
+                var light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+                light.intensity = 0.7;
+                console.log('💡 Light created');
+
+                // Create VR map display
+                console.log('🎨 Creating HTML mesh...');
+                const mapContainer = document.getElementById('mapContainer');
+                const htmlMesh = new HtmlMesh(mapContainer, scene);
+
+                // XR with extensive debugging
+                console.log('🥽 Creating XR experience...');
+                
+                try {
+                    const xrHelper = await scene.createDefaultXRExperienceAsync();
+                    
+                    if (xrHelper) {
+                        console.log('✅ XR Helper created successfully');
+                        console.log('🔍 XR Helper properties:', Object.keys(xrHelper));
+                        
+                        // Debug XR state changes
+                        if (xrHelper.baseExperience && xrHelper.baseExperience.onStateChangedObservable) {
+                            console.log('📱 XR Base Experience available');
+                            
+                            xrHelper.baseExperience.onStateChangedObservable.add((state) => {
+                                console.log(`🔄 XR State changed to: ${state}`);
+                                if (state === BABYLON.WebXRState.IN_XR) {
+                                    console.log('🥽 NOW IN VR MODE!');
+                                } else if (state === BABYLON.WebXRState.NOT_IN_XR) {
+                                    console.log('🖥️ Back to desktop mode');
+                                }
+                            });
+                        } else {
+                            console.log('❌ XR Base Experience NOT available');
+                        }
+                        
+                        // Debug input sources
+                        if (xrHelper.input && xrHelper.input.onControllerAddedObservable) {
+                            console.log('🎮 XR Input system available');
+                            
+                            xrHelper.input.onControllerAddedObservable.add((controller) => {
+                                console.log(`🎮 VR Controller added: ${controller.inputSource.handedness}`);
+                                console.log('🎮 Controller profiles:', controller.inputSource.profiles);
+                                
+                                if (controller.onMotionControllerInitObservable) {
+                                    controller.onMotionControllerInitObservable.add((motionController) => {
+                                        console.log('🎮 Motion controller initialized for:', controller.inputSource.handedness);
+                                        console.log('🎮 Available components:', Object.keys(motionController.components));
+                                        
+                                        // Debug each component
+                                        Object.keys(motionController.components).forEach(componentId => {
+                                            const component = motionController.components[componentId];
+                                            console.log(`🔘 Component ${componentId}:`, component.type);
+                                            
+                                            if (component.onButtonStateChangedObservable) {
+                                                component.onButtonStateChangedObservable.add((comp) => {
+                                                    console.log(`🔘 ${controller.inputSource.handedness} ${componentId} - pressed: ${comp.pressed}, touched: ${comp.touched}, value: ${comp.value}`);
+                                                });
+                                            }
+                                        });
+                                    });
+                                }
+                            });
+                            
+                            if (xrHelper.input.onControllerRemovedObservable) {
+                                xrHelper.input.onControllerRemovedObservable.add((controller) => {
+                                    console.log(`🎮 VR Controller removed: ${controller.inputSource.handedness}`);
+                                });
+                            }
+                        } else {
+                            console.log('❌ XR Input system NOT available');
+                        }
+                        
+                        // Debug pointer selection
+                        if (xrHelper.pointerSelection && xrHelper.pointerSelection.onSelectionPickedObservable) {
+                            console.log('👆 XR Pointer Selection available');
+                            
+                            xrHelper.pointerSelection.onSelectionPickedObservable.add((eventData) => {
+                                console.log('👆 VR Pointer picked something:', eventData.pickedMesh?.name);
+                                if (eventData.pickedMesh?.name === 'plane') {
+                                    console.log('🗺️ VR Pointer picked the MAP!');
+                                }
+                            });
+                        } else {
+                            console.log('❌ XR Pointer Selection NOT available');
+                        }
+                    } else {
+                        console.log('❌ XR Helper creation FAILED - helper is null/undefined');
+                    }
+                } catch (error) {
+                    console.log('💥 XR Creation ERROR:', error);
+                }
+
+                console.log('✅ VR World Map ready');
+                console.log('🚀 === SCENE CREATION END ===');
+                return scene;
+            };
+
+            // HtmlTexture converts a HTML DOM element into a texture using html2canvas
+            class HtmlTexture extends BABYLON.DynamicTexture {
+                constructor(domElement, scene) {
+                    super("HtmlTexture", html2canvas(domElement), scene);
+                    this.domElement = domElement;
+
+                    // Create an observer on the DOM, and run html2canvas update in the next loop
+                    const observer = new MutationObserver(() => {
+                        if (!this.scheduleUpdate) {
+                            this.scheduleUpdate = setTimeout(() => this.update(), 16);
+                        }
+                    });
+
+                    const config = { attributes: true, childList: true, subtree: true, characterData: true };
+                    observer.observe(domElement, config);
+                    this.observer = observer;
+                }
+
+                get width() {
+                    return this._canvas.width;
+                }
+
+                get height() {
+                    return this._canvas.height;
+                }
+
+                update() {
+                    html2canvas(this.domElement);
+                    super.update()
+                    this.scheduleUpdate = null;
+                }
+            }
+
+            // Creates a plane mesh and material with an attached HtmlTexture
+            // Handles events for HTML interactions
+            class HtmlMesh {
+                constructor(domElement, scene) {
+                    console.log('🎨 Creating HtmlMesh...');
+                    this.domElement = domElement;
+
+                    // create HTML texture
+                    this.texture = new HtmlTexture(domElement, scene);
+                    this.texture.hasAlpha = true;
+
+                    // create plane
+                    console.log('📐 Creating plane mesh...');
+                    this.mesh = BABYLON.MeshBuilder.CreatePlane("plane", { height: 6, width: 8 });
+                    this.material = new BABYLON.StandardMaterial("Mat", scene);
+
+                    // create material
+                    this.material.diffuseTexture = this.texture;
+                    this.mesh.material = this.material;
+
+                    // remember to update or you will get NOTHING :)
+                    this.texture.update();
+
+                    // Debug mesh properties
+                    console.log('🎯 Mesh created - Name:', this.mesh.name);
+                    console.log('🎯 Mesh pickable:', this.mesh.isPickable);
+                    console.log('🎯 Mesh visible:', this.mesh.isVisible);
+
+                    // setup actions
+                    console.log('⚙️ Setting up action manager...');
+                    this.mesh.actionManager = new BABYLON.ActionManager(scene);
+
+                    // mousedown event on OnPickDownTrigger action
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            {trigger: BABYLON.ActionManager.OnPickDownTrigger},
+                            (evt) => {
+                                console.log('🖱️ OnPickDownTrigger fired!');
+                                const htmlCoords = evt.additionalData.getTextureCoordinates();
+                                console.log('📍 Texture coords:', htmlCoords);
+                                htmlevent(this.domElement, "mousedown", htmlCoords.x, 1 - htmlCoords.y);
+                            }
+                        )
+                    );
+
+                    // mouseup event on OnPickUpTrigger action
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            {trigger: BABYLON.ActionManager.OnPickUpTrigger},
+                            (evt) => {
+                                console.log('🖱️ OnPickUpTrigger fired!');
+                                const htmlCoords = evt.additionalData.getTextureCoordinates();
+                                console.log('📍 Texture coords:', htmlCoords);
+                                htmlevent(this.domElement, "mouseup", htmlCoords.x, 1 - htmlCoords.y);
+                            }
+                        )
+                    );
+
+                    // click event on OnPickTrigger action
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            {trigger: BABYLON.ActionManager.OnPickTrigger},
+                            (evt) => {
+                                console.log('🖱️ OnPickTrigger fired!');
+                                const htmlCoords = evt.additionalData.getTextureCoordinates();
+                                console.log('📍 Texture coords:', htmlCoords);
+                                htmlevent(this.domElement, "click", htmlCoords.x, 1 - htmlCoords.y);
+                            }
+                        )
+                    );
+
+                    // mousemove event on OnPointerOverTrigger action
+                    this.mesh.actionManager.registerAction(
+                        new BABYLON.ExecuteCodeAction(
+                            {trigger: BABYLON.ActionManager.OnPointerOverTrigger},
+                            (evt) => {
+                                // Only log occasionally to avoid spam
+                                if (Math.random() < 0.01) {
+                                    console.log('🖱️ OnPointerOverTrigger fired!');
+                                }
+                                const htmlCoords = evt.additionalData.pickResult.getTextureCoordinates();
+                                htmlevent(this.domElement, "mousemove", htmlCoords.x, 1 - htmlCoords.y);
+                            }
+                        )
+                    );
+
+                    this.mesh.pointerOverDisableMeshTesting = true;
+                    
+                    console.log('✅ HtmlMesh setup complete');
+                    console.log('📊 Action manager has', this.mesh.actionManager.actions.length, 'actions registered');
+                }
+            }
+
+            // Enhanced html2canvas for Leaflet maps
+            const canvases = new WeakMap();
+            function html2canvas(element) {
+                const offset = element.getBoundingClientRect();
+                let canvas = canvases.get(element);
+
+                if (canvas === undefined) {
+                    canvas = document.createElement('canvas');
+                    canvas.width = offset.width;
+                    canvas.height = offset.height;
+                    console.log(`Map canvas size: ${canvas.width}x${canvas.height}`);
+                    canvases.set(element, canvas);
+                }
+
+                const context = canvas.getContext('2d');
+                context.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Draw background
+                context.fillStyle = '#1a1a1a';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+
+                // Draw Leaflet map tiles
+                const mapContainer = element.querySelector('#map');
+                if (mapContainer) {
+                    try {
+                        const tileImages = mapContainer.querySelectorAll('.leaflet-tile');
+                        console.log(`Rendering ${tileImages.length} tiles`);
+                        
+                        tileImages.forEach(img => {
+                            if (img.complete && img.naturalHeight !== 0) {
+                                const rect = img.getBoundingClientRect();
+                                const containerRect = element.getBoundingClientRect();
+                                
+                                const x = rect.left - containerRect.left;
+                                const y = rect.top - containerRect.top;
+                                
+                                try {
+                                    context.drawImage(img, x, y, rect.width, rect.height);
+                                } catch (e) {
+                                    console.log('Error drawing tile:', e);
+                                }
+                            }
+                        });
+
+                        // Draw zoom controls
+                        const controls = mapContainer.querySelectorAll('.leaflet-control');
+                        controls.forEach(control => {
+                            const rect = control.getBoundingClientRect();
+                            const containerRect = element.getBoundingClientRect();
+                            
+                            context.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                            context.fillRect(
+                                rect.left - containerRect.left,
+                                rect.top - containerRect.top,
+                                rect.width,
+                                rect.height
+                            );
+                        });
+                        
+                    } catch (e) {
+                        console.log('Error rendering map:', e);
+                        // Fallback
+                        context.fillStyle = '#4a90e2';
+                        context.fillRect(50, 50, canvas.width - 100, canvas.height - 100);
+                        context.fillStyle = '#ffffff';
+                        context.font = '24px Arial';
+                        context.textAlign = 'center';
+                        context.fillText('World Map', canvas.width / 2, canvas.height / 2);
+                    }
+                }
+
+                return canvas;
+            }
+
+            function htmlevent(element, event, x, y) {
+                console.log(`🖱️ HTML Event: ${event} at coordinates (${x.toFixed(3)}, ${y.toFixed(3)})`);
+                
+                const mouseEventInit = {
+                    clientX: (x * element.offsetWidth) + element.offsetLeft,
+                    clientY: (y * element.offsetHeight) + element.offsetTop,
+                    view: element.ownerDocument.defaultView
+                };
+
+                console.log(`📱 Mouse event init: clientX=${mouseEventInit.clientX}, clientY=${mouseEventInit.clientY}`);
+
+                const m = new MouseEvent(event, mouseEventInit);
+                window.dispatchEvent(m);
+
+                const rect = element.getBoundingClientRect();
+                console.log(`📐 Element rect: ${rect.width}x${rect.height} at (${rect.left}, ${rect.top})`);
+
+                x = x * rect.width + rect.left;
+                y = y * rect.height + rect.top;
+                
+                console.log(`🎯 Final coordinates: (${x}, ${y})`);
+
+                let elementsHit = 0;
+                function traverse(element) {
+                    if (element.nodeType !== Node.TEXT_NODE && element.nodeType !== Node.COMMENT_NODE) {
+                        const rect = element.getBoundingClientRect();
+
+                        if (x > rect.left && x < rect.right && y > rect.top && y < rect.bottom) {
+                            elementsHit++;
+                            console.log(`🎯 Hit element: ${element.tagName || element.nodeName} (${elementsHit})`);
+                            element.dispatchEvent(new MouseEvent(event, mouseEventInit));
+                        }
+
+                        for (let i = 0; i < element.childNodes.length; i++) {
+                            traverse(element.childNodes[i]);
+                        }
+                    }
+                }
+
+                traverse(element);
+                console.log(`📊 Total elements hit: ${elementsHit}`);
+            }
+
+            window.initFunction = async function() {
+                var asyncEngineCreation = async function() {
+                    try {
+                        return createDefaultEngine();
+                    } catch(e) {
+                        console.log("Engine creation failed. Creating default engine instead");
+                        return createDefaultEngine();
+                    }
+                }
+
+                window.engine = await asyncEngineCreation();
+                
+                if (!engine) throw 'Engine should not be null.';
+                startRenderLoop(engine, canvas);
+                window.scene = createScene();
+            };
+            
+            initFunction().then(() => {
+                scene.then(returnedScene => { 
+                    sceneToRender = returnedScene; 
+                });
+            });
+
+            // Resize
+            window.addEventListener("resize", function () {
+                engine.resize();
+            });
+        </script>
+    </body>
+</html>
