@@ -1,0 +1,17 @@
+=== INFORMACE O MISTE ===
+Nazev: Stockbury Castle
+ASCII nazev: Stockbury Castle
+Alternativni nazvy: 
+Typ: Castles
+Feature kod: CSTL
+Zeme: GB
+Souradnice: 51.32391, 0.6476
+Populace: 0
+Nadmorska vyska: N/A m
+Casove pasmo: Europe/London
+GeoNames ID: 6286426
+
+=== ODKAZY ===
+GeoNames URL: https://www.geonames.org/6286426
+Google Maps: https://www.google.com/maps?q=51.32391,0.6476
+OpenStreetMap: https://www.openstreetmap.org/?mlat=51.32391&mlon=0.6476&zoom=12

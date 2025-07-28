@@ -1,0 +1,17 @@
+=== INFORMACE O MISTE ===
+Nazev: Old Hall Camp
+ASCII nazev: Old Hall Camp
+Alternativni nazvy: 
+Typ: Castles
+Feature kod: CSTL
+Zeme: GB
+Souradnice: 52.49951, -3.17018
+Populace: 0
+Nadmorska vyska: N/A m
+Casove pasmo: Europe/London
+GeoNames ID: 6286221
+
+=== ODKAZY ===
+GeoNames URL: https://www.geonames.org/6286221
+Google Maps: https://www.google.com/maps?q=52.49951,-3.17018
+OpenStreetMap: https://www.openstreetmap.org/?mlat=52.49951&mlon=-3.17018&zoom=12

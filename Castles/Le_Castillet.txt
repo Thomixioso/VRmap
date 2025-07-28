@@ -1,0 +1,17 @@
+=== INFORMACE O MISTE ===
+Nazev: Le Castillet
+ASCII nazev: Le Castillet
+Alternativni nazvy: 
+Typ: Castles
+Feature kod: CSTL
+Zeme: FR
+Souradnice: 42.70064, 2.89412
+Populace: 0
+Nadmorska vyska: N/A m
+Casove pasmo: Europe/Paris
+GeoNames ID: 10284487
+
+=== ODKAZY ===
+GeoNames URL: https://www.geonames.org/10284487
+Google Maps: https://www.google.com/maps?q=42.70064,2.89412
+OpenStreetMap: https://www.openstreetmap.org/?mlat=42.70064&mlon=2.89412&zoom=12

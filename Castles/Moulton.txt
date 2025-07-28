@@ -1,0 +1,17 @@
+=== INFORMACE O MISTE ===
+Nazev: Moulton
+ASCII nazev: Moulton
+Alternativni nazvy: 
+Typ: Castles
+Feature kod: CSTL
+Zeme: GB
+Souradnice: 52.77328, -0.05583
+Populace: 0
+Nadmorska vyska: N/A m
+Casove pasmo: Europe/London
+GeoNames ID: 6287584
+
+=== ODKAZY ===
+GeoNames URL: https://www.geonames.org/6287584
+Google Maps: https://www.google.com/maps?q=52.77328,-0.05583
+OpenStreetMap: https://www.openstreetmap.org/?mlat=52.77328&mlon=-0.05583&zoom=12
