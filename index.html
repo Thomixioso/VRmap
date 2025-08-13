@@ -162,6 +162,11 @@
                 setupEyeLayers();
                 console.log('Eye layers nastaveny');
                 
+                // POUZE přidat controller exit
+                session.addEventListener('selectstart', () => {
+                    session.end();
+                });
+                
                 vrButton.style.display = 'none';
                 updateStatus('VR aktivní');
                 
@@ -183,6 +188,12 @@
                     await renderer.xr.setSession(session);
                     
                     setupEyeLayers();
+                    
+                    // POUZE přidat controller exit i pro fallback
+                    session.addEventListener('selectstart', () => {
+                        session.end();
+                    });
+                    
                     vrButton.style.display = 'none';
                     updateStatus('VR aktivní (viewer mode)');
                     
