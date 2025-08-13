@@ -25,21 +25,18 @@
             z-index: 1;
         }
         
-        /* Malé popup okénko pro detaily */
+        /* Popup okénko nad markerem */
         #detailsPopup {
             display: none;
             position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 300px;
-            max-height: 400px;
+            width: 250px;
             background: white;
             border: 2px solid #333;
             border-radius: 10px;
             padding: 15px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
             z-index: 1000;
-            overflow-y: auto;
+            pointer-events: auto;
         }
         
         #detailsPopup.active {
@@ -48,16 +45,16 @@
         
         #closePopup {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            top: 8px;
+            right: 8px;
             background: #ff4444;
             color: white;
             border: none;
             border-radius: 50%;
-            width: 25px;
-            height: 25px;
+            width: 22px;
+            height: 22px;
             cursor: pointer;
-            font-size: 16px;
+            font-size: 14px;
             line-height: 1;
         }
         
@@ -65,11 +62,14 @@
             background: #cc0000;
         }
         
-        .popup-image {
-            width: 100%;
-            height: auto;
-            margin: 10px 0;
-            border-radius: 5px;
+        #detailsPopup h3 {
+            margin: 0 20px 10px 0;
+            font-size: 16px;
+        }
+        
+        #detailsPopup p {
+            margin: 8px 0;
+            font-size: 14px;
         }
         
         /* VR Container - fullscreen overlay */
@@ -763,9 +763,8 @@
             if (event.key === 'Escape') exitVR();
         });
 
-        // Make functions global for onclick
+        // Make functions global for onclick - už nepotřebujeme openVRView
         window.exitVR = exitVR;
-        window.openVRView = openVRView;
         window.closeDetailsPopup = closeDetailsPopup;
     </script>
 </body>
