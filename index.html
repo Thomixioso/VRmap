@@ -5,11 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VR Stereo Test - Insta 360 EVO - Meta Quest 3</title>
     
-    <!-- A-Frame -->
-    <script src="https://aframe.io/releases/0.8.2/aframe.min.js"></script>
-    
-    <!-- Immersive Video Component - specializovaná knihovna pro stereo 180/360 -->
-    <script src="https://unpkg.com/aframe-immersive-video-component/dist/aframe-immersive-video-component.min.js"></script>
+    <!-- A-Frame - základní verze bez externích knihoven -->
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
     
     <style>
         body {
@@ -63,90 +60,89 @@
         .error { color: #dc3545; }
         .info { color: #17a2b8; }
         
-        .format-options {
-            margin: 10px 0;
-            padding: 10px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 5px;
-        }
-        
-        .format-btn {
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            margin: 3px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 12px;
-        }
-        
-        .format-btn.active {
-            background: #007bff;
+        /* Zvýraznit VR tlačítko */
+        .a-enter-vr {
+            background: #28a745 !important;
+            border: 3px solid #fff !important;
+            font-size: 16px !important;
+            padding: 15px !important;
         }
     </style>
 </head>
 <body>
     <div class="ui-overlay" id="uiOverlay">
-        <h3>🥽 VR Stereo Test - Insta 360 EVO - aframe-immersive-video</h3>
+        <h3>🥽 VR Stereo Test - Insta 360 EVO - Základní A-Frame</h3>
         <div class="info">
-            <strong>Použito: aframe-immersive-video-component</strong><br>
-            Specializovaná knihovna pro stereo 180°/360° obrázky a videa
-        </div>
-        
-        <div class="format-options">
-            <strong>Formáty pro test:</strong><br>
-            <button class="format-btn active" onclick="changeFormat('180_stereo_horizontal')">180° Stereo L/R (Insta 360 EVO)</button>
-            <button class="format-btn" onclick="changeFormat('180_mono_horizontal')">180° Mono</button>
-            <button class="format-btn" onclick="changeFormat('360_stereo_horizontal')">360° Stereo L/R</button>
-            <button class="format-btn" onclick="changeFormat('360_stereo_vertical')">360° Stereo T/B</button>
+            <strong>Jednoduchý přístup:</strong><br>
+            Dva canvas elementy pro levé a pravé oko, bez externích knihoven
         </div>
         
         <div class="controls">
             <button class="button" onclick="loadVRScene()">📷 Načíst VR scénu</button>
-            <button class="button" onclick="autoEnterVR()" id="autoVrBtn">🚀 Auto VR</button>
             <button class="button" onclick="testImagePath()">🔍 Test cesty k obrázku</button>
             <button class="button" onclick="toggleUI()">👁️ Skrýt/Zobrazit UI</button>
+            <button class="button" onclick="forceVR()">🚀 Vynucený VR vstup</button>
         </div>
         
         <div id="debugOutput" class="debug"></div>
     </div>
 
-    <!-- A-Frame VR scéna s immersive-video komponentou -->
+    <!-- A-Frame VR scéna - základní přístup -->
     <a-scene 
         id="vrScene" 
-        antialias="true"
         embedded 
         style="height: 100vh; width: 100%;"
         vr-mode-ui="enabled: true">
         
-        <!-- Immersive video entity pro stereo 180° -->
-        <a-entity 
-            id="immersiveEntity"
-            immersive-video="
-                type: 180_stereo_horizontal; 
-                source: Castles/generated/Le_Castillet_generated.jpg;
-                controls: true;
-                theme: dark;
-                open: true
-            ">
-        </a-entity>
+        <!-- Assets -->
+        <a-assets>
+            <img id="stereoImage" src="Castles/generated/Le_Castillet_generated.jpg" crossorigin="anonymous">
+            <canvas id="leftCanvas" width="512" height="512"></canvas>
+            <canvas id="rightCanvas" width="512" height="512"></canvas>
+        </a-assets>
         
-        <!-- Základní kamera -->
-        <a-entity 
-            camera 
-            look-controls 
-            position="0 1.6 0">
-        </a-entity>
+        <!-- Kamera -->
+        <a-camera 
+            position="0 1.6 0" 
+            look-controls="enabled: true">
+        </a-camera>
+        
+        <!-- Left eye - sphere s levou polovinou -->
+        <a-sphere 
+            id="leftEye"
+            src="#leftCanvas"
+            radius="10"
+            phi-start="270" 
+            phi-length="180"
+            theta-start="30"
+            theta-length="120"
+            rotation="0 0 0"
+            material="side: back"
+            layers="1">
+        </a-sphere>
+        
+        <!-- Right eye - sphere s pravou polovinou -->
+        <a-sphere 
+            id="rightEye"
+            src="#rightCanvas" 
+            radius="10"
+            phi-start="270"
+            phi-length="180" 
+            theta-start="30"
+            theta-length="120"
+            rotation="0 0 0"
+            material="side: back"
+            layers="2">
+        </a-sphere>
         
         <!-- Základní osvětlení -->
-        <a-light type="ambient" color="#404040"></a-light>
+        <a-light type="ambient" color="#ffffff"></a-light>
     </a-scene>
 
     <script>
         let sceneLoaded = false;
         let uiVisible = true;
-        let currentFormat = '180_stereo_horizontal';
+        let stereoImage = null;
         
         // Debug funkce
         function debugLog(message, type = 'info') {
@@ -158,134 +154,146 @@
             console.log(message);
         }
         
-        function changeFormat(format) {
-            currentFormat = format;
-            debugLog(`🔄 Změna formátu na: ${format}`, 'info');
+        function splitStereoImage() {
+            debugLog('🔄 Rozděluju stereo obrázek na L/R...', 'info');
             
-            // Aktualizovat aktivní tlačítko
-            document.querySelectorAll('.format-btn').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+            const img = document.querySelector('#stereoImage');
+            const leftCanvas = document.querySelector('#leftCanvas');
+            const rightCanvas = document.querySelector('#rightCanvas');
             
-            // Aktualizovat immersive-video komponentu
-            const entity = document.querySelector('#immersiveEntity');
-            if (entity) {
-                entity.setAttribute('immersive-video', {
-                    type: format,
-                    source: 'Castles/generated/Le_Castillet_generated.jpg',
-                    controls: true,
-                    theme: 'dark',
-                    open: true
-                });
-                debugLog(`✅ Formát aktualizován na entity`, 'success');
+            if (!img.complete) {
+                debugLog('❌ Obrázek ještě není načten', 'error');
+                return false;
+            }
+            
+            // Nastavit velikost canvas podle obrázku
+            const width = img.naturalWidth / 2; // Každá polovina
+            const height = img.naturalHeight;
+            
+            leftCanvas.width = width;
+            leftCanvas.height = height;
+            rightCanvas.width = width;
+            rightCanvas.height = height;
+            
+            const leftCtx = leftCanvas.getContext('2d');
+            const rightCtx = rightCanvas.getContext('2d');
+            
+            try {
+                // Nakreslit levou polovinu (0 - width/2)
+                leftCtx.drawImage(img, 0, 0, width, height, 0, 0, width, height);
+                
+                // Nakreslit pravou polovinu (width/2 - width)
+                rightCtx.drawImage(img, width, 0, width, height, 0, 0, width, height);
+                
+                debugLog('✅ Stereo obrázek rozdělen úspěšně!', 'success');
+                debugLog(`Rozměry: ${width}x${height} pro každé oko`, 'info');
+                
+                // Aktualizovat textury
+                const leftSphere = document.querySelector('#leftEye');
+                const rightSphere = document.querySelector('#rightEye');
+                
+                leftSphere.setAttribute('src', '#leftCanvas');
+                rightSphere.setAttribute('src', '#rightCanvas');
+                
+                return true;
+            } catch (error) {
+                debugLog(`❌ Chyba při rozdělení: ${error.message}`, 'error');
+                return false;
             }
         }
         
         function loadVRScene() {
-            debugLog('Načítám VR scénu s immersive-video...', 'info');
-            debugLog(`Aktuální formát: ${currentFormat}`, 'info');
+            debugLog('Načítám VR scénu...', 'info');
             
             const scene = document.querySelector('#vrScene');
-            const entity = document.querySelector('#immersiveEntity');
+            const img = document.querySelector('#stereoImage');
             
-            // Test existence obrázku
-            const testImg = new Image();
-            testImg.onload = () => {
+            debugLog(`Cesta k obrázku: ${img.src}`, 'info');
+            
+            // Přidat posluchače událostí
+            img.addEventListener('load', function() {
                 debugLog('✅ Stereo obrázek načten úspěšně!', 'success');
-                debugLog(`Rozměry obrázku: ${testImg.width}x${testImg.height}`, 'info');
-                debugLog(`🎥 Insta 360 EVO: ${currentFormat} formát`, 'info');
-                sceneLoaded = true;
+                debugLog(`Rozměry obrázku: ${img.naturalWidth}x${img.naturalHeight}`, 'info');
                 
-                // Aktualizovat immersive-video src
-                entity.setAttribute('immersive-video', 'source', testImg.src);
-                
-                // Auto-aktivovat VR tlačítko
-                setTimeout(() => {
-                    const vrButton = document.querySelector('.a-enter-vr');
-                    if (vrButton) {
-                        debugLog('✅ A-Frame VR tlačítko je dostupné', 'success');
-                        debugLog('🥽 Klikněte na VR tlačítko pro stereo efekt!', 'info');
-                    }
-                }, 1000);
-            };
+                // Rozdělit na L/R
+                if (splitStereoImage()) {
+                    sceneLoaded = true;
+                    debugLog('🎯 Insta 360 EVO side-by-side zpracováno', 'success');
+                    
+                    // Zdůraznit VR tlačítko
+                    setTimeout(() => {
+                        const vrButton = document.querySelector('.a-enter-vr');
+                        if (vrButton) {
+                            vrButton.style.background = '#28a745';
+                            vrButton.style.border = '3px solid #fff';
+                            vrButton.innerHTML = '🥽 VSTUP DO VR';
+                            debugLog('✅ VR tlačítko je připravené!', 'success');
+                        }
+                    }, 1000);
+                }
+            });
             
-            testImg.onerror = () => {
+            img.addEventListener('error', function(e) {
                 debugLog('❌ CHYBA při načítání obrázku!', 'error');
-                debugLog('Zkontrolujte cestu: Castles/generated/Le_Castillet_generated.jpg', 'error');
+                debugLog(`Chyba: ${e.type}`, 'error');
                 
                 // Zkusit alternativní cestu
                 debugLog('Zkouším alternativní cestu...', 'info');
                 setTimeout(() => {
-                    testImg.src = './Castles/generated/Le_Castillet_generated.jpg';
+                    img.src = './Castles/generated/Le_Castillet_generated.jpg';
                 }, 1000);
-            };
-            
-            testImg.src = 'Castles/generated/Le_Castillet_generated.jpg';
-            
-            // Sledovat A-Frame eventy
-            scene.addEventListener('loaded', () => {
-                debugLog('✅ A-Frame scéna načtena', 'success');
             });
             
+            // Vynutit načtení, pokud už je cached
+            if (img.complete && img.naturalWidth > 0) {
+                debugLog('✅ Obrázek již v cache, zpracovávám...', 'success');
+                img.dispatchEvent(new Event('load'));
+            }
+            
+            // Sledovat A-Frame eventy
             scene.addEventListener('enter-vr', () => {
-                debugLog('🥽 VSTUP DO VR REŽIMU - IMMERSIVE VIDEO AKTIVNÍ!', 'success');
-                toggleUI(false); // Skrýt UI ve VR
+                debugLog('🥽 VSTUP DO VR REŽIMU!', 'success');
+                debugLog('👀 Levé oko = layer 1, Pravé oko = layer 2', 'info');
+                toggleUI(false);
             });
             
             scene.addEventListener('exit-vr', () => {
                 debugLog('👋 Výstup z VR režimu', 'info');
-                toggleUI(true); // Zobrazit UI po VR
-            });
-            
-            // Sledovat immersive-video eventy
-            entity.addEventListener('componentinitialized', (evt) => {
-                if (evt.detail.name === 'immersive-video') {
-                    debugLog('✅ Immersive-video komponenta inicializována', 'success');
-                }
+                toggleUI(true);
             });
         }
         
-        async function autoEnterVR() {
-            debugLog('Pokouším se o automatický vstup do VR...', 'info');
-            
-            if (!sceneLoaded) {
-                debugLog('❌ Nejdříve načtěte VR scénu!', 'error');
-                return;
-            }
+        async function forceVR() {
+            debugLog('🚀 Vynucený pokus o VR vstup...', 'info');
             
             try {
-                const scene = document.querySelector('#vrScene');
-                
-                // Zkontrolovat WebXR podporu
                 if (!navigator.xr) {
-                    throw new Error('WebXR není podporováno');
+                    throw new Error('WebXR není dostupný');
                 }
                 
-                // Zkontrolovat VR session support
                 const supported = await navigator.xr.isSessionSupported('immersive-vr');
                 if (!supported) {
-                    throw new Error('Immersive VR není podporováno na tomto zařízení');
+                    throw new Error('Immersive VR není podporováno');
                 }
                 
-                debugLog('✅ WebXR je podporováno, spouštím VR...', 'success');
+                debugLog('✅ WebXR je funkční, hledám VR tlačítko...', 'success');
                 
-                // Pokusit se o automatický vstup
-                if (scene.enterVR) {
-                    await scene.enterVR();
-                    debugLog('🚀 Automatický vstup do VR úspěšný!', 'success');
-                } else {
-                    // Fallback - simulovat klik na VR tlačítko
-                    const vrButton = document.querySelector('.a-enter-vr');
-                    if (vrButton) {
+                const vrButton = document.querySelector('.a-enter-vr');
+                if (vrButton) {
+                    // Zvýraznit před kliknutím
+                    vrButton.style.background = '#dc3545';
+                    vrButton.innerHTML = '🔄 SPOUŠTÍM VR...';
+                    
+                    setTimeout(() => {
                         vrButton.click();
-                        debugLog('🔄 Simuluji klik na VR tlačítko...', 'info');
-                    } else {
-                        throw new Error('VR tlačítko nenalezeno');
-                    }
+                        debugLog('🎯 VR tlačítko aktivováno!', 'success');
+                    }, 500);
+                } else {
+                    throw new Error('VR tlačítko nenalezeno');
                 }
                 
             } catch (error) {
-                debugLog(`❌ Auto VR selhalo: ${error.message}`, 'error');
-                debugLog('💡 Zkuste kliknout na VR tlačítko v pravém dolním rohu', 'info');
+                debugLog(`❌ VR vstup selhal: ${error.message}`, 'error');
             }
         }
         
@@ -295,20 +303,17 @@
             const testPaths = [
                 'Castles/generated/Le_Castillet_generated.jpg',
                 './Castles/generated/Le_Castillet_generated.jpg',
-                '../Castles/generated/Le_Castillet_generated.jpg',
-                'data/Castles/generated/Le_Castillet_generated.jpg'
+                '../Castles/generated/Le_Castillet_generated.jpg'
             ];
             
-            testPaths.forEach((path, index) => {
+            testPaths.forEach((path) => {
                 const testImg = new Image();
                 testImg.onload = () => {
                     debugLog(`✅ FUNGUJE: ${path} (${testImg.width}x${testImg.height})`, 'success');
                     
-                    // Pokud je to první funkční cesta, použij ji
                     if (!sceneLoaded) {
                         debugLog(`🔄 Používám cestu: ${path}`, 'info');
-                        const entity = document.querySelector('#immersiveEntity');
-                        entity.setAttribute('immersive-video', 'source', path);
+                        document.querySelector('#stereoImage').src = path;
                         setTimeout(() => loadVRScene(), 500);
                     }
                 };
@@ -335,8 +340,7 @@
         window.addEventListener('load', () => {
             debugLog('🚀 Stránka načtena', 'success');
             debugLog(`A-Frame verze: ${AFRAME.version}`, 'info');
-            debugLog('🔧 Používám aframe-immersive-video-component', 'info');
-            debugLog('📱 Optimalizováno pro Insta 360 EVO (180_stereo_horizontal)', 'info');
+            debugLog('🔧 Základní A-Frame přístup bez externích knihoven', 'info');
             
             // Zkontrolovat WebXR
             if (navigator.xr) {
@@ -344,7 +348,6 @@
                 navigator.xr.isSessionSupported('immersive-vr').then(supported => {
                     if (supported) {
                         debugLog('✅ Immersive VR je podporováno!', 'success');
-                        debugLog('💡 Klikněte "Načíst VR scénu" → pak VR tlačítko vpravo dole', 'info');
                     } else {
                         debugLog('❌ Immersive VR není podporováno', 'error');
                     }
@@ -353,7 +356,7 @@
                 debugLog('❌ WebXR není dostupný', 'error');
             }
             
-            // Auto-načtení scény po 2 sekundách
+            // Auto-načtení scény
             setTimeout(() => {
                 debugLog('🔄 Auto-načítám VR scénu...', 'info');
                 loadVRScene();
@@ -363,16 +366,6 @@
         // Error handling
         window.addEventListener('error', (event) => {
             debugLog(`GLOBÁLNÍ CHYBA: ${event.message}`, 'error');
-        });
-        
-        // Klávesové zkratky
-        document.addEventListener('keydown', (event) => {
-            if (event.key === 'v' || event.key === 'V') {
-                autoEnterVR();
-            }
-            if (event.key === 'u' || event.key === 'U') {
-                toggleUI();
-            }
         });
     </script>
 </body>
