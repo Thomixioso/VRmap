@@ -1,60 +1,63 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>180° SBS Stereo WebXR</title>
+    <title>180° SBS Stereo Shader</title>
     <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+    <script>
+      // Stereo shader registrace
+      AFRAME.registerShader('sbs180', {
+        schema: {
+          src: {type: 'map'}
+        },
+        vertexShader: `
+          varying vec2 vUV;
+          void main() {
+            vUV = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          #ifdef GL_FRAGMENT_PRECISION_HIGH
+          precision highp float;
+          #else
+          precision mediump float;
+          #endif
+          uniform sampler2D src;
+          varying vec2 vUV;
+
+          void main() {
+            // WebXR stereo eye ID (0 = left, 1 = right)
+            #ifdef GL_VIEWID_OVR
+              uint eyeIndex = gl_ViewID_OVR;
+            #else
+              // Fallback (některé prohlížeče nepodporují gl_ViewID)
+              uint eyeIndex = uint(mod(gl_FragCoord.x, 2.0));
+            #endif
+
+            float eye = float(eyeIndex);
+            vec2 uv = vUV;
+            uv.x = uv.x * 0.5 + 0.5 * eye; // 0..0.5 pro levé oko, 0.5..1 pro pravé
+            gl_FragColor = texture2D(src, uv);
+          }
+        `
+      });
+    </script>
   </head>
   <body>
-    <a-scene vr-mode-ui="enabled: true"
-             xr-webxr="referenceSpaceType: local"  <!-- kamera přesně v centru -->
-
-             background="color: black">
-
+    <a-scene vr-mode-ui="enabled: true" xr-webxr="referenceSpaceType: local" background="color: black">
+      
       <!-- Kamera -->
-      <a-entity id="cameraRig">
-        <a-entity camera look-controls position="0 0 0"></a-entity>
+      <a-entity camera look-controls position="0 0 0"></a-entity>
+
+      <!-- Polokoule s naším stereo shaderem -->
+      <a-entity geometry="primitive: sphere; radius: 10; segmentsWidth: 64; segmentsHeight: 64; thetaLength: 180"
+                material="shader: sbs180; src: #stereoImage; side: back">
       </a-entity>
 
-      <!-- Levé oko -->
-      <a-entity id="sphereLeft"
-                geometry="primitive: sphere; radius: 10; segmentsWidth: 64; segmentsHeight: 64; thetaLength: 180"
-                material="side: back; src: #stereoImage; repeat: 0.5 1; offset: 0 0"
-                stereo="eye: left">
-      </a-entity>
-
-      <!-- Pravé oko -->
-      <a-entity id="sphereRight"
-                geometry="primitive: sphere; radius: 10; segmentsWidth: 64; segmentsHeight: 64; thetaLength: 180"
-                material="side: back; src: #stereoImage; repeat: 0.5 1; offset: 0.5 0"
-                stereo="eye: right">
-      </a-entity>
-
-      <!-- Jeden společný obrázek -->
+      <!-- Textura -->
       <a-assets>
-        <img id="stereoImage" src="./Castles/generated/Le_Castillet_generated.jpg">
+        <img id="stereoImage" src="Le_Castillet_generated.jpg">
       </a-assets>
-
-      <!-- Skript pro přizpůsobení segmentů -->
-      <script>
-        document.querySelector('#stereoImage').addEventListener('load', function (e) {
-          const img = e.target;
-          const halfAspect = (img.naturalWidth / 2) / img.naturalHeight; // poměr pro jedno oko
-          const radius = 10;
-          const segW = Math.max(32, Math.round(halfAspect * 64));
-
-          ['#sphereLeft', '#sphereRight'].forEach(sel => {
-            document.querySelector(sel).setAttribute('geometry', {
-              primitive: 'sphere',
-              radius: radius,
-              segmentsWidth: segW,
-              segmentsHeight: 64,
-              thetaLength: 180
-            });
-          });
-
-          console.log(`✅ Nastaveno pro aspect ratio jednoho oka: ${halfAspect.toFixed(3)}`);
-        });
-      </script>
 
     </a-scene>
   </body>
