@@ -145,14 +145,8 @@
                 // Nastavení kamer pro každé oko
                 setupEyeLayers();
                 
-                // Přidat controller exit listener
-                session.addEventListener('selectstart', () => {
-                    console.log('Trigger stisknut - ukončuji VR');
-                    session.end();
-                });
-                
                 vrButton.style.display = 'none';
-                updateStatus('VR aktivní - trigger = exit');
+                updateStatus('VR aktivní');
                 
                 session.addEventListener('end', () => {
                     vrButton.style.display = 'block';
