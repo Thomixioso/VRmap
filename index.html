@@ -79,7 +79,7 @@
         let leftSphere, rightSphere;
         let vrButton;
         
-        const stereoImagePath = "Castles/generated/Le_Castillet_generated.jpg";
+        const stereoImagePath = "./Castles/generated/Le_Castillet_generated.jpg";
 
         function updateStatus(message) {
             document.getElementById('status').textContent = message;
@@ -138,8 +138,16 @@
 
         async function startVR() {
             try {
-                const session = await navigator.xr.requestSession('immersive-vr');
+                // Požádat o VR session s 'local' reference space
+                const session = await navigator.xr.requestSession('immersive-vr', {
+                    requiredFeatures: [],
+                    optionalFeatures: ['local', 'bounded-floor']
+                });
+                
                 await renderer.xr.setSession(session);
+                
+                // Nastavit reference space na 'local'
+                renderer.xr.setReferenceSpaceType('local');
                 
                 // Nastavení kamer pro každé oko
                 setupEyeLayers();
@@ -155,6 +163,27 @@
             } catch (error) {
                 console.error('VR Error:', error);
                 updateStatus('Chyba VR: ' + error.message);
+                
+                // Fallback: zkusit bez jakýchkoliv features
+                try {
+                    updateStatus('Zkouším fallback VR...');
+                    const fallbackSession = await navigator.xr.requestSession('immersive-vr');
+                    await renderer.xr.setSession(fallbackSession);
+                    renderer.xr.setReferenceSpaceType('viewer');
+                    
+                    setupEyeLayers();
+                    vrButton.style.display = 'none';
+                    updateStatus('VR aktivní (fallback mode)');
+                    
+                    fallbackSession.addEventListener('end', () => {
+                        vrButton.style.display = 'block';
+                        updateStatus('VR ukončeno');
+                    });
+                    
+                } catch (fallbackError) {
+                    console.error('Fallback VR Error:', fallbackError);
+                    updateStatus('VR není dostupné');
+                }
             }
         }
 
@@ -345,4 +374,3 @@
     </script>
 </body>
 </html>
-
