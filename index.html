@@ -378,9 +378,9 @@
             popup.style.left = (markerPoint.x - 125) + 'px'; // Centrovat nad markerem
             popup.style.top = (markerPoint.y - 180) + 'px';  // Nad markerem
             
-            // Přidat event listener pro VR tlačítko
+            // Přidat event listener pro VR tlačítko - přímý vstup do VR
             document.getElementById('enterVRBtn').addEventListener('click', () => {
-                openVRView(location.image);
+                openVRViewDirect(location.image);
             });
             
             popup.classList.add('active');
