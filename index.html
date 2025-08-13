@@ -1,54 +1,80 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>180° SBS Stereo Layers FIX</title>
+    <title>180° SBS VR v A-Frame</title>
     <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
     <script>
       AFRAME.registerComponent('stereo-sbs-180', {
         schema: {src: {type: 'asset'}},
         init: function () {
-          const sceneEl = this.el.sceneEl;
-          const renderer = sceneEl.renderer;
+          const scene = this.el.sceneEl.object3D;
+
           const texture = new THREE.TextureLoader().load(this.data.src);
           texture.minFilter = THREE.LinearFilter;
 
-          // Levé oko
+          // Levá polovina
           const matLeft = new THREE.MeshBasicMaterial({map: texture, side: THREE.BackSide});
           matLeft.map.repeat.set(0.5, 1);
           matLeft.map.offset.set(0, 0);
 
-          // Pravé oko
+          // Pravá polovina
           const matRight = new THREE.MeshBasicMaterial({map: texture, side: THREE.BackSide});
           matRight.map.repeat.set(0.5, 1);
           matRight.map.offset.set(0.5, 0);
 
-          // Geometrie 180° polokoule
+          // Geometrie polokoule
           const geom = new THREE.SphereGeometry(10, 64, 64, 0, Math.PI);
 
-          // Mesh pro levé oko
-          const meshLeft = new THREE.Mesh(geom, matLeft);
-          meshLeft.rotation.y = Math.PI; // otočení 180° kolem Y
-          meshLeft.layers.set(1); // vrstva levého oka
+          this.meshLeft = new THREE.Mesh(geom, matLeft);
+          this.meshRight = new THREE.Mesh(geom, matRight);
 
-          // Mesh pro pravé oko
-          const meshRight = new THREE.Mesh(geom, matRight);
-          meshRight.rotation.y = Math.PI;
-          meshRight.layers.set(2); // vrstva pravého oka
+          // Otočení aby to bylo před uživatelem
+          this.meshLeft.rotation.y = Math.PI;
+          this.meshRight.rotation.y = Math.PI;
 
-          // Přidáme je přímo do THREE.Scene uvnitř A-Frame
-          sceneEl.object3D.add(meshLeft);
-          sceneEl.object3D.add(meshRight);
+          // Přidáme do scény
+          scene.add(this.meshLeft);
+          scene.add(this.meshRight);
 
-          console.log("Stereo 180° SBS inicializováno.");
+          // Hack: posloucháme WebXR render a kreslíme každé oko zvlášť
+          const renderer = this.el.sceneEl.renderer;
+          const camera = this.el.sceneEl.camera;
+
+          renderer.xr.addEventListener('sessionstart', () => {
+            renderer.setAnimationLoop(() => {
+              const session = renderer.xr.getSession();
+              const pose = renderer.xr.getCameraPose
+                ? renderer.xr.getCameraPose()
+                : null;
+              const xrCameras = renderer.xr.getCamera(camera).cameras;
+
+              if (xrCameras.length === 2) {
+                // Levé oko
+                this.meshLeft.visible = true;
+                this.meshRight.visible = false;
+                renderer.render(scene, xrCameras[0]);
+
+                // Pravé oko
+                this.meshLeft.visible = false;
+                this.meshRight.visible = true;
+                renderer.render(scene, xrCameras[1]);
+
+                // Po renderu zobrazíme oba pro non-VR
+                this.meshLeft.visible = true;
+                this.meshRight.visible = true;
+              } else {
+                // Normální mono režim
+                renderer.render(scene, camera);
+              }
+            });
+          });
         }
       });
     </script>
   </head>
   <body>
-    <a-scene vr-mode-ui="enabled: true" xr-webxr="referenceSpaceType: local" background="color: black">
-      <!-- aktivace komponenty -->
+    <a-scene vr-mode-ui="enabled: true" background="color: black">
       <a-entity stereo-sbs-180="src: ./Castles/generated/Le_Castillet_generated.jpg"></a-entity>
     </a-scene>
   </body>
 </html>
-
