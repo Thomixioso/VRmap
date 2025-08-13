@@ -3,17 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VR Stereo Test - A-Frame - Meta Quest 3</title>
+    <title>VR Stereo Test - A-Frame Stereo - Meta Quest 3</title>
     
-    <!-- A-Frame pro lepší VR podporu -->
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <!-- A-Frame 1.7.0 (stejná verze jako v příkladu) -->
+    <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
     
-    <!-- Custom stereo komponenta -->
+    <!-- Custom stereo komponenta inspirovaná příkladem -->
     <script>
-        // Registrace custom stereo komponenty pro side-by-side obrázky
-        AFRAME.registerComponent('stereo-sphere', {
+        // Registrace stereo komponenty pro jednotlivá oka
+        AFRAME.registerComponent('stereo', {
             schema: {
-                src: {type: 'string'},
                 eye: {type: 'string', default: 'left'} // 'left' nebo 'right'
             },
             
@@ -21,62 +20,67 @@
                 const data = this.data;
                 const el = this.el;
                 
-                // Vytvoř sphere geometrii pro 180°
-                const geometry = new THREE.SphereGeometry(
-                    10,    // radius
-                    64,    // widthSegments 
-                    32,    // heightSegments
-                    0,     // phiStart - začátek horizontálně
-                    Math.PI, // phiLength - 180° horizontálně  
-                    0,     // thetaStart - začátek vertikálně
-                    Math.PI  // thetaLength - 180° vertikálně (horní polovina)
-                );
-                
-                // Otočit geometrii dovnitř
-                geometry.scale(-1, 1, 1);
-                
-                // Upravit UV souřadnice pro stereo
-                const uvs = geometry.attributes.uv.array;
-                const uvCount = uvs.length / 2;
-                
-                for (let i = 0; i < uvCount; i++) {
-                    const u = uvs[i * 2];
-                    const v = uvs[i * 2 + 1];
-                    
-                    if (data.eye === 'left') {
-                        // Levé oko - levá polovina obrázku (u: 0-0.5)
-                        uvs[i * 2] = u * 0.5;
-                    } else {
-                        // Pravé oko - pravá polovina obrázku (u: 0.5-1.0)
-                        uvs[i * 2] = u * 0.5 + 0.5;
-                    }
+                // Nastavit layer podle oka
+                if (data.eye === 'left') {
+                    el.object3D.layers.set(1); // Layer pro levé oko
+                } else if (data.eye === 'right') {
+                    el.object3D.layers.set(2); // Layer pro pravé oko
                 }
                 
-                // Aktualizovat UV souřadnice
-                geometry.attributes.uv.needsUpdate = true;
+                console.log(`Stereo ${data.eye} eye layer nastaven`);
+            }
+        });
+        
+        // Registrace stereocam komponenty pro kameru
+        AFRAME.registerComponent('stereocam', {
+            schema: {
+                eye: {type: 'string', default: 'left'}
+            },
+            
+            init: function () {
+                const el = this.el;
+                const camera = el.getObject3D('camera');
                 
-                // Vytvořit materiál
-                const loader = new THREE.TextureLoader();
-                loader.load(data.src, (texture) => {
-                    const material = new THREE.MeshBasicMaterial({
-                        map: texture,
-                        side: THREE.BackSide
-                    });
+                if (camera) {
+                    // Povolit renderování obou layers
+                    camera.layers.enable(1); // Levé oko
+                    camera.layers.enable(2); // Pravé oko
+                    console.log('Stereocam - oba layers povoleny');
+                }
+            }
+        });
+        
+        // Komponenta pro rozdělení side-by-side obrázku
+        AFRAME.registerComponent('stereo-material', {
+            schema: {
+                eye: {type: 'string', default: 'left'},
+                src: {type: 'string'}
+            },
+            
+            init: function () {
+                const data = this.data;
+                const el = this.el;
+                
+                // Počkat na načtení materiálu
+                el.addEventListener('materialtextureloaded', () => {
+                    const material = el.getObject3D('mesh').material;
+                    const texture = material.map;
                     
-                    // Vytvořit mesh
-                    const mesh = new THREE.Mesh(geometry, material);
-                    
-                    // Nastavit layer pro správné oko
-                    if (data.eye === 'left') {
-                        mesh.layers.set(1); // Levé oko
-                    } else {
-                        mesh.layers.set(2); // Pravé oko
+                    if (texture) {
+                        // Upravit UV offset a repeat pro stereo
+                        if (data.eye === 'left') {
+                            // Levá polovina obrázku (0 - 0.5)
+                            texture.offset.x = 0;
+                            texture.repeat.x = 0.5;
+                        } else {
+                            // Pravá polovina obrázku (0.5 - 1.0)  
+                            texture.offset.x = 0.5;
+                            texture.repeat.x = 0.5;
+                        }
+                        
+                        texture.needsUpdate = true;
+                        console.log(`${data.eye} eye UV mapping nastaven`);
                     }
-                    
-                    // Přidat do scény
-                    el.setObject3D('mesh', mesh);
-                    
-                    console.log(`${data.eye} eye stereo sphere vytvořena`);
                 });
             }
         });
@@ -130,33 +134,17 @@
             overflow-y: auto;
         }
         
-        .success {
-            color: #28a745;
-        }
-        
-        .error {
-            color: #dc3545;
-        }
-        
-        .info {
-            color: #17a2b8;
-        }
-        
-        /* Skrýt A-Frame UI v normálním režimu */
-        .a-enter-vr {
-            bottom: 20px !important;
-            right: 20px !important;
-        }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .info { color: #17a2b8; }
     </style>
 </head>
 <body>
     <div class="ui-overlay" id="uiOverlay">
-        <h3>🥽 VR Stereo Test - A-Frame - Meta Quest 3</h3>
+        <h3>🥽 VR Stereo Test - A-Frame Stereo Komponenty</h3>
         <div class="info">
-            <strong>Instrukce:</strong><br>
-            1. Klikněte "Načíst VR scénu"<br>
-            2. Použijte VR tlačítko v pravém dolním rohu<br>
-            3. Nebo klikněte "Auto VR" pro automatický start
+            <strong>Inspirováno A-Frame stereo příkladem:</strong><br>
+            Používá dvojité &lt;a-sky&gt; pro levé a pravé oko s layer systémem
         </div>
         
         <div class="controls">
@@ -169,44 +157,46 @@
         <div id="debugOutput" class="debug"></div>
     </div>
 
-            <!-- A-Frame VR scéna -->
+    <!-- A-Frame VR scéna s stereo komponentami -->
     <a-scene 
         id="vrScene" 
+        antialias="true"
         embedded 
         style="height: 100vh; width: 100%;"
-        vr-mode-ui="enabled: true"
-        device-orientation-permission-ui="enabled: false">
+        vr-mode-ui="enabled: true">
         
-        <!-- Základní nastavení -->
+        <!-- Assets -->
         <a-assets>
             <img id="stereoImage" src="Castles/generated/Le_Castillet_generated.jpg">
         </a-assets>
         
-        <!-- VR prostředí pro 180° stereo -->
-        <!-- Levé oko - levá polovina obrázku -->
+        <!-- Kamera s stereo podporou -->
         <a-entity 
-            id="leftEye"
-            stereo-sphere="src: #stereoImage; eye: left">
+            camera 
+            look-controls 
+            position="0 1.6 0" 
+            stereocam="eye:left;">
         </a-entity>
         
-        <!-- Pravé oko - pravá polovina obrázku -->
-        <a-entity 
-            id="rightEye"
-            stereo-sphere="src: #stereoImage; eye: right">
-        </a-entity>
+        <!-- Sky sphere pro levé oko -->
+        <a-sky 
+            id="sky1" 
+            src="#stereoImage" 
+            stereo="eye:left"
+            stereo-material="eye:left"
+            geometry="primitive: sphere; radius: 10; thetaStart: 0; thetaLength: 180"
+            material="side: back">
+        </a-sky>
         
-        <!-- Kamera s ovládáním -->
-        <a-entity 
-            id="cameraRig" 
-            position="0 1.6 0">
-            <a-camera 
-                id="camera"
-                look-controls="enabled: true; touchEnabled: true"
-                wasd-controls="enabled: false">
-                <!-- Explicitně povolit oba layers pro stereo -->
-                <a-entity camera layers="1,2"></a-entity>
-            </a-camera>
-        </a-entity>
+        <!-- Sky sphere pro pravé oko -->
+        <a-sky 
+            id="sky2" 
+            src="#stereoImage" 
+            stereo="eye:right"
+            stereo-material="eye:right" 
+            geometry="primitive: sphere; radius: 10; thetaStart: 0; thetaLength: 180"
+            material="side: back">
+        </a-sky>
         
         <!-- Základní osvětlení -->
         <a-light type="ambient" color="#404040"></a-light>
@@ -227,17 +217,18 @@
         }
         
         function loadVRScene() {
-            debugLog('Načítám VR scénu...', 'info');
+            debugLog('Načítám VR scénu s dual-sky stereo...', 'info');
             
             const scene = document.querySelector('#vrScene');
             const image = document.querySelector('#stereoImage');
             
             debugLog(`Cesta k obrázku: ${image.src}`, 'info');
             
-            // Přidat posluchače událostí před načtením
+            // Přidat posluchače událostí
             image.addEventListener('load', function() {
                 debugLog('✅ Stereo obrázek načten úspěšně!', 'success');
                 debugLog(`Rozměry obrázku: ${image.naturalWidth}x${image.naturalHeight}`, 'info');
+                debugLog('📱 Side-by-side obrázek bude rozdělen na levé/pravé oko', 'info');
                 sceneLoaded = true;
                 
                 // Auto-aktivovat VR tlačítko
@@ -245,7 +236,7 @@
                     const vrButton = document.querySelector('.a-enter-vr');
                     if (vrButton) {
                         debugLog('✅ A-Frame VR tlačítko je dostupné', 'success');
-                        vrButton.style.display = 'block';
+                        debugLog('🥽 Klikněte na VR tlačítko pro stereo efekt!', 'info');
                     }
                 }, 1000);
             });
@@ -280,7 +271,7 @@
             });
             
             scene.addEventListener('enter-vr', () => {
-                debugLog('🥽 VSTUP DO VR REŽIMU!', 'success');
+                debugLog('🥽 VSTUP DO VR REŽIMU - STEREO AKTIVNÍ!', 'success');
                 toggleUI(false); // Skrýt UI ve VR
             });
             
@@ -379,8 +370,8 @@
         // Inicializace při načtení
         window.addEventListener('load', () => {
             debugLog('🚀 Stránka načtena', 'success');
-            debugLog(`User Agent: ${navigator.userAgent}`, 'info');
             debugLog(`A-Frame verze: ${AFRAME.version}`, 'info');
+            debugLog('🔧 Používám dual-sky stereo přístup z A-Frame příkladu', 'info');
             
             // Zkontrolovat WebXR
             if (navigator.xr) {
@@ -389,7 +380,6 @@
                     if (supported) {
                         debugLog('✅ Immersive VR je podporováno!', 'success');
                         debugLog('💡 Klikněte "Načíst VR scénu" → pak VR tlačítko vpravo dole', 'info');
-            debugLog('🔍 Stereo: Levé oko = levá polovina obrázku, Pravé oko = pravá polovina', 'info');
                     } else {
                         debugLog('❌ Immersive VR není podporováno', 'error');
                     }
