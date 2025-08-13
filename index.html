@@ -5,107 +5,209 @@
       #ui {
         position: fixed;
         z-index: 100;
-        bottom: 50px;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0,0,0,0.7);
+        padding: 10px;
+        border-radius: 5px;
+      }
+      #ui button {
+        margin: 5px;
+        padding: 10px 15px;
+        background: #4CC3D9;
+        color: white;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+      }
+      #ui button:hover {
+        background: #7BC8E8;
       }
       #info {
         position: fixed;
         z-index: 1000;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
         text-align: center;
-        width: 100%;
-        margin: 0 auto;
+        background: rgba(0,0,0,0.8);
+        color: white;
+        padding: 10px;
+        border-radius: 5px;
       }
     </style>
     <script>
-    // Jednoduchá stereo komponenta
-    AFRAME.registerComponent('stereo', {
+    AFRAME.registerComponent('stereo-180', {
       schema: {
         eye: {type: 'string', default: 'left'}
       },
       init: function () {
+        // Pro levé oko používáme levou polovinu textury
+        // Pro pravé oko používáme pravou polovinu textury
+        if (this.data.eye === 'left') {
+          this.el.setAttribute('material', {
+            repeat: {x: 0.5, y: 1},
+            offset: {x: 0, y: 0}
+          });
+        } else {
+          this.el.setAttribute('material', {
+            repeat: {x: 0.5, y: 1},
+            offset: {x: 0.5, y: 0}
+          });
+        }
+        
+        // Nastavení vrstvy pro stereo rendering
         this.el.setAttribute('layer', {
           type: this.data.eye === 'left' ? 'monovision' : 'monovision'
         });
       }
     });
 
-    AFRAME.registerComponent("gallery-controller", {
+    AFRAME.registerComponent('vr-gallery-controller', {
       init: function() {
-        const eyes = document.querySelectorAll("[stereo]");
-        const images = document.querySelectorAll(".ui");
-
-        const handleVrMode = e => {
-          if (!this.el.sceneEl.is('vr-mode') && AFRAME.utils.device.isMobile()) {
-            this.el.sceneEl.enterVR();
-          }
+        this.currentImageIndex = 0;
+        this.images = [
+          './Castles/generated/Le_Castillet_generated.jpg',
+          'assets/default180_1.jpg',
+          'assets/default180_2.jpg'
+        ];
+        
+        // Inicializace s prvním obrázkem
+        this.loadImage(this.currentImageIndex);
+        
+        // Event listenery pro tlačítka
+        document.getElementById('prevBtn').addEventListener('click', () => {
+          this.previousImage();
+        });
+        
+        document.getElementById('nextBtn').addEventListener('click', () => {
+          this.nextImage();
+        });
+        
+        document.getElementById('vrBtn').addEventListener('click', () => {
+          this.enterVR();
+        });
+      },
+      
+      loadImage: function(index) {
+        const spheres = document.querySelectorAll('.vr-sphere');
+        const imageSrc = this.images[index];
+        
+        // Aktualizace textury pro obě koule (levé a pravé oko)
+        spheres.forEach(sphere => {
+          sphere.setAttribute('material', 'src', imageSrc);
+        });
+        
+        // Aktualizace info
+        document.getElementById('imageCounter').textContent = 
+          `Obrázek ${index + 1} z ${this.images.length}`;
+      },
+      
+      nextImage: function() {
+        this.currentImageIndex = (this.currentImageIndex + 1) % this.images.length;
+        this.loadImage(this.currentImageIndex);
+      },
+      
+      previousImage: function() {
+        this.currentImageIndex = this.currentImageIndex === 0 ? 
+          this.images.length - 1 : this.currentImageIndex - 1;
+        this.loadImage(this.currentImageIndex);
+      },
+      
+      enterVR: function() {
+        if (!this.el.sceneEl.is('vr-mode')) {
+          this.el.sceneEl.enterVR();
         }
-
-        var newImage = "";
-        images.forEach(img => {
-          img.addEventListener("click", evt => {
-            handleVrMode()
-            newImage = evt.target.getAttribute("src");
-            eyes.forEach(eye => {
-              eye.emit("swap")
-            })
-          }, false)
-        })
-
-        eyes.forEach(eye => {
-          eye.addEventListener("animationcomplete__fadeout", evt => {
-            eye.setAttribute("material", "src", newImage);
-            eye.emit("show");
-          })
-          
-          eye.addEventListener("animationcomplete__fadein", evt => {
-            interactable = true;
-          })
-        })
       }
-    })
+    });
     </script>
   </head>
   <body>
     <div id="info">
-      <p>Podívejte se dolů na obrázky.<br>Klikněte na ně pro vstup do VR / změnu obrázku<br>
-      Stereoskopická VR Galerie
-      </p>
+      <h3>180° VR Stereo Galerie</h3>
+      <p id="imageCounter">Obrázek 1 z 3</p>
+      <p>Použijte VR headset nebo Google Cardboard pro nejlepší zážitek</p>
     </div>
-    <a-scene vr-mode-ui="enabled: false" raycaster="objects: .ui">
+    
+    <div id="ui">
+      <button id="prevBtn">◀ Předchozí</button>
+      <button id="vrBtn">🥽 Vstup do VR</button>
+      <button id="nextBtn">Další ▶</button>
+    </div>
+
+    <a-scene 
+      vr-mode-ui="enabled: true" 
+      background="color: #000000"
+      renderer="antialias: true; colorManagement: true; sortObjects: true;"
+      vive-controls="hand: left" 
+      vive-controls="hand: right">
+      
       <a-assets>
-        <img id="le_castillet" src="./Castles/generated/Le_Castillet_generated.jpg">
-
+        <img id="currentImage" src="./Castles/generated/Le_Castillet_generated.jpg" crossorigin="anonymous">
       </a-assets>
-      <a-entity camera look-controls position="0 1.6 0" stereocam="eye:left;">
-          <a-entity cursor="fuse: false"
-          position="0 0 -0.3"
-          geometry="primitive: ring; radiusInner: 0.002; radiusOuter: 0.003"
-          material="color: #9916F5; shader: flat">
-        </a-entity>
-      </a-entity>
-      <!-- v VR módu se první plocha zobrazí pouze v levém oku, druhá v pravém -->
-      <a-entity gallery-controller>
-        <a-plane
-          material="repeat: 0.5 1; src: #le_castillet"
-          position="0 1.6 -.25"
-          stereo="eye:left"
-          animation__fadeout="property: material.opacity; from: 1.0; to: 0.01; dur: 250; startEvents: swap"
-          animation__fadein="property: material.opacity; from: 0.01; to: 1.0; dur: 250; startEvents: show"
-        ></a-plane>
-        <a-plane
-          material="repeat: 0.5 1; offset: 0.5 0; src: #le_castillet"
-          position="0 1.6 -.25"
+
+      <!-- VR kamera s pozicí uprostřed -->
+      <a-entity 
+        id="cameraRig" 
+        position="0 1.6 0"
+        vr-gallery-controller>
+        
+        <!-- Levé oko - zobrazuje levou polovinu SBS obrázku -->
+        <a-camera 
+          id="leftEye"
+          active="false"
+          stereo="eye: left"
+          look-controls="enabled: true; reverseMouseDrag: false"
+          wasd-controls="enabled: false"
+          position="-0.032 0 0">
+        </a-camera>
+        
+        <!-- Pravé oko - zobrazuje pravou polovinu SBS obrázku -->
+        <a-camera 
+          id="rightEye" 
+          active="false"
           stereo="eye: right"
-          animation__fadeout="property: material.opacity; from: 1.0; to: 0.01; dur: 250; startEvents: swap"
-          animation__fadein="property: material.opacity; from: 0.01; to: 1.0; dur: 250; startEvents: show"
-        ></a-plane>
+          look-controls="enabled: true; reverseMouseDrag: false"
+          wasd-controls="enabled: false"
+          position="0.032 0 0">
+        </a-camera>
+        
+        <!-- Hlavní kamera pro non-VR mód -->
+        <a-camera 
+          id="mainCamera"
+          active="true"
+          look-controls="enabled: true"
+          wasd-controls="enabled: false">
+        </a-camera>
       </a-entity>
 
-      <a-image src="#le_castillet"     class="ui" scale="0.4 0.2 0.5" position="-0.75 1 0"  rotation="-70 0 0"></a-image>
-      <a-image src="#synagogue"       class="ui" scale="0.4 0.2 0.5" position="-0.25 1 0"  rotation="-70 0 0"></a-image>
-      <a-image src="#charles_street"  class="ui" scale="0.4 0.2 0.5" position="0.25 1 0"   rotation="-70 0 0"></a-image>
-      <a-image src="#college"         class="ui" scale="0.4 0.2 0.5" position="0.75 1 0"   rotation="-70 0 0"></a-image>
-      <a-plane color="black" position="0 1 -0.001" rotation="-70 0 0" scale="2 0.3 1"></a-plane>
+      <!-- 180° sféra pro levé oko -->
+      <a-sphere 
+        class="vr-sphere"
+        material="src: #currentImage; side: back; repeat: 0.5 1; offset: 0 0"
+        stereo-180="eye: left"
+        radius="100" 
+        theta-start="0" 
+        theta-length="180"
+        position="0 0 0"
+        layer="type: monovision">
+      </a-sphere>
+      
+      <!-- 180° sféra pro pravé oko -->
+      <a-sphere 
+        class="vr-sphere"
+        material="src: #currentImage; side: back; repeat: 0.5 1; offset: 0.5 0"
+        stereo-180="eye: right"
+        radius="100" 
+        theta-start="0" 
+        theta-length="180" 
+        position="0 0 0"
+        layer="type: monovision">
+      </a-sphere>
+
+      <!-- Světlo pro lepší zobrazení -->
+      <a-light type="ambient" color="#404040" intensity="0.4"></a-light>
     </a-scene>
   </body>
 </html>
-
