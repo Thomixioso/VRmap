@@ -1,9 +1,14 @@
 <html>
   <head>
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <meta charset="utf-8">
+    <title>180° SBS Stereo WebXR</title>
+    <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
   </head>
   <body>
-    <a-scene vr-mode-ui="enabled: true">
+    <a-scene vr-mode-ui="enabled: true"
+             xr-webxr="referenceSpaceType: local"  <!-- kamera přesně v centru -->
+
+             background="color: black">
 
       <!-- Kamera -->
       <a-entity id="cameraRig">
@@ -29,41 +34,28 @@
         <img id="stereoImage" src="./Castles/generated/Le_Castillet_generated.jpg">
       </a-assets>
 
-      <!-- Skript pro přizpůsobení -->
+      <!-- Skript pro přizpůsobení segmentů -->
       <script>
         document.querySelector('#stereoImage').addEventListener('load', function (e) {
           const img = e.target;
-          const aspect = img.naturalWidth / img.naturalHeight;
-
-          // protože máme SBS, šířku jedné půlky počítáme jako poloviční
-          const halfAspect = (img.naturalWidth / 2) / img.naturalHeight;
-
-          // radius určíme tak, aby projekce nebyla deformovaná
-          // pro většinu headsetů funguje radius 10 + úprava segmentů
+          const halfAspect = (img.naturalWidth / 2) / img.naturalHeight; // poměr pro jedno oko
           const radius = 10;
+          const segW = Math.max(32, Math.round(halfAspect * 64));
 
-          const sphereLeft = document.querySelector('#sphereLeft');
-          const sphereRight = document.querySelector('#sphereRight');
-
-          sphereLeft.setAttribute('geometry', {
-            primitive: 'sphere',
-            radius: radius,
-            segmentsWidth: Math.max(32, Math.round(halfAspect * 64)),
-            segmentsHeight: 64,
-            thetaLength: 180
+          ['#sphereLeft', '#sphereRight'].forEach(sel => {
+            document.querySelector(sel).setAttribute('geometry', {
+              primitive: 'sphere',
+              radius: radius,
+              segmentsWidth: segW,
+              segmentsHeight: 64,
+              thetaLength: 180
+            });
           });
 
-          sphereRight.setAttribute('geometry', {
-            primitive: 'sphere',
-            radius: radius,
-            segmentsWidth: Math.max(32, Math.round(halfAspect * 64)),
-            segmentsHeight: 64,
-            thetaLength: 180
-          });
-
-          console.log(`Texture aspect ratio: ${aspect}, half: ${halfAspect}`);
+          console.log(`✅ Nastaveno pro aspect ratio jednoho oka: ${halfAspect.toFixed(3)}`);
         });
       </script>
+
     </a-scene>
   </body>
 </html>
