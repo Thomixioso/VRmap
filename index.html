@@ -329,136 +329,39 @@
         let currentImagePath = '';
         let lastMapView = null; // Uložit poslední pozici mapy
 
-        // Data míst
-        const locations = [
-            {
-                "name": "Le_Castillet",
-                "category": "Castles",
-                "lat": 42.70064,
-                "lon": 2.89412,
-                "txtFile": "Castles/Le_Castillet.txt",
-                "image": "Castles/generated/Le_Castillet_generated.jpg"
-            },
-            {
-                "name": "Moulton",
-                "category": "Castles",
-                "lat": 52.77328,
-                "lon": -0.05583,
-                "txtFile": "Castles/Moulton.txt",
-                "image": "Castles/generated/Moulton_generated.jpg"
-            },
-            {
-                "name": "Old_Hall_Camp",
-                "category": "Castles",
-                "lat": 52.49951,
-                "lon": -3.17018,
-                "txtFile": "Castles/Old_Hall_Camp.txt",
-                "image": "Castles/generated/Old_Hall_Camp_generated.jpg"
-            },
-            {
-                "name": "Stockbury_Castle",
-                "category": "Castles",
-                "lat": 51.32391,
-                "lon": 0.6476,
-                "txtFile": "Castles/Stockbury_Castle.txt",
-                "image": "Castles/generated/Stockbury_Castle_generated.jpg"
-            },
-            {
-                "name": "Cristo_Redentore",
-                "category": "Historical_sites",
-                "lat": 42.8633,
-                "lon": 13.57593,
-                "txtFile": "Historical_sites/Cristo_Redentore.txt",
-                "image": "Historical_sites/generated/Cristo_Redentore_generated.jpg"
-            },
-            {
-                "name": "Heimkehrerdenkmal",
-                "category": "Historical_sites",
-                "lat": 51.41575,
-                "lon": 9.90878,
-                "txtFile": "Historical_sites/Heimkehrerdenkmal.txt",
-                "image": "Historical_sites/generated/Heimkehrerdenkmal_generated.jpg"
-            },
-            {
-                "name": "Henry_Wadsworth_Longfellow_Statue",
-                "category": "Historical_sites",
-                "lat": 38.90594,
-                "lon": -77.04109,
-                "txtFile": "Historical_sites/Henry_Wadsworth_Longfellow_Statue.txt",
-                "image": "Historical_sites/generated/Henry_Wadsworth_Longfellow_Statue_generated.jpg"
-            },
-            {
-                "name": "Homenagem_a_D._Miguel",
-                "category": "Historical_sites",
-                "lat": 41.09725,
-                "lon": -7.80658,
-                "txtFile": "Historical_sites/Homenagem_a_D._Miguel.txt",
-                "image": "Historical_sites/generated/Homenagem_a_D._Miguel_generated.jpg"
-            },
-            {
-                "name": "Monumento_al_Ahogado_(Los_Dedos)",
-                "category": "Historical_sites",
-                "lat": -34.95783,
-                "lon": -54.93722,
-                "txtFile": "Historical_sites/Monumento_al_Ahogado_(Los_Dedos).txt",
-                "image": "Historical_sites/generated/Monumento_al_Ahogado_(Los_Dedos)_generated.jpg"
-            },
-            {
-                "name": "Walhalla",
-                "category": "Historical_sites",
-                "lat": 49.03126,
-                "lon": 12.22409,
-                "txtFile": "Historical_sites/Walhalla.txt",
-                "image": "Historical_sites/generated/Walhalla_generated.jpg"
-            },
-            {
-                "name": "Brookwood_Park",
-                "category": "Parks",
-                "lat": 30.66547,
-                "lon": -88.23667,
-                "txtFile": "Parks/Brookwood_Park.txt",
-                "image": "Parks/generated/Brookwood_Park_generated.jpg"
-            },
-            {
-                "name": "Dorandoran-gongwon",
-                "category": "Parks",
-                "lat": 37.39807,
-                "lon": 126.63758,
-                "txtFile": "Parks/Dorandoran-gongwon.txt",
-                "image": "Parks/generated/Dorandoran-gongwon_generated.jpg"
-            },
-            {
-                "name": "Garden_Grove_Park",
-                "category": "Parks",
-                "lat": 33.76252,
-                "lon": -117.96645,
-                "txtFile": "Parks/Garden_Grove_Park.txt",
-                "image": "Parks/generated/Garden_Grove_Park_generated.jpg"
-            },
-            {
-                "name": "Lake_George_Battlefield_Park",
-                "category": "Parks",
-                "lat": 43.41646,
-                "lon": -73.70845,
-                "txtFile": "Parks/Lake_George_Battlefield_Park.txt",
-                "image": "Parks/generated/Lake_George_Battlefield_Park_generated.jpg"
-            },
-            {
-                "name": "Parc_James-Palmer",
-                "category": "Parks",
-                "lat": 45.36338,
-                "lon": -73.71699,
-                "txtFile": "Parks/Parc_James-Palmer.txt",
-                "image": "Parks/generated/Parc_James-Palmer_generated.jpg"
+        // Data míst - načteme z data.json
+        let locations = [];
+
+        // Načíst data z data.json
+        async function loadLocationsData() {
+            try {
+                const response = await fetch('data.json');
+                if (!response.ok) {
+                    throw new Error('Nepodařilo se načíst data.json: ' + response.statusText);
+                }
+                locations = await response.json();
+                
+                // Přidat markery na mapu po načtení dat
+                addMarkersToMap();
+                
+            } catch (error) {
+                console.error('Chyba při načítání dat:', error);
+                document.getElementById('errorMessage').innerHTML = 
+                    '<p style="color: red; position: fixed; top: 10px; left: 10px; background: white; padding: 10px; border-radius: 5px; z-index: 1000;">Chyba: Nepodařilo se načíst data.json</p>';
             }
-        ];
+        }
 
         // Přidat markery na mapu
-        locations.forEach(location => {
-            let marker = L.marker([location.lat, location.lon]).addTo(map);
-            marker.bindPopup(location.name);
-            marker.on('click', (e) => showLocationDetails(location, e));
-        });
+        function addMarkersToMap() {
+            locations.forEach(location => {
+                let marker = L.marker([location.lat, location.lon]).addTo(map);
+                marker.bindPopup(location.name);
+                marker.on('click', (e) => showLocationDetails(location, e));
+            });
+        }
+
+        // Spustit načítání dat při startu
+        loadLocationsData();
 
         function updateStatus(message) {
             document.getElementById('vr-status').textContent = message;
@@ -666,8 +569,27 @@
                 return;
             }
             
+            // Ověřit že jsou sféry připravené
+            if (!leftSphere || !rightSphere) {
+                updateStatus('VR scéna není připravená - čekám...');
+                // Zkusit znovu za chvíli
+                setTimeout(() => {
+                    startVRAutomatically();
+                }, 1000);
+                return;
+            }
+            
             try {
-                updateStatus('Spouštím VR...');
+                updateStatus('Kontroluji VR podporu...');
+                
+                // Ověřit VR podporu před spuštěním
+                const supported = await navigator.xr.isSessionSupported('immersive-vr');
+                if (!supported) {
+                    updateStatus('VR není podporováno na tomto zařízení');
+                    return;
+                }
+                
+                updateStatus('Spouštím VR session...');
                 
                 // Zkusíme local reference space pro head tracking
                 renderer.xr.setReferenceSpaceType('local');
@@ -677,6 +599,7 @@
                     optionalFeatures: ['local']
                 });
                 
+                updateStatus('Nastavuji VR session...');
                 await renderer.xr.setSession(session);
                 
                 // Nastavení kamer pro každé oko
@@ -700,7 +623,7 @@
                 
                 // Fallback na viewer pokud local selže
                 try {
-                    updateStatus('Fallback na viewer...');
+                    updateStatus('Zkouším fallback na viewer...');
                     renderer.xr.setReferenceSpaceType('viewer');
                     
                     const session = await navigator.xr.requestSession('immersive-vr');
@@ -708,7 +631,7 @@
                     
                     setupEyeLayers();
                     
-                    // Přidar controller exit s přímým návratem na mapu
+                    // Přidat controller exit s přímým návratem na mapu
                     session.addEventListener('selectstart', () => {
                         session.end();
                         exitVR(); // Přímý návrat na mapu
@@ -723,7 +646,12 @@
                     
                 } catch (fallbackError) {
                     console.error('Fallback také selhal:', fallbackError);
-                    updateStatus('VR nedostupné');
+                    updateStatus('VR selhalo - zkuste to znovu');
+                    
+                    // Automaticky ukončit a vrátit na mapu při chybě
+                    setTimeout(() => {
+                        exitVR();
+                    }, 3000);
                 }
             }
         }
