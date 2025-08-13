@@ -1,67 +1,69 @@
-<!DOCTYPE html>
 <html>
-<head>
-    <title>A-Frame Stereo - Insta 360 EVO</title>
-    <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
-    <script src="build.js"></script>
-</head>
-<body>
-    <a-scene antialias="true">
-        <!-- Rozdělené poloviny z Insta 360 EVO obrázku -->
-        <a-assets>
-            <img id="originalImage" src="./Castles/generated/Le_Castillet_generated.jpg">
-            <canvas id="left" width="1024" height="1024"></canvas>
-            <canvas id="right" width="1024" height="1024"></canvas>
-        </a-assets>
+  <head>
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  </head>
+  <body>
+    <a-scene vr-mode-ui="enabled: true">
 
-        <!-- Camera -->
-        <a-entity camera look-controls position="0 0 0" stereocam="eye:left;"></a-entity>
+      <!-- Kamera -->
+      <a-entity id="cameraRig">
+        <a-entity camera look-controls position="0 0 0"></a-entity>
+      </a-entity>
 
-        <!-- Sphere pouze pro 180° (přední hemisféra) -->
-        <a-sphere id="sky1" src="#left" stereo="eye:left" 
-                  radius="10" 
-                  theta-start="0" theta-length="180"
-                  phi-start="0" phi-length="360"
-                  rotation="0 -90 0"
-                  material="side: back"></a-sphere>
-        <a-sphere id="sky2" src="#right" stereo="eye:right"
-                  radius="10"
-                  theta-start="0" theta-length="180" 
-                  phi-start="0" phi-length="360"
-                  rotation="0 -90 0"
-                  material="side: back"></a-sphere>
-    </a-scene>
+      <!-- Levé oko -->
+      <a-entity id="sphereLeft"
+                geometry="primitive: sphere; radius: 10; segmentsWidth: 64; segmentsHeight: 64; thetaLength: 180"
+                material="side: back; src: #stereoImage; repeat: 0.5 1; offset: 0 0"
+                stereo="eye: left">
+      </a-entity>
 
-    <script>
-        // Rozdělení side-by-side obrázku na dva canvas
-        window.addEventListener('load', () => {
-            const img = document.getElementById('originalImage');
-            
-            img.onload = () => {
-                const leftCanvas = document.getElementById('left');
-                const rightCanvas = document.getElementById('right');
-                
-                const fullWidth = img.naturalWidth;
-                const fullHeight = img.naturalHeight;
-                const halfWidth = fullWidth / 2;
-                
-                leftCanvas.width = halfWidth;
-                leftCanvas.height = fullHeight;
-                rightCanvas.width = halfWidth;
-                rightCanvas.height = fullHeight;
-                
-                const leftCtx = leftCanvas.getContext('2d');
-                const rightCtx = rightCanvas.getContext('2d');
-                
-                // Levá polovina → left canvas
-                leftCtx.drawImage(img, 0, 0, halfWidth, fullHeight, 0, 0, halfWidth, fullHeight);
-                
-                // Pravá polovina → right canvas
-                rightCtx.drawImage(img, halfWidth, 0, halfWidth, fullHeight, 0, 0, halfWidth, fullHeight);
-            };
-            
-            if (img.complete) img.onload();
+      <!-- Pravé oko -->
+      <a-entity id="sphereRight"
+                geometry="primitive: sphere; radius: 10; segmentsWidth: 64; segmentsHeight: 64; thetaLength: 180"
+                material="side: back; src: #stereoImage; repeat: 0.5 1; offset: 0.5 0"
+                stereo="eye: right">
+      </a-entity>
+
+      <!-- Jeden společný obrázek -->
+      <a-assets>
+        <img id="stereoImage" src="./Castles/generated/Le_Castillet_generated.jpg">
+      </a-assets>
+
+      <!-- Skript pro přizpůsobení -->
+      <script>
+        document.querySelector('#stereoImage').addEventListener('load', function (e) {
+          const img = e.target;
+          const aspect = img.naturalWidth / img.naturalHeight;
+
+          // protože máme SBS, šířku jedné půlky počítáme jako poloviční
+          const halfAspect = (img.naturalWidth / 2) / img.naturalHeight;
+
+          // radius určíme tak, aby projekce nebyla deformovaná
+          // pro většinu headsetů funguje radius 10 + úprava segmentů
+          const radius = 10;
+
+          const sphereLeft = document.querySelector('#sphereLeft');
+          const sphereRight = document.querySelector('#sphereRight');
+
+          sphereLeft.setAttribute('geometry', {
+            primitive: 'sphere',
+            radius: radius,
+            segmentsWidth: Math.max(32, Math.round(halfAspect * 64)),
+            segmentsHeight: 64,
+            thetaLength: 180
+          });
+
+          sphereRight.setAttribute('geometry', {
+            primitive: 'sphere',
+            radius: radius,
+            segmentsWidth: Math.max(32, Math.round(halfAspect * 64)),
+            segmentsHeight: 64,
+            thetaLength: 180
+          });
+
+          console.log(`Texture aspect ratio: ${aspect}, half: ${halfAspect}`);
         });
-    </script>
-</body>
+      </script>
+    </a-scene>
+  </body>
 </html>
