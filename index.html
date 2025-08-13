@@ -4,31 +4,8 @@
     <title>A-Frame Stereo - Insta 360 EVO</title>
     <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
     <script src="build.js"></script>
-    
-    <style>
-        body { margin: 0; font-family: Arial, sans-serif; }
-        .debug {
-            position: fixed; top: 10px; left: 10px;
-            background: rgba(0,0,0,0.8); color: white;
-            padding: 10px; border-radius: 5px;
-            font-family: monospace; font-size: 12px;
-            z-index: 1000; max-width: 400px;
-        }
-        .success { color: #28a745; }
-        .error { color: #dc3545; }
-        button {
-            background: #007bff; color: white; border: none;
-            padding: 8px 16px; margin: 5px; border-radius: 3px; cursor: pointer;
-        }
-    </style>
 </head>
 <body>
-    <div class="debug" id="debugOutput">
-        <strong>🥽 A-Frame Stereo - build.js knihovna</strong><br>
-        <span id="status">Načítám...</span><br>
-        <button onclick="toggleDebug()">Skrýt/Zobrazit</button>
-    </div>
-
     <a-scene antialias="true">
         <!-- Rozdělené poloviny z Insta 360 EVO obrázku -->
         <a-assets>
@@ -46,79 +23,34 @@
     </a-scene>
 
     <script>
-        function log(message, type = 'info') {
-            const status = document.getElementById('status');
-            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
-            status.innerHTML += `<div class="${className}">${message}</div>`;
-            console.log(message);
-        }
-        
-        function toggleDebug() {
-            const debug = document.querySelector('.debug');
-            debug.style.display = debug.style.display === 'none' ? 'block' : 'none';
-        }
-        
-        function splitStereoToCanvases() {
+        // Rozdělení side-by-side obrázku na dva canvas
+        window.addEventListener('load', () => {
             const img = document.getElementById('originalImage');
-            const leftCanvas = document.getElementById('left');
-            const rightCanvas = document.getElementById('right');
             
-            if (!img.complete) {
-                log('❌ Obrázek není načten', 'error');
-                return;
-            }
-            
-            const fullWidth = img.naturalWidth;
-            const fullHeight = img.naturalHeight;
-            const halfWidth = fullWidth / 2;
-            
-            log(`📏 Celkový obrázek: ${fullWidth}x${fullHeight}`, 'info');
-            log(`🔄 Levá polovina: 0-${halfWidth}, Pravá: ${halfWidth}-${fullWidth}`, 'info');
-            
-            // Nastavit velikost canvas
-            leftCanvas.width = halfWidth;
-            leftCanvas.height = fullHeight;
-            rightCanvas.width = halfWidth;
-            rightCanvas.height = fullHeight;
-            
-            const leftCtx = leftCanvas.getContext('2d');
-            const rightCtx = rightCanvas.getContext('2d');
-            
-            try {
-                // Levá polovina obrázku → left canvas
+            img.onload = () => {
+                const leftCanvas = document.getElementById('left');
+                const rightCanvas = document.getElementById('right');
+                
+                const fullWidth = img.naturalWidth;
+                const fullHeight = img.naturalHeight;
+                const halfWidth = fullWidth / 2;
+                
+                leftCanvas.width = halfWidth;
+                leftCanvas.height = fullHeight;
+                rightCanvas.width = halfWidth;
+                rightCanvas.height = fullHeight;
+                
+                const leftCtx = leftCanvas.getContext('2d');
+                const rightCtx = rightCanvas.getContext('2d');
+                
+                // Levá polovina → left canvas
                 leftCtx.drawImage(img, 0, 0, halfWidth, fullHeight, 0, 0, halfWidth, fullHeight);
                 
-                // Pravá polovina obrázku → right canvas
+                // Pravá polovina → right canvas
                 rightCtx.drawImage(img, halfWidth, 0, halfWidth, fullHeight, 0, 0, halfWidth, fullHeight);
-                
-                log('✅ Side-by-side rozdělen na L/R canvas!', 'success');
-                log('🥽 build.js stereo komponenty připraveny', 'success');
-                log('👆 Klikněte VR tlačítko vpravo dole', 'success');
-            } catch (error) {
-                log(`❌ Chyba při rozdělení: ${error.message}`, 'error');
-            }
-        }
-        
-        // Inicializace
-        window.addEventListener('load', () => {
-            log('🚀 Spouštím s build.js knihovnou...', 'info');
+            };
             
-            const img = document.getElementById('originalImage');
-            
-            img.addEventListener('load', () => {
-                log('✅ Insta 360 EVO obrázek načten', 'success');
-                splitStereoToCanvases();
-            });
-            
-            img.addEventListener('error', () => {
-                log('❌ Chyba načítání obrázku', 'error');
-                log('Zkontrolujte cestu: ./Castles/generated/Le_Castillet_generated.jpg', 'error');
-            });
-            
-            // Pokud už je načten
-            if (img.complete && img.naturalWidth > 0) {
-                img.dispatchEvent(new Event('load'));
-            }
+            if (img.complete) img.onload();
         });
     </script>
 </body>
