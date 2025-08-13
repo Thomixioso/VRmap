@@ -17,9 +17,13 @@
         <!-- Camera -->
         <a-entity camera look-controls position="0 0 0" stereocam="eye:left;"></a-entity>
 
-        <!-- Sky sphere -->
-        <a-sky id="sky1" src="#left" stereo="eye:left"></a-sky>
-        <a-sky id="sky2" src="#right" stereo="eye:right"></a-sky>
+        <!-- Sky sphere pouze pro 180° (přední hemisféra) -->
+        <a-sky id="sky1" src="#left" stereo="eye:left" 
+               geometry="primitive: sphere; radius: 10; thetaStart: 0; thetaLength: 180; phiStart: 0; phiLength: 360"
+               material="side: back"></a-sky>
+        <a-sky id="sky2" src="#right" stereo="eye:right"
+               geometry="primitive: sphere; radius: 10; thetaStart: 0; thetaLength: 180; phiStart: 0; phiLength: 360" 
+               material="side: back"></a-sky>
     </a-scene>
 
     <script>
