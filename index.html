@@ -88,13 +88,14 @@
         <div class="controls">
             <button class="button" onclick="loadVRScene()">📷 Načíst VR scénu</button>
             <button class="button" onclick="autoEnterVR()" id="autoVrBtn">🚀 Auto VR</button>
+            <button class="button" onclick="testImagePath()">🔍 Test cesty k obrázku</button>
             <button class="button" onclick="toggleUI()">👁️ Skrýt/Zobrazit UI</button>
         </div>
         
         <div id="debugOutput" class="debug"></div>
     </div>
 
-    <!-- A-Frame VR scéna -->
+            <!-- A-Frame VR scéna -->
     <a-scene 
         id="vrScene" 
         embedded 
@@ -104,17 +105,21 @@
         
         <!-- Základní nastavení -->
         <a-assets>
-            <img id="stereoImage" src="Castles/generated/Le_Castillet_generated.jpg" crossorigin="anonymous">
+            <img id="stereoImage" src="Castles/generated/Le_Castillet_generated.jpg">
         </a-assets>
         
-        <!-- VR prostředí -->
-        <a-sky 
+        <!-- VR prostředí pro 180° stereo -->
+        <a-sphere 
             id="skybox" 
             src="#stereoImage" 
+            radius="10"
+            theta-start="0"
+            theta-length="180"
+            phi-start="0" 
+            phi-length="360"
             rotation="0 -90 0"
-            geometry="primitive: sphere; radius: 10; segmentsWidth: 64; segmentsHeight: 32"
             material="side: back; shader: flat">
-        </a-sky>
+        </a-sphere>
         
         <!-- Kamera s ovládáním -->
         <a-entity 
@@ -151,9 +156,12 @@
             const scene = document.querySelector('#vrScene');
             const image = document.querySelector('#stereoImage');
             
-            // Sledovat načtení obrázku
-            image.onload = () => {
-                debugLog('✅ Stereo obrázek načten úspěšně', 'success');
+            debugLog(`Cesta k obrázku: ${image.src}`, 'info');
+            
+            // Přidat posluchače událostí před načtením
+            image.addEventListener('load', function() {
+                debugLog('✅ Stereo obrázek načten úspěšně!', 'success');
+                debugLog(`Rozměry obrázku: ${image.naturalWidth}x${image.naturalHeight}`, 'info');
                 sceneLoaded = true;
                 
                 // Auto-aktivovat VR tlačítko
@@ -164,12 +172,31 @@
                         vrButton.style.display = 'block';
                     }
                 }, 1000);
-            };
+            });
             
-            image.onerror = () => {
-                debugLog('❌ Chyba při načítání obrázku: Castles/generated/Le_Castillet_generated.jpg', 'error');
-                debugLog('Zkontrolujte cestu k souboru', 'error');
-            };
+            image.addEventListener('error', function(e) {
+                debugLog('❌ CHYBA při načítání obrázku!', 'error');
+                debugLog(`Chyba: ${e.type}`, 'error');
+                debugLog('Zkontrolujte cestu: Castles/generated/Le_Castillet_generated.jpg', 'error');
+                
+                // Zkusit alternativní cestu
+                debugLog('Zkouším alternativní cestu...', 'info');
+                setTimeout(() => {
+                    image.src = './Castles/generated/Le_Castillet_generated.jpg';
+                }, 1000);
+            });
+            
+            // Vynutit načtení, pokud už je cached
+            if (image.complete && image.naturalWidth > 0) {
+                debugLog('✅ Obrázek již v cache, načítám...', 'success');
+                image.dispatchEvent(new Event('load'));
+            } else {
+                // Vynutit reload
+                const currentSrc = image.src;
+                image.src = '';
+                image.src = currentSrc;
+                debugLog('🔄 Vynucuji reload obrázku...', 'info');
+            }
             
             // Sledovat A-Frame eventy
             scene.addEventListener('loaded', () => {
@@ -230,6 +257,35 @@
                 debugLog(`❌ Auto VR selhalo: ${error.message}`, 'error');
                 debugLog('💡 Zkuste kliknout na VR tlačítko v pravém dolním rohu', 'info');
             }
+        }
+        
+        function testImagePath() {
+            debugLog('🔍 Testuji cesty k obrázku...', 'info');
+            
+            const testPaths = [
+                'Castles/generated/Le_Castillet_generated.jpg',
+                './Castles/generated/Le_Castillet_generated.jpg',
+                '../Castles/generated/Le_Castillet_generated.jpg',
+                'data/Castles/generated/Le_Castillet_generated.jpg'
+            ];
+            
+            testPaths.forEach((path, index) => {
+                const testImg = new Image();
+                testImg.onload = () => {
+                    debugLog(`✅ FUNGUJE: ${path} (${testImg.width}x${testImg.height})`, 'success');
+                    
+                    // Pokud je to první funkční cesta, použij ji
+                    if (!sceneLoaded) {
+                        debugLog(`🔄 Používám cestu: ${path}`, 'info');
+                        document.querySelector('#stereoImage').src = path;
+                        setTimeout(() => loadVRScene(), 500);
+                    }
+                };
+                testImg.onerror = () => {
+                    debugLog(`❌ NEFUNGUJE: ${path}`, 'error');
+                };
+                testImg.src = path;
+            });
         }
         
         function toggleUI(force = null) {
