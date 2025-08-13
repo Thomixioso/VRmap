@@ -237,10 +237,6 @@
             leftSphere = new THREE.Mesh(geometry.clone(), leftMaterial);
             rightSphere = new THREE.Mesh(geometry.clone(), rightMaterial);
             
-            // Otočení sfér tak, aby obrázek byl před námi
-            leftSphere.rotation.y = Math.PI;
-            rightSphere.rotation.y = Math.PI;
-            
             // Nastavení vrstev pro stereo zobrazení
             leftSphere.layers.set(1);  // Levé oko
             rightSphere.layers.set(2); // Pravé oko
