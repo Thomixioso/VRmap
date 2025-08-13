@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>180° VR Stereo Viewer</title>
-    <!-- WebXR Permissions Policy -->
-    <meta http-equiv="Permissions-Policy" content="xr-spatial-tracking=*, camera=*, microphone=*">
     <style>
         body {
             margin: 0;
@@ -15,20 +13,10 @@
             overflow: hidden;
         }
         
-        #info {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: white;
-            z-index: 100;
-            background: rgba(0,0,0,0.5);
-            padding: 10px;
-            border-radius: 5px;
-        }
-        
-        #container {
+        #viewer {
             width: 100vw;
             height: 100vh;
+            position: relative;
         }
         
         canvas {
@@ -37,347 +25,323 @@
             display: block;
         }
         
-        .loading {
+        #vr-button {
             position: absolute;
-            top: 50%;
+            bottom: 20px;
             left: 50%;
-            transform: translate(-50%, -50%);
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
             color: white;
-            font-size: 18px;
+            border: 2px solid white;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 25px;
+            z-index: 100;
+        }
+        
+        #vr-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        #status {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+            font-size: 14px;
         }
     </style>
 </head>
 <body>
-    <div id="info">
-        <div>180° VR Stereo Viewer</div>
-        <div id="status">Inicializace...</div>
-    </div>
-    
-    <div id="container">
-        <div class="loading" id="loading">Načítání VR prostředí...</div>
+    <div id="viewer">
+        <div id="status">Načítání...</div>
+        <button id="vr-button" style="display: none;">Enter VR</button>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
-    <script>
-        let scene, camera, renderer, xrSession;
-        let leftEye, rightEye;
-        let sphere;
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js",
+            "three/": "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        let scene, camera, renderer;
+        let leftSphere, rightSphere;
+        let vrButton;
         
-        // Cesta k side-by-side stereo obrázku
         const stereoImagePath = "./Castles/generated/Le_Castillet_generated.jpg";
-        
+
         function updateStatus(message) {
             document.getElementById('status').textContent = message;
         }
-        
+
         function init() {
-            updateStatus('Vytváření scény...');
+            updateStatus('Inicializace...');
             
-            // Vytvoření scény
+            // Scéna
             scene = new THREE.Scene();
             
-            // Kamera s širokým zorným úhlem
+            // Kamera
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 0, 0);
             
-            // WebGL renderer s WebXR podporou
+            // Renderer s WebXR
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
-            renderer.xr.setReferenceSpaceType('local');
             
-            document.getElementById('container').appendChild(renderer.domElement);
-            document.getElementById('loading').style.display = 'none';
+            document.getElementById('viewer').appendChild(renderer.domElement);
             
-            // Vytvoření sfér pro stereo zobrazení
-            createStereoSpheres();
+            // VR Button
+            setupVRButton();
             
-            // Automatické spuštění VR
-            startVR();
+            // Načtení stereo obrázku
+            loadStereoImage();
+            
+            // Mouse/touch kontrol pro non-VR
+            setupControls();
             
             // Render loop
             renderer.setAnimationLoop(render);
-            
-            updateStatus('Připraveno - vstupuji do VR...');
         }
-        
-        function createStereoSpheres() {
-            // Geometrie pro 180° rectilineární zobrazení
-            // Používáme válcovou geometrii pro rectilineární projekci
-            const geometry = new THREE.CylinderGeometry(100, 100, 200, 60, 1, true, 0, Math.PI);
-            geometry.scale(-1, 1, 1); // Invertovat pro vnitřní zobrazení
+
+        function setupVRButton() {
+            vrButton = document.getElementById('vr-button');
             
-            // Načtení side-by-side stereo obrázku
-            const loader = new THREE.TextureLoader();
-            
-            updateStatus('Načítám stereo obrázek...');
-            
-            loader.load(stereoImagePath, (texture) => {
-                updateStatus('Rozdělování stereo obrázku...');
-                
-                // Zajistit že obrázek je načten
-                if (!texture.image) {
-                    updateStatus('Chyba: Obrázek nebyl správně načten');
-                    return;
-                }
-                
-                console.log('Rozměry obrázku:', texture.image.width, 'x', texture.image.height);
-                
-                // Rozdělení na levou a pravou část
-                const leftTexture = splitStereoTexture(texture, 'left');
-                const rightTexture = splitStereoTexture(texture, 'right');
-                
-                processStereoTexture(texture);
-                
-            }, (progress) => {
-                console.log('Načítání obrázku:', Math.round((progress.loaded / progress.total) * 100) + '%');
-                
-                // Úprava UV mapování pro rectilineární projekci
-                adjustUVForRectilinear(geometry);
-                
-                // Vytvoření materiálů
-                const materialLeft = new THREE.MeshBasicMaterial({ 
-                    map: leftTexture,
-                    side: THREE.DoubleSide
-                });
-                
-                const materialRight = new THREE.MeshBasicMaterial({ 
-                    map: rightTexture,
-                    side: THREE.DoubleSide
-                });
-                
-                // Vytvoření válců pro každé oko
-                leftEye = new THREE.Mesh(geometry.clone(), materialLeft);
-                leftEye.layers.set(1); // Vrstva pro levé oko
-                leftEye.rotation.y = Math.PI; // Otočení pro správnou orientaci
-                scene.add(leftEye);
-                
-                rightEye = new THREE.Mesh(geometry.clone(), materialRight);
-                rightEye.layers.set(2); // Vrstva pro pravé oko
-                rightEye.rotation.y = Math.PI; // Otočení pro správnou orientaci
-                scene.add(rightEye);
-                
-                updateStatus('Rectilineární stereo obrázek načten');
-                
-            }, (progress) => {
-                console.log('Načítání obrázku:', Math.round((progress.loaded / progress.total) * 100) + '%');
-            }, (error) => {
-                console.error('Chyba při načítání stereo obrázku:', error);
-                updateStatus('Chyba při načítání: ' + stereoImagePath + ' - zkontrolujte cestu k souboru');
-                
-                // Zkusit alternativní cestu
-                const altPath = "Castles/generated/Le_Castillet_generated.jpg";
-                updateStatus('Zkouším alternativní cestu: ' + altPath);
-                
-                loader.load(altPath, (texture) => {
-                    updateStatus('Obrázek načten z alternativní cesty');
-                    processStereoTexture(texture);
-                }, undefined, (altError) => {
-                    updateStatus('Soubor nenalezen. Umístěte obrázek do: ' + stereoImagePath);
-                    console.error('Alternativní cesta také selhala:', altError);
-                });
-            });
-        }
-        
-        function adjustUVForRectilinear(geometry) {
-            // Úprava UV souřadnic pro rectilineární projekci 180°
-            const uvs = geometry.attributes.uv.array;
-            
-            for (let i = 0; i < uvs.length; i += 2) {
-                const u = uvs[i];
-                const v = uvs[i + 1];
-                
-                // Mapování U souřadnic pro 180° pokrytí
-                uvs[i] = u; // U zůstává stejné (0-1)
-                
-                // Mapování V souřadnic - střed obrázku odpovídá horizontu
-                uvs[i + 1] = 1 - v; // Invertujeme V pro správnou orientaci
+            if (!navigator.xr) {
+                updateStatus('WebXR není podporován');
+                return;
             }
             
-            geometry.attributes.uv.needsUpdate = true;
+            navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                if (supported) {
+                    vrButton.style.display = 'block';
+                    vrButton.textContent = 'Enter VR';
+                    vrButton.onclick = startVR;
+                } else {
+                    updateStatus('VR není podporováno');
+                }
+            }).catch(() => {
+                updateStatus('Chyba při kontrole VR podpory');
+            });
         }
-        
-        function splitStereoTexture(originalTexture, eye) {
-            // Vytvoření canvas pro rozdělení obrázku
+
+        async function startVR() {
+            try {
+                const session = await navigator.xr.requestSession('immersive-vr');
+                await renderer.xr.setSession(session);
+                
+                // Nastavení kamer pro každé oko
+                setupEyeLayers();
+                
+                vrButton.style.display = 'none';
+                updateStatus('VR aktivní');
+                
+                session.addEventListener('end', () => {
+                    vrButton.style.display = 'block';
+                    updateStatus('VR ukončeno');
+                });
+                
+            } catch (error) {
+                console.error('VR Error:', error);
+                updateStatus('Chyba VR: ' + error.message);
+            }
+        }
+
+        function setupEyeLayers() {
+            // Konfigurace vrstev pro stereo zobrazení
+            camera.layers.enableAll();
+            
+            if (leftSphere) leftSphere.layers.set(1);
+            if (rightSphere) rightSphere.layers.set(2);
+        }
+
+        function loadStereoImage() {
+            updateStatus('Načítání obrázku...');
+            
+            const loader = new THREE.TextureLoader();
+            loader.load(
+                stereoImagePath,
+                (texture) => {
+                    updateStatus('Zpracování stereo obrázku...');
+                    createStereoSpheres(texture);
+                },
+                (progress) => {
+                    const percent = Math.round((progress.loaded / progress.total) * 100);
+                    updateStatus(`Načítání... ${percent}%`);
+                },
+                (error) => {
+                    console.error('Load error:', error);
+                    updateStatus('Chyba při načítání: ' + stereoImagePath);
+                }
+            );
+        }
+
+        function createStereoSpheres(originalTexture) {
+            // Rozdělení side-by-side obrázku
+            const leftTexture = splitTexture(originalTexture, 'left');
+            const rightTexture = splitTexture(originalTexture, 'right');
+            
+            // Geometrie pro 180° zobrazení
+            const geometry = new THREE.SphereGeometry(
+                500,  // radius
+                60,   // widthSegments
+                40,   // heightSegments
+                0,    // phiStart (začátek horizontálně)
+                Math.PI, // phiLength (180°)
+                0,    // thetaStart
+                Math.PI  // thetaLength
+            );
+            
+            // Invertovat pro vnitřní zobrazení
+            geometry.scale(-1, 1, 1);
+            
+            // Materiály
+            const leftMaterial = new THREE.MeshBasicMaterial({
+                map: leftTexture,
+                side: THREE.FrontSide
+            });
+            
+            const rightMaterial = new THREE.MeshBasicMaterial({
+                map: rightTexture,
+                side: THREE.FrontSide
+            });
+            
+            // Vytvoření sfér
+            leftSphere = new THREE.Mesh(geometry.clone(), leftMaterial);
+            rightSphere = new THREE.Mesh(geometry.clone(), rightMaterial);
+            
+            // Nastavení vrstev pro stereo zobrazení
+            leftSphere.layers.set(1);  // Levé oko
+            rightSphere.layers.set(2); // Pravé oko
+            
+            scene.add(leftSphere);
+            scene.add(rightSphere);
+            
+            updateStatus('Stereo obrázek načten - klikněte Enter VR');
+        }
+
+        function splitTexture(originalTexture, eye) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            
-            // Vytvoření image objektu z textury
             const img = originalTexture.image;
             
-            // Nastavení rozměrů - každá polovina
+            // Rozměry pro každé oko (polovina šířky)
             const halfWidth = img.width / 2;
             const height = img.height;
             
             canvas.width = halfWidth;
             canvas.height = height;
             
-            // Určení pozice pro výřez (levá nebo pravá polovina)
+            // Pozice pro výřez (left: 0-halfWidth, right: halfWidth-fullWidth)
             const sourceX = eye === 'left' ? 0 : halfWidth;
             
-            // Vykreslení příslušné poloviny obrázku na canvas
+            // Vykreslení poloviny obrázku
             ctx.drawImage(img, sourceX, 0, halfWidth, height, 0, 0, halfWidth, height);
             
-            // Vytvoření nové textury z canvas
-            const newTexture = new THREE.CanvasTexture(canvas);
-            newTexture.wrapS = THREE.ClampToEdgeWrapping;
-            newTexture.wrapT = THREE.ClampToEdgeWrapping;
-            newTexture.minFilter = THREE.LinearFilter;
-            newTexture.generateMipmaps = false;
+            // Vytvoření textury z canvas
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.ClampToEdgeWrapping;
+            texture.wrapT = THREE.ClampToEdgeWrapping;
+            texture.minFilter = THREE.LinearFilter;
+            texture.generateMipmaps = false;
             
-            return newTexture;
+            return texture;
         }
-        
-        async function startVR() {
-            if (!navigator.xr) {
-                updateStatus('WebXR není podporován - používám fallback režim');
-                createFallbackView();
-                return;
-            }
-            
-            try {
-                // Kontrola podpory immersive-vr
-                const supported = await navigator.xr.isSessionSupported('immersive-vr');
-                if (!supported) {
-                    updateStatus('Immersive VR není podporován - používám fallback režim');
-                    createFallbackView();
-                    return;
-                }
-                
-                updateStatus('Spouštím VR relaci...');
-                
-                // Požádání o VR relaci s automatickým vstupem
-                const session = await navigator.xr.requestSession('immersive-vr', {
-                    requiredFeatures: ['local'],
-                    optionalFeatures: ['bounded-floor', 'hand-tracking']
-                });
-                
-                xrSession = session;
-                await renderer.xr.setSession(session);
-                
-                // Nastavení vrstev pro stereo zobrazení
-                setupStereoLayers();
-                
-                updateStatus('VR aktivní');
-                
-                // Skrýt info panel v VR
-                document.getElementById('info').style.display = 'none';
-                
-                session.addEventListener('end', () => {
-                    updateStatus('VR relace ukončena');
-                    document.getElementById('info').style.display = 'block';
-                });
-                
-            } catch (error) {
-                console.error('Chyba při spuštění VR:', error);
-                updateStatus('VR nedostupné - používám fallback režim');
-                createFallbackView();
-            }
-        }
-        
-        function createFallbackView() {
-            // Fallback pro prohlížeče bez WebXR nebo při chybách
-            updateStatus('Fallback režim - použijte myš/dotek pro pohyb');
-            
-            // Přidání mouse/touch kontrol
-            let isMouseDown = false;
-            let mouseX = 0, mouseY = 0;
+
+        function setupControls() {
+            let isPointerDown = false;
+            let pointerX = 0, pointerY = 0;
             let rotationX = 0, rotationY = 0;
             
-            renderer.domElement.addEventListener('mousedown', (e) => {
-                isMouseDown = true;
-                mouseX = e.clientX;
-                mouseY = e.clientY;
+            const canvas = renderer.domElement;
+            
+            // Mouse události
+            canvas.addEventListener('mousedown', (e) => {
+                isPointerDown = true;
+                pointerX = e.clientX;
+                pointerY = e.clientY;
             });
             
-            renderer.domElement.addEventListener('mousemove', (e) => {
-                if (!isMouseDown) return;
+            canvas.addEventListener('mousemove', (e) => {
+                if (!isPointerDown) return;
                 
-                const deltaX = e.clientX - mouseX;
-                const deltaY = e.clientY - mouseY;
+                const deltaX = e.clientX - pointerX;
+                const deltaY = e.clientY - pointerY;
                 
-                rotationY += deltaX * 0.01;
-                rotationX += deltaY * 0.01;
+                rotationY += deltaX * 0.005;
+                rotationX += deltaY * 0.005;
                 
+                // Omezení vertikální rotace
                 rotationX = Math.max(-Math.PI/2, Math.min(Math.PI/2, rotationX));
                 
                 camera.rotation.x = rotationX;
                 camera.rotation.y = rotationY;
                 
-                mouseX = e.clientX;
-                mouseY = e.clientY;
+                pointerX = e.clientX;
+                pointerY = e.clientY;
             });
             
-            renderer.domElement.addEventListener('mouseup', () => {
-                isMouseDown = false;
+            canvas.addEventListener('mouseup', () => {
+                isPointerDown = false;
             });
             
-            // Touch podpora
-            renderer.domElement.addEventListener('touchstart', (e) => {
+            // Touch události
+            canvas.addEventListener('touchstart', (e) => {
                 if (e.touches.length === 1) {
-                    mouseX = e.touches[0].clientX;
-                    mouseY = e.touches[0].clientY;
+                    isPointerDown = true;
+                    pointerX = e.touches[0].clientX;
+                    pointerY = e.touches[0].clientY;
                 }
             });
             
-            renderer.domElement.addEventListener('touchmove', (e) => {
-                if (e.touches.length === 1) {
-                    const deltaX = e.touches[0].clientX - mouseX;
-                    const deltaY = e.touches[0].clientY - mouseY;
+            canvas.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 1 && isPointerDown) {
+                    const deltaX = e.touches[0].clientX - pointerX;
+                    const deltaY = e.touches[0].clientY - pointerY;
                     
-                    rotationY += deltaX * 0.01;
-                    rotationX += deltaY * 0.01;
+                    rotationY += deltaX * 0.005;
+                    rotationX += deltaY * 0.005;
                     
                     rotationX = Math.max(-Math.PI/2, Math.min(Math.PI/2, rotationX));
                     
                     camera.rotation.x = rotationX;
                     camera.rotation.y = rotationY;
                     
-                    mouseX = e.touches[0].clientX;
-                    mouseY = e.touches[0].clientY;
+                    pointerX = e.touches[0].clientX;
+                    pointerY = e.touches[0].clientY;
                 }
                 e.preventDefault();
             });
-        }
-        
-        function setupStereoLayers() {
-            // Nastavení kamer pro každé oko
-            camera.layers.enableAll();
             
-            // Přizpůsobení pro stereo zobrazení
-            const cameraL = camera.clone();
-            const cameraR = camera.clone();
-            
-            cameraL.layers.set(1); // Levé oko
-            cameraR.layers.set(2); // Pravé oko
+            canvas.addEventListener('touchend', () => {
+                isPointerDown = false;
+            });
         }
-        
+
         function render() {
-            // Bez automatické rotace pro statické zobrazení
             renderer.render(scene, camera);
         }
-        
+
         // Resize handler
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-        
-        // Spustit po načtení stránky
-        window.addEventListener('load', init);
-        
-        // Error handling
-        window.addEventListener('error', (event) => {
-            console.error('Globální chyba:', event.error);
-            updateStatus('Chyba aplikace: ' + event.error.message);
-        });
-        
-        // Fallback pro starší prohlížeče
-        if (!('xr' in navigator)) {
-            updateStatus('WebXR není dostupný v tomto prohlížeči');
-        }
+
+        // Spustit aplikaci
+        init();
     </script>
 </body>
 </html>
