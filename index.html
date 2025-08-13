@@ -213,7 +213,7 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // Leaflet mapa
+        // Leaflet mapa - přes celý obraz
         let map = L.map('map').setView([50.0755, 14.4378], 6);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
@@ -222,6 +222,7 @@
         let leftSphere, rightSphere;
         let vrButton;
         let currentImagePath = '';
+        let lastMapView = null; // Uložit poslední pozici mapy
 
         // Data míst
         const locations = [
@@ -359,12 +360,23 @@
         }
 
         function showLocationDetails(location) {
-            let details = document.getElementById('detailsContainer');
-            details.innerHTML = `
-                <h2>${location.name}</h2>
+            const popup = document.getElementById('detailsPopup');
+            const content = document.getElementById('popupContent');
+            
+            content.innerHTML = `
+                <h3>${location.name}</h3>
                 <p><strong>Kategorie:</strong> ${location.category}</p>
+                <img src="${location.image}" alt="${location.name}" class="popup-image" onerror="this.style.display='none'">
                 <p id="description">Načítání popisu...</p>
+                <button class="enter-vr-btn" id="enterVRBtn">Enter VR</button>
             `;
+            
+            // Přidat event listener pro VR tlačítko
+            document.getElementById('enterVRBtn').addEventListener('click', () => {
+                openVRView(location.image);
+            });
+            
+            popup.classList.add('active');
 
             // Načíst popis z TXT souboru
             fetch(location.txtFile)
@@ -381,27 +393,23 @@
                     console.error('Chyba při načítání TXT:', error);
                     document.getElementById('description').innerHTML = 'Chyba: Nepodařilo se načíst popis z TXT souboru.';
                 });
+        }
 
-            let imageContainer = document.getElementById('imageContainer');
-            imageContainer.innerHTML = '';
-
-            let img = document.createElement('img');
-            img.src = location.image;
-            img.alt = location.name;
-            img.onerror = () => {
-                imageContainer.innerHTML = '<p>Chyba při načítání obrázku.</p>';
-            };
-            imageContainer.appendChild(img);
-
-            // Přidat VR tlačítko
-            const vrButton = document.createElement('button');
-            vrButton.textContent = 'Prohlédnout ve VR';
-            vrButton.className = 'enter-vr-btn';
-            vrButton.onclick = () => openVRView(location.image);
-            details.appendChild(vrButton);
+        function closeDetailsPopup() {
+            const popup = document.getElementById('detailsPopup');
+            popup.classList.remove('active');
         }
 
         function openVRView(imagePath) {
+            // Uložit aktuální pozici mapy
+            lastMapView = {
+                center: map.getCenter(),
+                zoom: map.getZoom()
+            };
+            
+            // Zavřít popup
+            closeDetailsPopup();
+            
             currentImagePath = imagePath;
             const vrContainer = document.getElementById('vrContainer');
             vrContainer.classList.add('active');
@@ -429,6 +437,11 @@
             const canvas = vrViewer.querySelector('canvas');
             if (canvas) {
                 canvas.remove();
+            }
+            
+            // Vrátit se na stejnou pozici mapy
+            if (lastMapView) {
+                map.setView(lastMapView.center, lastMapView.zoom);
             }
         }
 
@@ -750,8 +763,10 @@
             if (event.key === 'Escape') exitVR();
         });
 
-        // Make exitVR global for onclick
+        // Make functions global for onclick
         window.exitVR = exitVR;
+        window.openVRView = openVRView;
+        window.closeDetailsPopup = closeDetailsPopup;
     </script>
 </body>
 </html>
