@@ -50,24 +50,33 @@
             }
         });
         
-        // Komponenta pro rozdělení side-by-side obrázku
-        AFRAME.registerComponent('stereo-material', {
+        <!-- Komponenta pro rectilinear stereo obrázky (Insta 360 EVO) -->
+        AFRAME.registerComponent('rectilinear-stereo', {
             schema: {
                 eye: {type: 'string', default: 'left'},
-                src: {type: 'string'}
+                fov: {type: 'number', default: 90}, // Field of view v stupních
+                distance: {type: 'number', default: 5} // Vzdálenost roviny od kamery
             },
             
             init: function () {
                 const data = this.data;
                 const el = this.el;
                 
+                // Nastavit layer podle oka
+                if (data.eye === 'left') {
+                    el.object3D.layers.set(1); // Layer pro levé oko
+                } else if (data.eye === 'right') {
+                    el.object3D.layers.set(2); // Layer pro pravé oko
+                }
+                
                 // Počkat na načtení materiálu
                 el.addEventListener('materialtextureloaded', () => {
-                    const material = el.getObject3D('mesh').material;
+                    const mesh = el.getObject3D('mesh');
+                    const material = mesh.material;
                     const texture = material.map;
                     
                     if (texture) {
-                        // Upravit UV offset a repeat pro stereo
+                        // Upravit UV mapping pro side-by-side
                         if (data.eye === 'left') {
                             // Levá polovina obrázku (0 - 0.5)
                             texture.offset.x = 0;
@@ -79,9 +88,11 @@
                         }
                         
                         texture.needsUpdate = true;
-                        console.log(`${data.eye} eye UV mapping nastaven`);
+                        console.log(`${data.eye} eye rectilinear UV mapping nastaven`);
                     }
                 });
+                
+                console.log(`Rectilinear stereo ${data.eye} eye nastaven`);
             }
         });
     </script>
@@ -143,8 +154,8 @@
     <div class="ui-overlay" id="uiOverlay">
         <h3>🥽 VR Stereo Test - A-Frame Stereo Komponenty</h3>
         <div class="info">
-            <strong>Inspirováno A-Frame stereo příkladem:</strong><br>
-            Používá dvojité &lt;a-sky&gt; pro levé a pravé oko s layer systémem
+            <strong>Optimalizováno pro Insta 360 EVO:</strong><br>
+            Rectilinear stereo (levý + pravý perspektivní obrázek spojený side-by-side)
         </div>
         
         <div class="controls">
@@ -178,25 +189,29 @@
             stereocam="eye:left;">
         </a-entity>
         
-        <!-- Sky sphere pro levé oko -->
-        <a-sky 
-            id="sky1" 
+        <!-- Rectilinear stereo roviny pro levé oko (Insta 360 EVO formát) -->
+        <a-plane 
+            id="leftPlane"
             src="#stereoImage" 
-            stereo="eye:left"
-            stereo-material="eye:left"
-            geometry="primitive: sphere; radius: 10; thetaStart: 0; thetaLength: 180"
-            material="side: back">
-        </a-sky>
+            width="8" 
+            height="6"
+            position="-2 1.6 -5"
+            rotation="0 15 0"
+            rectilinear-stereo="eye:left; fov:90; distance:5"
+            material="side: front">
+        </a-plane>
         
-        <!-- Sky sphere pro pravé oko -->
-        <a-sky 
-            id="sky2" 
+        <!-- Rectilinear stereo roviny pro pravé oko -->
+        <a-plane 
+            id="rightPlane"
             src="#stereoImage" 
-            stereo="eye:right"
-            stereo-material="eye:right" 
-            geometry="primitive: sphere; radius: 10; thetaStart: 0; thetaLength: 180"
-            material="side: back">
-        </a-sky>
+            width="8" 
+            height="6" 
+            position="2 1.6 -5"
+            rotation="0 -15 0"
+            rectilinear-stereo="eye:right; fov:90; distance:5"
+            material="side: front">
+        </a-plane>
         
         <!-- Základní osvětlení -->
         <a-light type="ambient" color="#404040"></a-light>
@@ -228,7 +243,8 @@
             image.addEventListener('load', function() {
                 debugLog('✅ Stereo obrázek načten úspěšně!', 'success');
                 debugLog(`Rozměry obrázku: ${image.naturalWidth}x${image.naturalHeight}`, 'info');
-                debugLog('📱 Side-by-side obrázek bude rozdělen na levé/pravé oko', 'info');
+                debugLog('📱 Insta 360 EVO: Side-by-side rectilinear stereo', 'info');
+                debugLog('🔧 Používám ploché roviny místo sféry', 'info');
                 sceneLoaded = true;
                 
                 // Auto-aktivovat VR tlačítko
@@ -371,7 +387,7 @@
         window.addEventListener('load', () => {
             debugLog('🚀 Stránka načtena', 'success');
             debugLog(`A-Frame verze: ${AFRAME.version}`, 'info');
-            debugLog('🔧 Používám dual-sky stereo přístup z A-Frame příkladu', 'info');
+            debugLog('🔧 Optimalizováno pro Insta 360 EVO rectilinear stereo', 'info');
             
             // Zkontrolovat WebXR
             if (navigator.xr) {
