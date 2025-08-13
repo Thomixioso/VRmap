@@ -87,7 +87,6 @@
 
         function init() {
             updateStatus('Inicializace...');
-            console.log('Spouštím inicializaci...');
             
             // Scéna
             scene = new THREE.Scene();
@@ -96,14 +95,11 @@
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 0, 0);
             
-            // Renderer s WebXR - zpět na viewer (fungovalo)
+            // Renderer s WebXR
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
-            renderer.xr.setReferenceSpaceType('viewer'); // Zpět na viewer
-            
-            console.log('Three.js verze:', THREE.REVISION);
-            console.log('WebXR enabled:', renderer.xr.enabled);
+            renderer.xr.setReferenceSpaceType('viewer');
             
             document.getElementById('viewer').appendChild(renderer.domElement);
             
@@ -118,8 +114,6 @@
             
             // Render loop
             renderer.setAnimationLoop(render);
-            
-            console.log('Inicializace dokončena');
         }
 
         function setupVRButton() {
@@ -145,42 +139,29 @@
 
         async function startVR() {
             try {
-                updateStatus('Spouštím VR session...');
-                console.log('Requesting VR session...');
-                
-                // Zpět na viewer (fungovalo)
-                renderer.xr.setReferenceSpaceType('viewer');
-                console.log('Reference space type nastaven na viewer');
-                
-                // Požádat o VR session bez features
                 const session = await navigator.xr.requestSession('immersive-vr');
-                console.log('VR session vytvořen:', session);
-                
-                updateStatus('Nastavuji renderer...');
-                console.log('Setting XR session on renderer...');
-                
                 await renderer.xr.setSession(session);
-                console.log('Renderer XR session nastaven');
                 
                 // Nastavení kamer pro každé oko
                 setupEyeLayers();
-                console.log('Eye layers nastaveny');
                 
-                // Přidat VR controller exit listener PO nastavení session
-                setupVRControllerExit(session);
+                // Přidat controller exit listener
+                session.addEventListener('selectstart', () => {
+                    console.log('Trigger stisknut - ukončuji VR');
+                    session.end();
+                });
                 
                 vrButton.style.display = 'none';
-                updateStatus('VR aktivní - stiskněte trigger pro exit');
+                updateStatus('VR aktivní - trigger = exit');
                 
                 session.addEventListener('end', () => {
                     vrButton.style.display = 'block';
                     updateStatus('VR ukončeno');
-                    console.log('VR session ukončen');
                 });
                 
             } catch (error) {
-                console.error('VR Error detail:', error);
-                updateStatus('VR chyba: ' + error.message);
+                console.error('VR Error:', error);
+                updateStatus('Chyba VR: ' + error.message);
             }
         }
 
@@ -368,19 +349,6 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
-
-        function setupVRControllerExit(session) {
-            // Event listener pro VR controller exit
-            if (session) {
-                // Poslouchat na selectstart (trigger stisknutí)
-                session.addEventListener('selectstart', (event) => {
-                    console.log('VR Controller trigger stisknut - ukončuji VR');
-                    session.end();
-                });
-                
-                console.log('VR Controller exit listener nastaven');
-            }
-        }
 
         // Spustit aplikaci
         init();
