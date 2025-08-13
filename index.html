@@ -87,6 +87,7 @@
 
         function init() {
             updateStatus('Inicializace...');
+            console.log('Spouštím inicializaci...');
             
             // Scéna
             scene = new THREE.Scene();
@@ -95,10 +96,13 @@
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 0, 0);
             
-            // Renderer s WebXR
+            // Renderer s WebXR - bez přednastavení reference space
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
+            
+            console.log('Three.js verze:', THREE.REVISION);
+            console.log('WebXR enabled:', renderer.xr.enabled);
             
             document.getElementById('viewer').appendChild(renderer.domElement);
             
@@ -113,6 +117,8 @@
             
             // Render loop
             renderer.setAnimationLoop(render);
+            
+            console.log('Inicializace dokončena');
         }
 
         function setupVRButton() {
@@ -138,17 +144,29 @@
 
         async function startVR() {
             try {
+                updateStatus('Spouštím VR session...');
+                console.log('Requesting VR session...');
+                
                 // Požádat o VR session bez jakýchkoliv features
                 const session = await navigator.xr.requestSession('immersive-vr');
+                console.log('VR session vytvořen:', session);
+                
+                updateStatus('Nastavuji reference space...');
+                console.log('Requesting viewer reference space...');
                 
                 // Použít pouze 'viewer' reference space - funguje všude
                 const referenceSpace = await session.requestReferenceSpace('viewer');
-                console.log('Používám viewer reference space');
+                console.log('Reference space vytvořen:', referenceSpace);
+                
+                updateStatus('Nastavuji renderer...');
+                console.log('Setting XR session on renderer...');
                 
                 await renderer.xr.setSession(session);
+                console.log('Renderer XR session nastaven');
                 
                 // Nastavení kamer pro každé oko
                 setupEyeLayers();
+                console.log('Eye layers nastaveny');
                 
                 vrButton.style.display = 'none';
                 updateStatus('VR aktivní');
@@ -156,11 +174,15 @@
                 session.addEventListener('end', () => {
                     vrButton.style.display = 'block';
                     updateStatus('VR ukončeno');
+                    console.log('VR session ukončen');
                 });
                 
             } catch (error) {
-                console.error('VR Error:', error);
-                updateStatus('VR není dostupné: ' + error.message);
+                console.error('VR Error detail:', error);
+                console.error('Error name:', error.name);
+                console.error('Error message:', error.message);
+                console.error('Stack trace:', error.stack);
+                updateStatus('VR chyba: ' + error.message);
             }
         }
 
