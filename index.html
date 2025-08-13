@@ -106,7 +106,7 @@
             look-controls="enabled: true">
         </a-camera>
         
-        <!-- Left eye - sphere s levou polovinou -->
+        <!-- Left eye - sphere POUZE s levou polovinou obrázku -->
         <a-sphere 
             id="leftEye"
             src="#leftCanvas"
@@ -116,11 +116,10 @@
             theta-start="30"
             theta-length="120"
             rotation="0 0 0"
-            material="side: back"
-            layers="1">
+            material="side: back">
         </a-sphere>
         
-        <!-- Right eye - sphere s pravou polovinou -->
+        <!-- Right eye - sphere POUZE s pravou polovinou obrázku -->
         <a-sphere 
             id="rightEye"
             src="#rightCanvas" 
@@ -130,8 +129,7 @@
             theta-start="30"
             theta-length="120"
             rotation="0 0 0"
-            material="side: back"
-            layers="2">
+            material="side: back">
         </a-sphere>
         
         <!-- Základní osvětlení -->
@@ -154,7 +152,7 @@
         }
         
         function splitStereoImage() {
-            debugLog('🔄 Rozděluju stereo obrázek na L/R...', 'info');
+            debugLog('🔄 Rozděluju side-by-side stereo obrázek...', 'info');
             
             const img = document.querySelector('#stereoImage');
             const leftCanvas = document.querySelector('#leftCanvas');
@@ -165,34 +163,59 @@
                 return false;
             }
             
-            // Nastavit velikost canvas podle obrázku
-            const width = img.naturalWidth / 2; // Každá polovina
-            const height = img.naturalHeight;
+            const fullWidth = img.naturalWidth;
+            const fullHeight = img.naturalHeight;
+            const halfWidth = fullWidth / 2; // Každá polovina pro jedno oko
             
-            leftCanvas.width = width;
-            leftCanvas.height = height;
-            rightCanvas.width = width;
-            rightCanvas.height = height;
+            debugLog(`Celkové rozměry: ${fullWidth}x${fullHeight}`, 'info');
+            debugLog(`Levé oko: 0-${halfWidth}, Pravé oko: ${halfWidth}-${fullWidth}`, 'info');
+            
+            // Nastavit velikost canvas pro každé oko
+            leftCanvas.width = halfWidth;
+            leftCanvas.height = fullHeight;
+            rightCanvas.width = halfWidth;
+            rightCanvas.height = fullHeight;
             
             const leftCtx = leftCanvas.getContext('2d');
             const rightCtx = rightCanvas.getContext('2d');
             
             try {
-                // Nakreslit levou polovinu (0 - width/2)
-                leftCtx.drawImage(img, 0, 0, width, height, 0, 0, width, height);
+                // LEVÉ OKO: Nakreslit LEVOU polovinu obrázku (x: 0 → halfWidth)
+                leftCtx.drawImage(
+                    img,           // source image
+                    0, 0,          // source x,y (levá polovina)
+                    halfWidth, fullHeight,  // source width,height 
+                    0, 0,          // dest x,y
+                    halfWidth, fullHeight   // dest width,height
+                );
                 
-                // Nakreslit pravou polovinu (width/2 - width)
-                rightCtx.drawImage(img, width, 0, width, height, 0, 0, width, height);
+                // PRAVÉ OKO: Nakreslit PRAVOU polovinu obrázku (x: halfWidth → fullWidth)
+                rightCtx.drawImage(
+                    img,           // source image  
+                    halfWidth, 0,  // source x,y (pravá polovina)
+                    halfWidth, fullHeight,  // source width,height
+                    0, 0,          // dest x,y
+                    halfWidth, fullHeight   // dest width,height
+                );
                 
-                debugLog('✅ Stereo obrázek rozdělen úspěšně!', 'success');
-                debugLog(`Rozměry: ${width}x${height} pro každé oko`, 'info');
+                debugLog('✅ Stereo obrázek SPRÁVNĚ rozdělen na L/R!', 'success');
+                debugLog(`Každé oko: ${halfWidth}x${fullHeight}`, 'info');
                 
-                // Aktualizovat textury
-                const leftSphere = document.querySelector('#leftEye');
-                const rightSphere = document.querySelector('#rightEye');
-                
-                leftSphere.setAttribute('src', '#leftCanvas');
-                rightSphere.setAttribute('src', '#rightCanvas');
+                // Force update textur v A-Frame
+                setTimeout(() => {
+                    const leftSphere = document.querySelector('#leftEye');
+                    const rightSphere = document.querySelector('#rightEye');
+                    
+                    // Vynutit reload textur
+                    leftSphere.removeAttribute('src');
+                    rightSphere.removeAttribute('src');
+                    
+                    setTimeout(() => {
+                        leftSphere.setAttribute('src', '#leftCanvas');
+                        rightSphere.setAttribute('src', '#rightCanvas');
+                        debugLog('🎯 Textury aktualizovány v A-Frame', 'success');
+                    }, 100);
+                }, 100);
                 
                 return true;
             } catch (error) {
@@ -235,12 +258,7 @@
             img.addEventListener('error', function(e) {
                 debugLog('❌ CHYBA při načítání obrázku!', 'error');
                 debugLog(`Chyba: ${e.type}`, 'error');
-                
-                // Zkusit alternativní cestu
-                debugLog('Zkouším alternativní cestu...', 'info');
-                setTimeout(() => {
-                    img.src = './Castles/generated/Le_Castillet_generated.jpg';
-                }, 1000);
+                debugLog('Zkontrolujte cestu: ./Castles/generated/Le_Castillet_generated.jpg', 'error');
             });
             
             // Vynutit načtení, pokud už je cached
@@ -294,33 +312,6 @@
             } catch (error) {
                 debugLog(`❌ VR vstup selhal: ${error.message}`, 'error');
             }
-        }
-        
-        function testImagePath() {
-            debugLog('🔍 Testuji cesty k obrázku...', 'info');
-            
-            const testPaths = [
-                'Castles/generated/Le_Castillet_generated.jpg',
-                './Castles/generated/Le_Castillet_generated.jpg',
-                '../Castles/generated/Le_Castillet_generated.jpg'
-            ];
-            
-            testPaths.forEach((path) => {
-                const testImg = new Image();
-                testImg.onload = () => {
-                    debugLog(`✅ FUNGUJE: ${path} (${testImg.width}x${testImg.height})`, 'success');
-                    
-                    if (!sceneLoaded) {
-                        debugLog(`🔄 Používám cestu: ${path}`, 'info');
-                        document.querySelector('#stereoImage').src = path;
-                        setTimeout(() => loadVRScene(), 500);
-                    }
-                };
-                testImg.onerror = () => {
-                    debugLog(`❌ NEFUNGUJE: ${path}`, 'error');
-                };
-                testImg.src = path;
-            });
         }
         
         function toggleUI(force = null) {
