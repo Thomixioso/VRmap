@@ -277,7 +277,10 @@
         import * as THREE from 'three';
 
         // Leaflet mapa s různými layery - přes celý obraz
-        let map = L.map('map').setView([50.0755, 14.4378], 6);
+        let map = L.map('map', {
+            minZoom: 2,  // Omezí zoom out aby se svět nezobrazoval vícekrát
+            maxZoom: 18  // Maximální zoom in
+        }).setView([50.0755, 14.4378], 6);
         
         // Různé tile layery
         let osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -306,8 +309,8 @@
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}')
         ]);
         
-        // Přidat výchozí layer
-        osmLayer.addTo(map);
+        // Přidat výchozí layer - hybrid satelitní s popisky
+        hybridGroup.addTo(map);
         
         // Definice layerů pro control
         let baseLayers = {
