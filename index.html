@@ -3,23 +3,56 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>180° VR Stereo Viewer</title>
+    <title>Interaktivní mapa s VR</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    
     <style>
         body {
             margin: 0;
-            padding: 0;
-            background: #000;
+            padding: 20px;
             font-family: Arial, sans-serif;
-            overflow: hidden;
         }
         
-        #viewer {
-            width: 100vw;
-            height: 100vh;
+        #map { 
+            height: 400px; 
+            margin-bottom: 20px;
+        }
+        
+        #detailsContainer { 
+            margin-bottom: 20px; 
+        }
+        
+        #imageContainer img { 
+            max-width: 100%; 
+            height: auto; 
+            margin-bottom: 10px;
+        }
+        
+        /* VR Container - fullscreen overlay */
+        #vrContainer {
+            display: none;
+            position: fixed;
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%;
+            background: #000;
+            z-index: 1000;
+        }
+        
+        #vrContainer.active { 
+            display: block; 
+        }
+        
+        /* VR Viewer styles */
+        #vrViewer {
+            width: 100%;
+            height: 100%;
             position: relative;
         }
         
-        canvas {
+        #vrViewer canvas {
             width: 100%;
             height: 100%;
             display: block;
@@ -44,7 +77,7 @@
             background: rgba(255, 255, 255, 0.2);
         }
         
-        #status {
+        #vr-status {
             position: absolute;
             top: 20px;
             left: 20px;
@@ -55,13 +88,58 @@
             z-index: 100;
             font-size: 14px;
         }
+        
+        #exitVRButton {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            color: black;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 5px;
+            z-index: 100;
+            font-size: 14px;
+        }
+        
+        .enter-vr-btn {
+            background: #007cba;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin-top: 10px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        
+        .enter-vr-btn:hover {
+            background: #005a87;
+        }
+        
+        #errorMessage { 
+            color: red; 
+            margin-top: 10px; 
+        }
     </style>
 </head>
 <body>
-    <div id="viewer">
-        <div id="status">Načítání...</div>
-        <button id="vr-button" style="display: none;">Enter VR</button>
+    <h1>Interaktivní mapa s VR prohlížením</h1>
+    <div id="map"></div>
+    <div id="detailsContainer"></div>
+    <div id="imageContainer"></div>
+    
+    <!-- VR Container s vaším funkčním VR viewerem -->
+    <div id="vrContainer">
+        <button id="exitVRButton" onclick="exitVR()">Exit VR</button>
+        <div id="vrViewer">
+            <div id="vr-status">Načítání...</div>
+            <button id="vr-button" style="display: none;">Enter VR</button>
+        </div>
     </div>
+    
+    <div id="errorMessage"></div>
 
     <script type="importmap">
     {
@@ -75,17 +153,227 @@
     <script type="module">
         import * as THREE from 'three';
 
+        // Leaflet mapa
+        let map = L.map('map').setView([50.0755, 14.4378], 6);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // VR Viewer proměnné
         let scene, camera, renderer;
         let leftSphere, rightSphere;
         let vrButton;
-        
-        const stereoImagePath = "./Castles/generated/Le_Castillet_generated.jpg";
+        let currentImagePath = '';
+
+        // Data míst
+        const locations = [
+            {
+                "name": "Le_Castillet",
+                "category": "Castles",
+                "lat": 42.70064,
+                "lon": 2.89412,
+                "txtFile": "Castles/Le_Castillet.txt",
+                "image": "Castles/generated/Le_Castillet_generated.jpg"
+            },
+            {
+                "name": "Moulton",
+                "category": "Castles",
+                "lat": 52.77328,
+                "lon": -0.05583,
+                "txtFile": "Castles/Moulton.txt",
+                "image": "Castles/generated/Moulton_generated.jpg"
+            },
+            {
+                "name": "Old_Hall_Camp",
+                "category": "Castles",
+                "lat": 52.49951,
+                "lon": -3.17018,
+                "txtFile": "Castles/Old_Hall_Camp.txt",
+                "image": "Castles/generated/Old_Hall_Camp_generated.jpg"
+            },
+            {
+                "name": "Stockbury_Castle",
+                "category": "Castles",
+                "lat": 51.32391,
+                "lon": 0.6476,
+                "txtFile": "Castles/Stockbury_Castle.txt",
+                "image": "Castles/generated/Stockbury_Castle_generated.jpg"
+            },
+            {
+                "name": "Cristo_Redentore",
+                "category": "Historical_sites",
+                "lat": 42.8633,
+                "lon": 13.57593,
+                "txtFile": "Historical_sites/Cristo_Redentore.txt",
+                "image": "Historical_sites/generated/Cristo_Redentore_generated.jpg"
+            },
+            {
+                "name": "Heimkehrerdenkmal",
+                "category": "Historical_sites",
+                "lat": 51.41575,
+                "lon": 9.90878,
+                "txtFile": "Historical_sites/Heimkehrerdenkmal.txt",
+                "image": "Historical_sites/generated/Heimkehrerdenkmal_generated.jpg"
+            },
+            {
+                "name": "Henry_Wadsworth_Longfellow_Statue",
+                "category": "Historical_sites",
+                "lat": 38.90594,
+                "lon": -77.04109,
+                "txtFile": "Historical_sites/Henry_Wadsworth_Longfellow_Statue.txt",
+                "image": "Historical_sites/generated/Henry_Wadsworth_Longfellow_Statue_generated.jpg"
+            },
+            {
+                "name": "Homenagem_a_D._Miguel",
+                "category": "Historical_sites",
+                "lat": 41.09725,
+                "lon": -7.80658,
+                "txtFile": "Historical_sites/Homenagem_a_D._Miguel.txt",
+                "image": "Historical_sites/generated/Homenagem_a_D._Miguel_generated.jpg"
+            },
+            {
+                "name": "Monumento_al_Ahogado_(Los_Dedos)",
+                "category": "Historical_sites",
+                "lat": -34.95783,
+                "lon": -54.93722,
+                "txtFile": "Historical_sites/Monumento_al_Ahogado_(Los_Dedos).txt",
+                "image": "Historical_sites/generated/Monumento_al_Ahogado_(Los_Dedos)_generated.jpg"
+            },
+            {
+                "name": "Walhalla",
+                "category": "Historical_sites",
+                "lat": 49.03126,
+                "lon": 12.22409,
+                "txtFile": "Historical_sites/Walhalla.txt",
+                "image": "Historical_sites/generated/Walhalla_generated.jpg"
+            },
+            {
+                "name": "Brookwood_Park",
+                "category": "Parks",
+                "lat": 30.66547,
+                "lon": -88.23667,
+                "txtFile": "Parks/Brookwood_Park.txt",
+                "image": "Parks/generated/Brookwood_Park_generated.jpg"
+            },
+            {
+                "name": "Dorandoran-gongwon",
+                "category": "Parks",
+                "lat": 37.39807,
+                "lon": 126.63758,
+                "txtFile": "Parks/Dorandoran-gongwon.txt",
+                "image": "Parks/generated/Dorandoran-gongwon_generated.jpg"
+            },
+            {
+                "name": "Garden_Grove_Park",
+                "category": "Parks",
+                "lat": 33.76252,
+                "lon": -117.96645,
+                "txtFile": "Parks/Garden_Grove_Park.txt",
+                "image": "Parks/generated/Garden_Grove_Park_generated.jpg"
+            },
+            {
+                "name": "Lake_George_Battlefield_Park",
+                "category": "Parks",
+                "lat": 43.41646,
+                "lon": -73.70845,
+                "txtFile": "Parks/Lake_George_Battlefield_Park.txt",
+                "image": "Parks/generated/Lake_George_Battlefield_Park_generated.jpg"
+            },
+            {
+                "name": "Parc_James-Palmer",
+                "category": "Parks",
+                "lat": 45.36338,
+                "lon": -73.71699,
+                "txtFile": "Parks/Parc_James-Palmer.txt",
+                "image": "Parks/generated/Parc_James-Palmer_generated.jpg"
+            }
+        ];
+
+        // Přidat markery na mapu
+        locations.forEach(location => {
+            let marker = L.marker([location.lat, location.lon]).addTo(map);
+            marker.bindPopup(location.name);
+            marker.on('click', () => showLocationDetails(location));
+        });
 
         function updateStatus(message) {
-            document.getElementById('status').textContent = message;
+            document.getElementById('vr-status').textContent = message;
         }
 
-        function init() {
+        function showLocationDetails(location) {
+            let details = document.getElementById('detailsContainer');
+            details.innerHTML = `
+                <h2>${location.name}</h2>
+                <p><strong>Kategorie:</strong> ${location.category}</p>
+                <p id="description">Načítání popisu...</p>
+            `;
+
+            // Načíst popis z TXT souboru
+            fetch(location.txtFile)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Nepodařilo se načíst TXT soubor: ' + response.statusText);
+                    }
+                    return response.text();
+                })
+                .then(text => {
+                    document.getElementById('description').innerHTML = text.replace(/\n/g, '<br>');
+                })
+                .catch(error => {
+                    console.error('Chyba při načítání TXT:', error);
+                    document.getElementById('description').innerHTML = 'Chyba: Nepodařilo se načíst popis z TXT souboru.';
+                });
+
+            let imageContainer = document.getElementById('imageContainer');
+            imageContainer.innerHTML = '';
+
+            let img = document.createElement('img');
+            img.src = location.image;
+            img.alt = location.name;
+            img.onerror = () => {
+                imageContainer.innerHTML = '<p>Chyba při načítání obrázku.</p>';
+            };
+            imageContainer.appendChild(img);
+
+            // Přidat VR tlačítko
+            const vrButton = document.createElement('button');
+            vrButton.textContent = 'Prohlédnout ve VR';
+            vrButton.className = 'enter-vr-btn';
+            vrButton.onclick = () => openVRView(location.image);
+            details.appendChild(vrButton);
+        }
+
+        function openVRView(imagePath) {
+            currentImagePath = imagePath;
+            const vrContainer = document.getElementById('vrContainer');
+            vrContainer.classList.add('active');
+            
+            // Inicializovat VR viewer s novým obrázkem
+            initVRViewer();
+        }
+
+        function exitVR() {
+            const vrContainer = document.getElementById('vrContainer');
+            vrContainer.classList.remove('active');
+            
+            // Vyčistit VR viewer
+            if (renderer) {
+                renderer.dispose();
+                renderer = null;
+            }
+            if (scene) {
+                scene.clear();
+                scene = null;
+            }
+            
+            // Vyčistit DOM
+            const vrViewer = document.getElementById('vrViewer');
+            const canvas = vrViewer.querySelector('canvas');
+            if (canvas) {
+                canvas.remove();
+            }
+        }
+
+        // VÁŠ FUNKČNÍ VR VIEWER KÓD
+        function initVRViewer() {
             updateStatus('Inicializace...');
             
             // Scéna
@@ -101,7 +389,7 @@
             renderer.xr.enabled = true;
             renderer.xr.setReferenceSpaceType('local'); // Local pro head tracking
             
-            document.getElementById('viewer').appendChild(renderer.domElement);
+            document.getElementById('vrViewer').appendChild(renderer.domElement);
             
             // VR Button
             setupVRButton();
@@ -222,7 +510,7 @@
             
             const loader = new THREE.TextureLoader();
             loader.load(
-                stereoImagePath,
+                currentImagePath,
                 (texture) => {
                     updateStatus('Zpracování stereo obrázku...');
                     createStereoSpheres(texture);
@@ -233,7 +521,7 @@
                 },
                 (error) => {
                     console.error('Load error:', error);
-                    updateStatus('Chyba při načítání: ' + stereoImagePath);
+                    updateStatus('Chyba při načítání: ' + currentImagePath);
                 }
             );
         }
@@ -390,13 +678,20 @@
 
         // Resize handler
         window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
         });
 
-        // Spustit aplikaci
-        init();
+        // Escape key listener
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') exitVR();
+        });
+
+        // Make exitVR global for onclick
+        window.exitVR = exitVR;
     </script>
 </body>
 </html>
