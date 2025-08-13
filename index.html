@@ -141,16 +141,9 @@
                 // Požádat o VR session bez jakýchkoliv features
                 const session = await navigator.xr.requestSession('immersive-vr');
                 
-                // Najít podporovaný reference space - jen 'local' a 'viewer'
-                let referenceSpace;
-                try {
-                    referenceSpace = await session.requestReferenceSpace('local');
-                    console.log('Používám local reference space');
-                } catch (e) {
-                    console.log('local reference space nepodporován, používám viewer...');
-                    referenceSpace = await session.requestReferenceSpace('viewer');
-                    console.log('Používám viewer reference space');
-                }
+                // Použít pouze 'viewer' reference space - funguje všude
+                const referenceSpace = await session.requestReferenceSpace('viewer');
+                console.log('Používám viewer reference space');
                 
                 await renderer.xr.setSession(session);
                 
