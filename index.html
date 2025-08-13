@@ -8,21 +8,28 @@
         bottom: 20px;
         left: 50%;
         transform: translateX(-50%);
-        background: rgba(0,0,0,0.7);
-        padding: 10px;
-        border-radius: 5px;
+        background: rgba(0,0,0,0.8);
+        padding: 15px;
+        border-radius: 8px;
+        font-family: Arial, sans-serif;
       }
       #ui button {
         margin: 5px;
-        padding: 10px 15px;
+        padding: 12px 18px;
         background: #4CC3D9;
         color: white;
         border: none;
-        border-radius: 3px;
+        border-radius: 5px;
         cursor: pointer;
+        font-size: 14px;
+        transition: background 0.3s;
       }
       #ui button:hover {
         background: #7BC8E8;
+      }
+      #ui button:disabled {
+        background: #666;
+        cursor: not-allowed;
       }
       #info {
         position: fixed;
@@ -31,52 +38,93 @@
         left: 50%;
         transform: translateX(-50%);
         text-align: center;
-        background: rgba(0,0,0,0.8);
+        background: rgba(0,0,0,0.9);
         color: white;
-        padding: 10px;
-        border-radius: 5px;
+        padding: 15px;
+        border-radius: 8px;
+        font-family: Arial, sans-serif;
+      }
+      #stereoToggle {
+        background: #EF2D5E !important;
+      }
+      #stereoToggle:hover {
+        background: #F56990 !important;
+      }
+      #stereoToggle.active {
+        background: #43A047 !important;
+      }
+      .stereo-warning {
+        color: #FFA726;
+        font-size: 12px;
+        margin-top: 5px;
       }
     </style>
     <script>
-    AFRAME.registerComponent('stereo-180', {
+    AFRAME.registerComponent('stereo-viewer', {
       schema: {
-        eye: {type: 'string', default: 'left'}
+        stereoMode: {type: 'boolean', default: false}
       },
-      init: function () {
-        // Pro levé oko používáme levou polovinu textury
-        // Pro pravé oko používáme pravou polovinu textury
-        if (this.data.eye === 'left') {
-          this.el.setAttribute('material', {
-            repeat: {x: 0.5, y: 1},
-            offset: {x: 0, y: 0}
-          });
-        } else {
-          this.el.setAttribute('material', {
-            repeat: {x: 0.5, y: 1},
-            offset: {x: 0.5, y: 0}
-          });
-        }
+      
+      init: function() {
+        this.sphere = this.el.querySelector('.vr-sphere');
+        this.camera = this.el.querySelector('[camera]');
+        this.isStereoMode = false;
         
-        // Nastavení vrstvy pro stereo rendering
-        this.el.setAttribute('layer', {
-          type: this.data.eye === 'left' ? 'monovision' : 'monovision'
+        // Inicialní nastavení pro mono zobrazení (plný obrázek)
+        this.setMonoMode();
+      },
+      
+      setMonoMode: function() {
+        // Zobrazujeme celý obrázek (obě strany SBS)
+        this.sphere.setAttribute('material', {
+          repeat: {x: 1, y: 1},
+          offset: {x: 0, y: 0}
         });
+        this.isStereoMode = false;
+        
+        // Obnovení normální kamery
+        this.camera.setAttribute('camera', 'active', true);
+      },
+      
+      setStereoMode: function() {
+        // Zobrazujeme pouze levou polovinu pro demo stereo efektu
+        this.sphere.setAttribute('material', {
+          repeat: {x: 0.5, y: 1},
+          offset: {x: 0, y: 0}
+        });
+        this.isStereoMode = true;
+      },
+      
+      toggleStereo: function() {
+        if (this.isStereoMode) {
+          this.setMonoMode();
+        } else {
+          this.setStereoMode();
+        }
+        return this.isStereoMode;
       }
     });
 
-    AFRAME.registerComponent('vr-gallery-controller', {
+    AFRAME.registerComponent('gallery-controller', {
       init: function() {
         this.currentImageIndex = 0;
         this.images = [
-          './Castles/generated/Le_Castillet_generated.jpg',
-          'assets/default180_1.jpg',
-          'assets/default180_2.jpg'
+          {
+            src: './Castles/generated/Le_Castillet_generated.jpg',
+            name: 'Le Castillet'
+          },
+          {
+            src: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Stereoscopic_postcard_of_the_Geneva_synagogue.jpg/800px-Stereoscopic_postcard_of_the_Geneva_synagogue.jpg',
+            name: 'Geneva Synagogue'
+          }
         ];
         
-        // Inicializace s prvním obrázkem
+        this.stereoViewer = this.el.components['stereo-viewer'];
+        
+        // Načtení prvního obrázku
         this.loadImage(this.currentImageIndex);
         
-        // Event listenery pro tlačítka
+        // Event listenery
         document.getElementById('prevBtn').addEventListener('click', () => {
           this.previousImage();
         });
@@ -85,23 +133,32 @@
           this.nextImage();
         });
         
-        document.getElementById('vrBtn').addEventListener('click', () => {
-          this.enterVR();
+        document.getElementById('stereoToggle').addEventListener('click', () => {
+          this.toggleStereo();
         });
+        
+        document.getElementById('fullscreenBtn').addEventListener('click', () => {
+          this.enterFullscreen();
+        });
+        
+        // Kontrola WebXR podpory
+        this.checkWebXRSupport();
       },
       
       loadImage: function(index) {
-        const spheres = document.querySelectorAll('.vr-sphere');
-        const imageSrc = this.images[index];
+        const sphere = this.el.querySelector('.vr-sphere');
+        const imageData = this.images[index];
         
-        // Aktualizace textury pro obě koule (levé a pravé oko)
-        spheres.forEach(sphere => {
-          sphere.setAttribute('material', 'src', imageSrc);
-        });
+        // Aktualizace textury
+        sphere.setAttribute('material', 'src', imageData.src);
         
-        // Aktualizace info
+        // Aktualizace UI
         document.getElementById('imageCounter').textContent = 
-          `Obrázek ${index + 1} z ${this.images.length}`;
+          `${imageData.name} (${index + 1}/${this.images.length})`;
+        
+        // Obnovení mono módu při změně obrázku
+        this.stereoViewer.setMonoMode();
+        this.updateStereoButton(false);
       },
       
       nextImage: function() {
@@ -115,10 +172,52 @@
         this.loadImage(this.currentImageIndex);
       },
       
-      enterVR: function() {
-        if (!this.el.sceneEl.is('vr-mode')) {
-          this.el.sceneEl.enterVR();
+      toggleStereo: function() {
+        const isStereo = this.stereoViewer.toggleStereo();
+        this.updateStereoButton(isStereo);
+      },
+      
+      updateStereoButton: function(isStereo) {
+        const button = document.getElementById('stereoToggle');
+        if (isStereo) {
+          button.textContent = '👁️ Mono zobrazení';
+          button.classList.add('active');
+        } else {
+          button.textContent = '🥽 Stereo mód';
+          button.classList.remove('active');
         }
+      },
+      
+      enterFullscreen: function() {
+        const sceneEl = document.querySelector('a-scene');
+        if (sceneEl.requestFullscreen) {
+          sceneEl.requestFullscreen();
+        } else if (sceneEl.webkitRequestFullscreen) {
+          sceneEl.webkitRequestFullscreen();
+        } else if (sceneEl.msRequestFullscreen) {
+          sceneEl.msRequestFullscreen();
+        }
+      },
+      
+      checkWebXRSupport: function() {
+        if (!navigator.xr) {
+          document.getElementById('webxrStatus').textContent = 
+            'WebXR není podporován v tomto prohlížeči';
+          return;
+        }
+        
+        navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+          if (supported) {
+            document.getElementById('webxrStatus').textContent = 
+              'WebXR VR je podporován! 🎉';
+          } else {
+            document.getElementById('webxrStatus').textContent = 
+              'WebXR je dostupný, ale VR není podporován na tomto zařízení';
+          }
+        }).catch(() => {
+          document.getElementById('webxrStatus').textContent = 
+            'Problém s detekcí WebXR podpory';
+        });
       }
     });
     </script>
@@ -126,88 +225,58 @@
   <body>
     <div id="info">
       <h3>180° VR Stereo Galerie</h3>
-      <p id="imageCounter">Obrázek 1 z 3</p>
-      <p>Použijte VR headset nebo Google Cardboard pro nejlepší zážitek</p>
+      <p id="imageCounter">Le Castillet (1/2)</p>
+      <p id="webxrStatus">Kontroluji WebXR podporu...</p>
+      <div class="stereo-warning">
+        💡 Stereo mód zobrazuje pouze levou část SBS obrázku pro demonstraci
+      </div>
     </div>
     
     <div id="ui">
       <button id="prevBtn">◀ Předchozí</button>
-      <button id="vrBtn">🥽 Vstup do VR</button>
+      <button id="stereoToggle">🥽 Stereo mód</button>
       <button id="nextBtn">Další ▶</button>
+      <button id="fullscreenBtn">⛶ Celá obrazovka</button>
     </div>
 
     <a-scene 
-      vr-mode-ui="enabled: true" 
       background="color: #000000"
-      renderer="antialias: true; colorManagement: true; sortObjects: true;"
-      vive-controls="hand: left" 
-      vive-controls="hand: right">
+      vr-mode-ui="enabled: false"
+      renderer="antialias: true; colorManagement: true"
+      embedded
+      style="height: 100vh; width: 100vw;">
       
       <a-assets>
         <img id="currentImage" src="./Castles/generated/Le_Castillet_generated.jpg" crossorigin="anonymous">
       </a-assets>
 
-      <!-- VR kamera s pozicí uprostřed -->
+      <!-- Hlavní entita s komponentami -->
       <a-entity 
-        id="cameraRig" 
-        position="0 1.6 0"
-        vr-gallery-controller>
+        stereo-viewer
+        gallery-controller
+        position="0 1.6 0">
         
-        <!-- Levé oko - zobrazuje levou polovinu SBS obrázku -->
+        <!-- Kamera s look controls -->
         <a-camera 
-          id="leftEye"
-          active="false"
-          stereo="eye: left"
           look-controls="enabled: true; reverseMouseDrag: false"
           wasd-controls="enabled: false"
-          position="-0.032 0 0">
-        </a-camera>
-        
-        <!-- Pravé oko - zobrazuje pravou polovinu SBS obrázku -->
-        <a-camera 
-          id="rightEye" 
-          active="false"
-          stereo="eye: right"
-          look-controls="enabled: true; reverseMouseDrag: false"
-          wasd-controls="enabled: false"
-          position="0.032 0 0">
-        </a-camera>
-        
-        <!-- Hlavní kamera pro non-VR mód -->
-        <a-camera 
-          id="mainCamera"
-          active="true"
-          look-controls="enabled: true"
-          wasd-controls="enabled: false">
+          cursor="rayOrigin: mouse"
+          position="0 0 0">
         </a-camera>
       </a-entity>
 
-      <!-- 180° sféra pro levé oko -->
+      <!-- 180° sféra -->
       <a-sphere 
         class="vr-sphere"
-        material="src: #currentImage; side: back; repeat: 0.5 1; offset: 0 0"
-        stereo-180="eye: left"
-        radius="100" 
+        material="src: #currentImage; side: back"
+        radius="50" 
         theta-start="0" 
         theta-length="180"
-        position="0 0 0"
-        layer="type: monovision">
-      </a-sphere>
-      
-      <!-- 180° sféra pro pravé oko -->
-      <a-sphere 
-        class="vr-sphere"
-        material="src: #currentImage; side: back; repeat: 0.5 1; offset: 0.5 0"
-        stereo-180="eye: right"
-        radius="100" 
-        theta-start="0" 
-        theta-length="180" 
-        position="0 0 0"
-        layer="type: monovision">
+        position="0 0 0">
       </a-sphere>
 
-      <!-- Světlo pro lepší zobrazení -->
-      <a-light type="ambient" color="#404040" intensity="0.4"></a-light>
+      <!-- Ambientní osvětlení -->
+      <a-light type="ambient" color="#ffffff" intensity="0.6"></a-light>
     </a-scene>
   </body>
 </html>
