@@ -276,9 +276,51 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // Leaflet mapa - přes celý obraz
+        // Leaflet mapa s různými layery - přes celý obraz
         let map = L.map('map').setView([50.0755, 14.4378], 6);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        
+        // Různé tile layery
+        let osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        });
+        
+        let satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles © Esri'
+        });
+        
+        let topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenTopoMap'
+        });
+        
+        let cartoDarkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© CartoDB'
+        });
+        
+        let cartoLightLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '© CartoDB'
+        });
+        
+        // Hybrid layer (satelitní + popisky)
+        let hybridGroup = L.layerGroup([
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'),
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}')
+        ]);
+        
+        // Přidat výchozí layer
+        osmLayer.addTo(map);
+        
+        // Definice layerů pro control
+        let baseLayers = {
+            "🗺️ Standardní": osmLayer,
+            "🛰️ Satelitní": satelliteLayer,
+            "🏔️ Topografická": topoLayer,
+            "🌓 Tmavý režim": cartoDarkLayer,
+            "☀️ Světlý režim": cartoLightLayer,
+            "🛰️ Hybrid (sat + popisky)": hybridGroup
+        };
+        
+        // Přidat layer control
+        L.control.layers(baseLayers).addTo(map);
 
         // VR Viewer proměnné
         let scene, camera, renderer;
@@ -480,12 +522,38 @@
             // Zavřít popup
             closeDetailsPopup();
             
+            // Zobrazit progress bar
+            showLoadingProgress();
+            
             currentImagePath = imagePath;
             const vrContainer = document.getElementById('vrContainer');
             vrContainer.classList.add('active');
             
             // Inicializovat VR viewer a automaticky spustit VR
             initVRViewerAndStart();
+        }
+        
+        function showLoadingProgress() {
+            const progressDiv = document.getElementById('loadingProgress');
+            const progressFill = document.getElementById('progressFill');
+            const progressPercent = document.getElementById('progressPercent');
+            
+            progressDiv.classList.add('active');
+            progressFill.style.width = '0%';
+            progressPercent.textContent = '0%';
+        }
+        
+        function updateLoadingProgress(percent) {
+            const progressFill = document.getElementById('progressFill');
+            const progressPercent = document.getElementById('progressPercent');
+            
+            progressFill.style.width = percent + '%';
+            progressPercent.textContent = percent + '%';
+        }
+        
+        function hideLoadingProgress() {
+            const progressDiv = document.getElementById('loadingProgress');
+            progressDiv.classList.remove('active');
         }
 
         function initVRViewerAndStart() {
@@ -524,20 +592,26 @@
                 currentImagePath,
                 (texture) => {
                     updateStatus('Zpracování stereo obrázku...');
+                    updateLoadingProgress(100);
                     createStereoSpheres(texture);
                     
-                    // Automaticky spustit VR po načtení obrázku
+                    // Skrýt progress bar a automaticky spustit VR
                     setTimeout(() => {
+                        hideLoadingProgress();
                         startVRAutomatically();
-                    }, 500); // Krátké zpoždění pro stabilitu
+                    }, 300);
                 },
                 (progress) => {
-                    const percent = Math.round((progress.loaded / progress.total) * 100);
-                    updateStatus(`Načítání... ${percent}%`);
+                    if (progress.total > 0) {
+                        const percent = Math.round((progress.loaded / progress.total) * 100);
+                        updateStatus(`Načítání... ${percent}%`);
+                        updateLoadingProgress(percent);
+                    }
                 },
                 (error) => {
                     console.error('Load error:', error);
                     updateStatus('Chyba při načítání: ' + currentImagePath);
+                    hideLoadingProgress();
                 }
             );
         }
@@ -613,6 +687,9 @@
         function exitVR() {
             const vrContainer = document.getElementById('vrContainer');
             vrContainer.classList.remove('active');
+            
+            // Skrýt progress bar pro případ že se zobrazuje
+            hideLoadingProgress();
             
             // Vyčistit VR viewer
             if (renderer) {
