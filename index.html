@@ -45,6 +45,17 @@
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
+            display: flex;
+            gap: 12px;
+        }
+        .vr-btn {
+            padding: 12px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            background: #1e88e5;
+            color: white;
+            cursor: pointer;
         }
     </style>
 </head>
@@ -54,6 +65,10 @@
         <div id="vr-title"></div>
         <div id="close-vr" onclick="exitVR()">✖</div>
         <stereo-img></stereo-img>
+        <div id="vr-button-container">
+            <!-- Explicitní tlačítko pro vstup do VR (user gesture) -->
+            <button id="enter-vr-btn" class="vr-btn">Enter VR</button>
+        </div>
     </div>
 
     <script>
@@ -92,6 +107,7 @@
 
             // Přidání obrázku a tlačítka pro VR
             content += `<img src="${location.image}" alt="${location.name}" style="width:100%;"><br>`;
+            // Spouštíme VR zobrazení po kliknutí na tlačítko v popupu
             content += `<button onclick="openVRView('${location.image}', '${location.name}')">Enter VR</button>`;
 
             return content;
@@ -110,28 +126,37 @@
 
             document.getElementById('vr-title').innerText = name;
 
-            enterVR();
+            // Zajistíme, že vstup do VR se provede na uživatelský dotyk
+            // Aktivuje tlačítko Enter VR, které je uvnitř VR kontejneru
+            // Předávame referenci pro pozdější použití
         }
 
-        // Upravená funkce pro vstup do VR (používá renderer a animate z custom elementu)
-        function enterVR() {
+        // Funkce pro vstup do VR (must be called as a user gesture)
+        async function enterVR() {
             const stereoImg = document.querySelector('stereo-img');
-            if (navigator.xr && stereoImg.renderer) {
-                navigator.xr.requestSession('immersive-vr').then((session) => {
+            if (stereoImg && navigator.xr) {
+                try {
+                    const session = await navigator.xr.requestSession('immersive-vr');
                     stereoImg.renderer.xr.setSession(session);
-                    stereoImg.animate();  // Spustí animaci z custom elementu
-                }).catch((err) => {
+                    // Spustí render loop
+                    stereoImg.animate();
+                } catch (err) {
                     console.error('Chyba při vstupu do VR:', err);
-                });
+                }
             } else {
                 alert('WebXR není podporován nebo renderer není připraven.');
             }
         }
 
+        // Umožníme volání enterVR pouze z tlačítka (user gesture)
+        document.getElementById('enter-vr-btn').addEventListener('click', () => {
+            enterVR();
+        });
+
         // Funkce pro ukončení VR zobrazení
         function exitVR() {
             const stereoImg = document.querySelector('stereo-img');
-            if (stereoImg.renderer.xr.getSession()) {
+            if (stereoImg && stereoImg.renderer && stereoImg.renderer.xr && stereoImg.renderer.xr.getSession()) {
                 stereoImg.renderer.xr.getSession().end();
             }
             document.getElementById('vr-container').style.display = 'none';
@@ -139,13 +164,11 @@
 
         // Detekce gamepadů (pro Quest 3 ovladače) a ukončení VR při stisku tlačítka
         function checkGamepads() {
-            const gamepads = navigator.getGamepads();
-            for (let gamepad of gamepads) {
-                if (gamepad) {
-                    // Kontrola tlačítek a joysticků
-                    const buttonsPressed = gamepad.buttons.some(button => button.pressed);
-                    const axesMoved = gamepad.axes.some(axis => Math.abs(axis) > 0.1);
-
+            const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+            for (let gp of gamepads) {
+                if (gp) {
+                    const buttonsPressed = gp.buttons && gp.buttons.some(b => b.pressed);
+                    const axesMoved = gp.axes && gp.axes.some(a => Math.abs(a) > 0.1);
                     if (buttonsPressed || axesMoved) {
                         exitVR();
                         return;
