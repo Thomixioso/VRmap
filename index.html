@@ -29,43 +29,52 @@
         #exitButton {
             position: absolute;
             top: 10px; right: 10px;
-            padding: 10px; background: white; color: black; cursor: pointer;
+            padding: 15px 20px; 
+            background: rgba(255,255,255,0.9); 
+            color: black; 
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
             z-index: 1001;
+        }
+        #exitButton:hover {
+            background: white;
         }
         .controller {
             position: absolute;
             bottom: 20px;
             color: white;
             font-size: 18px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
         }
         #leftController { left: 20px; }
         #rightController { right: 20px; }
         #errorMessage { color: red; margin-top: 10px; }
-        
-        /* Styling pro VR tlačítko */
-        .vr-button {
-            background: #4CAF50;
-            border: none;
-            color: white;
-            padding: 15px 32px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 16px;
-            margin: 4px 2px;
-            cursor: pointer;
-            border-radius: 4px;
-        }
-        
-        .vr-button:disabled {
-            background: #cccccc;
-            cursor: not-allowed;
-        }
-        
         #vrStatus {
+            position: absolute;
+            top: 60px; left: 20px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .vr-button {
+            background: #007bff;
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
             margin-top: 10px;
-            font-style: italic;
-            color: #666;
+        }
+        .vr-button:hover {
+            background: #0056b3;
         }
     </style>
 </head>
@@ -74,44 +83,50 @@
     <div id="detailsContainer"></div>
     <div id="imageContainer"></div>
     <div id="vrContainer">
-        <div id="exitButton" onclick="exitVR()">Exit VR</div>
-        <div id="leftController" class="controller">Left Controller: X Y</div>
-        <div id="rightController" class="controller">Right Controller: A B</div>
+        <button id="exitButton" onclick="exitVR()">✕ Exit VR</button>
+        <div id="vrStatus">VR Mode Active - Use controller buttons or touch to exit</div>
+        <div id="leftController" class="controller">Left: Trigger/Grip to exit</div>
+        <div id="rightController" class="controller">Right: A/B/X/Y to exit</div>
     </div>
     <div id="errorMessage"></div>
-    <div id="vrStatus"></div>
 
     <script>
         let map = L.map('map').setView([50.0755, 14.4378], 13);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
         let xrSession = null;
-        let stereoImgElement = null;
+        let currentStereoImg = null;
 
-        // Kontrola VR podpory při načtení
-        async function checkVRSupport() {
-            const vrStatus = document.getElementById('vrStatus');
-            
-            if (!navigator.xr) {
-                vrStatus.textContent = 'WebXR není podporováno v tomto prohlížeči';
-                return false;
+        // Testovací data - použijte vaše data.json
+        const testData = [
+            {
+                "name": "Le_Castillet",
+                "category": "Castles",
+                "lat": 42.70064,
+                "lon": 2.89412,
+                "txtFile": "Castles/Le_Castillet.txt",
+                "image": "Castles/generated/Le_Castillet_generated.jpg"
+            },
+            {
+                "name": "Moulton",
+                "category": "Castles", 
+                "lat": 52.77328,
+                "lon": -0.05583,
+                "txtFile": "Castles/Moulton.txt",
+                "image": "Castles/generated/Moulton_generated.jpg"
             }
-            
-            try {
-                const isSupported = await navigator.xr.isSessionSupported('immersive-vr');
-                if (isSupported) {
-                    vrStatus.textContent = 'VR je podporováno - použijte tlačítko "Enter VR" v aplikaci';
-                } else {
-                    vrStatus.textContent = 'VR session není podporována';
-                }
-                return isSupported;
-            } catch (error) {
-                vrStatus.textContent = 'Chyba při kontrole VR podpory: ' + error.message;
-                return false;
-            }
+        ];
+
+        // Inicializace mapy s testovacími daty
+        function initializeMap() {
+            testData.forEach(location => {
+                let marker = L.marker([location.lat, location.lon]).addTo(map);
+                marker.bindPopup(location.name);
+                marker.on('click', () => showLocationDetails(location));
+            });
         }
 
-        // Fetch data.json s error handling
+        // Načtení skutečných dat (pokud existují)
         fetch('data.json')
             .then(response => {
                 if (!response.ok) {
@@ -120,18 +135,29 @@
                 return response.json();
             })
             .then(data => {
-                if (!Array.isArray(data)) {
-                    throw new Error('Data.json nemá očekávanou strukturu (mělo by být array míst).');
-                }
-                data.forEach(location => {
-                    let marker = L.marker([location.lat, location.lon]).addTo(map);
-                    marker.bindPopup(location.name);
-                    marker.on('click', () => showLocationDetails(location));
+                // Vyčistit testovací markery
+                map.eachLayer(layer => {
+                    if (layer instanceof L.Marker) {
+                        map.removeLayer(layer);
+                    }
                 });
+                
+                // Přidat skutečná data
+                if (Array.isArray(data)) {
+                    data.forEach(location => {
+                        let marker = L.marker([location.lat, location.lon]).addTo(map);
+                        marker.bindPopup(location.name);
+                        marker.on('click', () => showLocationDetails(location));
+                    });
+                } else {
+                    throw new Error('Data.json nemá očekávanou strukturu.');
+                }
             })
             .catch(error => {
                 console.error('Chyba při načítání dat:', error);
-                document.getElementById('errorMessage').innerHTML = '<p>Chyba: Nepodařilo se načíst data. Zkontroluj soubor data.json nebo síťové připojení.</p>';
+                console.log('Používám testovací data');
+                document.getElementById('errorMessage').innerHTML = '<p>Používám testovací data - data.json nenalezen</p>';
+                initializeMap();
             });
 
         function showLocationDetails(location) {
@@ -142,25 +168,30 @@
                 <p id="description">Načítání popisu...</p>
             `;
 
-            // Načti popis z TXT souboru
-            fetch(location.txtFile)
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Nepodařilo se načíst TXT soubor: ' + response.statusText);
-                    }
-                    return response.text();
-                })
-                .then(text => {
-                    document.getElementById('description').innerHTML = text.replace(/\n/g, '<br>');
-                })
-                .catch(error => {
-                    console.error('Chyba při načítání TXT:', error);
-                    document.getElementById('description').innerHTML = 'Chyba: Nepodařilo se načíst popis z TXT souboru.';
-                });
+            // Načíst popis z TXT souboru
+            if (location.txtFile) {
+                fetch(location.txtFile)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Nepodařilo se načíst TXT soubor');
+                        }
+                        return response.text();
+                    })
+                    .then(text => {
+                        document.getElementById('description').innerHTML = text.replace(/\n/g, '<br>');
+                    })
+                    .catch(error => {
+                        console.error('Chyba při načítání TXT:', error);
+                        document.getElementById('description').innerHTML = 'Popis není k dispozici.';
+                    });
+            } else {
+                document.getElementById('description').innerHTML = 'Popis není k dispozici.';
+            }
 
             let imageContainer = document.getElementById('imageContainer');
             imageContainer.innerHTML = '';
 
+            // Zobrazit obrázek
             let img = document.createElement('img');
             img.src = location.image;
             img.alt = location.name;
@@ -169,138 +200,227 @@
             };
             imageContainer.appendChild(img);
 
-            // Vylepšené VR tlačítko
+            // Přidat VR tlačítko - KLÍČOVÉ: uživatel musí přímo kliknout
             const vrButton = document.createElement('button');
-            vrButton.textContent = 'Enter VR';
             vrButton.className = 'vr-button';
-            vrButton.onclick = () => openVRView(location.image);
-            
-            // Kontrola, zda je VR dostupné
-            navigator.xr?.isSessionSupported('immersive-vr').then(supported => {
-                if (!supported) {
-                    vrButton.disabled = true;
-                    vrButton.textContent = 'VR není podporováno';
-                }
-            }).catch(() => {
-                vrButton.disabled = true;
-                vrButton.textContent = 'VR nedostupné';
-            });
-            
+            vrButton.textContent = '🥽 Enter VR';
+            vrButton.onclick = (event) => {
+                // Zabránit event bubblingу
+                event.preventDefault();
+                event.stopPropagation();
+                
+                // Přímo spustit VR - musí být přímá akce uživatele
+                enterVRMode(location.image);
+            };
             details.appendChild(vrButton);
+
+            // Přidat informace o VR
+            const vrInfo = document.createElement('p');
+            vrInfo.innerHTML = '<small>💡 Pro VR použijte ovladače nebo dotkněte se obrazovky pro ukončení</small>';
+            details.appendChild(vrInfo);
         }
 
-        async function openVRView(imagePath) {
-            console.log('Spouštím VR pro obrázek:', imagePath);
+        async function enterVRMode(imagePath) {
+            console.log('Spouštím VR mode pro:', imagePath);
+            
+            const vrContainer = document.getElementById('vrContainer');
             
             try {
-                // Nejprve zkontroluj, zda je VR session podporována
-                const isSupported = await navigator.xr.isSessionSupported('immersive-vr');
-                if (!isSupported) {
-                    alert('VR session není podporována. Použijte prosím tlačítko "Enter VR" v Meta Browser menu.');
-                    return;
-                }
-
-                const vrContainer = document.getElementById('vrContainer');
-                
-                // Vyčisti předchozí obsah
+                // Vyčistit předchozí obsah
                 const existingStereoImg = vrContainer.querySelector('stereo-img');
                 if (existingStereoImg) {
                     existingStereoImg.remove();
                 }
                 
-                // Vytvoř nový stereo-img element
-                stereoImgElement = document.createElement('stereo-img');
-                stereoImgElement.setAttribute('src', imagePath);
-                stereoImgElement.setAttribute('type', 'left-right');
-                stereoImgElement.setAttribute('angle', '180');
-                stereoImgElement.style.width = '100%';
-                stereoImgElement.style.height = '100%';
+                // Vytvořit novou stereo-img komponentu
+                currentStereoImg = document.createElement('stereo-img');
+                currentStereoImg.src = imagePath;
+                currentStereoImg.type = 'left-right'; // Upravte podle vašich obrázků
+                currentStereoImg.angle = '180';
+                currentStereoImg.style.width = '100%';
+                currentStereoImg.style.height = '100%';
                 
-                vrContainer.appendChild(stereoImgElement);
+                vrContainer.appendChild(currentStereoImg);
                 vrContainer.classList.add('active');
 
-                // Pokus o spuštění VR session
-                try {
-                    console.log('Požadavek na VR session...');
-                    xrSession = await navigator.xr.requestSession('immersive-vr', {
-                        requiredFeatures: ['local-floor']
-                    });
-                    
-                    console.log('VR session úspěšně spuštěna');
-                    
-                    // Nastavení event listeneru pro ukončení session
-                    xrSession.addEventListener('end', () => {
-                        console.log('VR session ukončena');
-                        xrSession = null;
-                        exitVR();
-                    });
-                    
-                } catch (vrError) {
-                    console.error('Chyba při spouštění VR session:', vrError);
-                    // Zobraz VR obsah i bez immersive session
-                    document.getElementById('vrStatus').textContent = 'VR spuštěno v desktop módu. Pro plnou VR použijte tlačítko "Enter VR" v browseru.';
+                // Počkat na inicializaci stereo-img komponenty
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                // Pokusit se spustit VR session
+                if (navigator.xr) {
+                    try {
+                        console.log('Kontrolujem VR podporu...');
+                        const isSupported = await navigator.xr.isSessionSupported('immersive-vr');
+                        
+                        if (isSupported) {
+                            console.log('Spouštím VR session...');
+                            xrSession = await navigator.xr.requestSession('immersive-vr');
+                            
+                            xrSession.addEventListener('end', () => {
+                                console.log('VR session ukončena');
+                                xrSession = null;
+                                exitVR();
+                            });
+                            
+                            console.log('VR session úspěšně spuštěna');
+                        } else {
+                            console.log('VR není podporováno na tomto zařízení');
+                        }
+                    } catch (error) {
+                        console.error('Chyba při spouštění VR session:', error);
+                    }
+                } else {
+                    console.log('WebXR není dostupné');
                 }
-                
+
             } catch (error) {
-                console.error('Obecná chyba VR:', error);
-                alert('Chyba při spouštění VR: ' + error.message + '\n\nZkuste použít tlačítko "Enter VR" v Meta Browser menu.');
+                console.error('Chyba při vytváření VR view:', error);
+                exitVR();
             }
         }
 
         function exitVR() {
-            console.log('Ukončování VR...');
+            console.log('Ukončuji VR mode');
             
             const vrContainer = document.getElementById('vrContainer');
             vrContainer.classList.remove('active');
             
-            // Vyčisti stereo-img element
-            if (stereoImgElement) {
-                stereoImgElement.remove();
-                stereoImgElement = null;
+            // Vyčistit stereo-img komponentu
+            if (currentStereoImg) {
+                currentStereoImg.remove();
+                currentStereoImg = null;
             }
 
-            // Ukončení XR session
+            // Ukončit XR session
             if (xrSession) {
                 xrSession.end().then(() => {
-                    console.log('XR session úspěšně ukončena');
                     xrSession = null;
+                    console.log('XR session ukončena');
                 }).catch(err => {
                     console.error('Chyba při ukončení XR session:', err);
                     xrSession = null;
                 });
             }
-            
-            document.getElementById('vrStatus').textContent = '';
         }
 
-        // Listener pro Escape klávesu
+        // Poslouchání klávesových zkratek
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape') {
                 exitVR();
             }
         });
 
-        // Gamepad kontrola
+        // Vylepšená detekce ovladačů pro Meta Quest 3
         function checkGamepads() {
             const gamepads = navigator.getGamepads();
-            gamepads.forEach(gp => {
-                if (gp && gp.connected) {
-                    const isButtonPressed = gp.buttons.some(button => button.pressed);
-                    const isJoystickMoved = Math.abs(gp.axes[1]) > 0.5 || Math.abs(gp.axes[0]) > 0.5;
-
-                    if (isButtonPressed || isJoystickMoved) {
-                        exitVR();
+            
+            if (gamepads && vrContainer.classList.contains('active')) {
+                for (let i = 0; i < gamepads.length; i++) {
+                    const gamepad = gamepads[i];
+                    
+                    if (gamepad && gamepad.connected) {
+                        // Meta Quest 3 ovladače - detekce různých tlačítek
+                        let shouldExit = false;
+                        
+                        // Trigger tlačítka (index 0 a 1)
+                        if (gamepad.buttons[0] && gamepad.buttons[0].pressed) {
+                            shouldExit = true;
+                        }
+                        if (gamepad.buttons[1] && gamepad.buttons[1].pressed) {
+                            shouldExit = true;
+                        }
+                        
+                        // Grip tlačítka (index 2 a 3) 
+                        if (gamepad.buttons[2] && gamepad.buttons[2].pressed) {
+                            shouldExit = true;
+                        }
+                        if (gamepad.buttons[3] && gamepad.buttons[3].pressed) {
+                            shouldExit = true;
+                        }
+                        
+                        // A, B, X, Y tlačítka (obvykle index 4, 5, 6, 7)
+                        for (let btnIndex = 4; btnIndex < Math.min(gamepad.buttons.length, 8); btnIndex++) {
+                            if (gamepad.buttons[btnIndex] && gamepad.buttons[btnIndex].pressed) {
+                                shouldExit = true;
+                                break;
+                            }
+                        }
+                        
+                        // Thumbstick press (obvykle index 8, 9)
+                        if (gamepad.buttons[8] && gamepad.buttons[8].pressed) {
+                            shouldExit = true;
+                        }
+                        if (gamepad.buttons[9] && gamepad.buttons[9].pressed) {
+                            shouldExit = true;
+                        }
+                        
+                        // Menu tlačítko (obvykle index 10 nebo 11)
+                        if (gamepad.buttons[10] && gamepad.buttons[10].pressed) {
+                            shouldExit = true;
+                        }
+                        if (gamepad.buttons[11] && gamepad.buttons[11].pressed) {
+                            shouldExit = true;
+                        }
+                        
+                        // Detekce pohybu thumbstick
+                        if (gamepad.axes && gamepad.axes.length >= 4) {
+                            // Levý thumbstick (axes 0, 1) a pravý thumbstick (axes 2, 3)
+                            const leftStickX = Math.abs(gamepad.axes[0] || 0);
+                            const leftStickY = Math.abs(gamepad.axes[1] || 0);
+                            const rightStickX = Math.abs(gamepad.axes[2] || 0);
+                            const rightStickY = Math.abs(gamepad.axes[3] || 0);
+                            
+                            // Pokud je thumbstick posunut více než 70% v jakémkoli směru
+                            if (leftStickX > 0.7 || leftStickY > 0.7 || rightStickX > 0.7 || rightStickY > 0.7) {
+                                shouldExit = true;
+                            }
+                        }
+                        
+                        if (shouldExit) {
+                            console.log('Gamepad tlačítko stisknuto - ukončuji VR');
+                            exitVR();
+                            return;
+                        }
                     }
                 }
-            });
+            }
+            
+            // Použít requestAnimationFrame pro lepší výkon
             requestAnimationFrame(checkGamepads);
         }
+
+        // Spustit kontrolu gamepadů
+        checkGamepads();
+
+        // Touch events pro mobilní zařízení
+        let touchStartTime = 0;
         
-        // Spusť kontrolu VR podpory a gamepad monitoring
-        window.addEventListener('load', () => {
-            checkVRSupport();
-            checkGamepads();
+        document.addEventListener('touchstart', (e) => {
+            if (vrContainer.classList.contains('active')) {
+                touchStartTime = Date.now();
+            }
         });
+        
+        document.addEventListener('touchend', (e) => {
+            if (vrContainer.classList.contains('active')) {
+                const touchDuration = Date.now() - touchStartTime;
+                // Dlouhý dotek (více než 500ms) ukončí VR
+                if (touchDuration > 500) {
+                    console.log('Dlouhý dotek - ukončuji VR');
+                    exitVR();
+                }
+            }
+        });
+
+        // Debug informace
+        console.log('VR mapa inicializována');
+        console.log('WebXR dostupné:', !!navigator.xr);
+        
+        if (navigator.xr) {
+            navigator.xr.isSessionSupported('immersive-vr').then(supported => {
+                console.log('VR session podporována:', supported);
+            });
+        }
     </script>
 </body>
 </html>
