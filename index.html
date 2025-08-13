@@ -99,7 +99,6 @@
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
-            renderer.xr.setReferenceSpaceType('local'); // Výchozí reference space
             
             document.getElementById('viewer').appendChild(renderer.domElement);
             
@@ -237,6 +236,10 @@
             // Vytvoření sfér
             leftSphere = new THREE.Mesh(geometry.clone(), leftMaterial);
             rightSphere = new THREE.Mesh(geometry.clone(), rightMaterial);
+            
+            // Otočení sfér tak, aby obrázek byl před námi
+            leftSphere.rotation.y = Math.PI;
+            rightSphere.rotation.y = Math.PI;
             
             // Nastavení vrstev pro stereo zobrazení
             leftSphere.layers.set(1);  // Levé oko
