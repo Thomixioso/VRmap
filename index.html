@@ -1,176 +1,81 @@
 <!DOCTYPE html>
-<html lang="cs">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VR Stereo Test - Insta 360 EVO - Meta Quest 3</title>
-    
-    <!-- A-Frame - základní verze bez externích knihoven -->
-    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <title>A-Frame Stereo - Insta 360 EVO</title>
+    <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+    <script src="build.js"></script>
     
     <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-        }
-        
-        .ui-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 15px;
-            z-index: 1000;
-            font-size: 14px;
-        }
-        
-        .controls {
-            margin-top: 10px;
-        }
-        
-        .button {
-            background: #007bff;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            margin: 5px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        
-        .button:hover {
-            background: #0056b3;
-        }
-        
+        body { margin: 0; font-family: Arial, sans-serif; }
         .debug {
-            background: rgba(40, 40, 40, 0.9);
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 5px;
-            font-family: monospace;
-            font-size: 12px;
-            max-height: 200px;
-            overflow-y: auto;
+            position: fixed; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.8); color: white;
+            padding: 10px; border-radius: 5px;
+            font-family: monospace; font-size: 12px;
+            z-index: 1000; max-width: 400px;
         }
-        
         .success { color: #28a745; }
         .error { color: #dc3545; }
-        .info { color: #17a2b8; }
-        
-        /* Zvýraznit VR tlačítko */
-        .a-enter-vr {
-            background: #28a745 !important;
-            border: 3px solid #fff !important;
-            font-size: 16px !important;
-            padding: 15px !important;
+        button {
+            background: #007bff; color: white; border: none;
+            padding: 8px 16px; margin: 5px; border-radius: 3px; cursor: pointer;
         }
     </style>
 </head>
 <body>
-    <div class="ui-overlay" id="uiOverlay">
-        <h3>🥽 VR Stereo Test - Insta 360 EVO - Základní A-Frame</h3>
-        <div class="info">
-            <strong>Jednoduchý přístup:</strong><br>
-            Dva canvas elementy pro levé a pravé oko, bez externích knihoven
-        </div>
-        
-        <div class="controls">
-            <button class="button" onclick="loadVRScene()">📷 Načíst VR scénu</button>
-            <button class="button" onclick="toggleUI()">👁️ Skrýt/Zobrazit UI</button>
-            <button class="button" onclick="forceVR()">🚀 Vynucený VR vstup</button>
-        </div>
-        
-        <div id="debugOutput" class="debug"></div>
+    <div class="debug" id="debugOutput">
+        <strong>🥽 A-Frame Stereo - build.js knihovna</strong><br>
+        <span id="status">Načítám...</span><br>
+        <button onclick="toggleDebug()">Skrýt/Zobrazit</button>
     </div>
 
-    <!-- A-Frame VR scéna - základní přístup -->
-    <a-scene 
-        id="vrScene" 
-        embedded 
-        style="height: 100vh; width: 100%;"
-        vr-mode-ui="enabled: true">
-        
-        <!-- Assets -->
+    <a-scene antialias="true">
+        <!-- Rozdělené poloviny z Insta 360 EVO obrázku -->
         <a-assets>
-            <img id="stereoImage" src="./Castles/generated/Le_Castillet_generated.jpg">
-            <canvas id="leftCanvas" width="512" height="512"></canvas>
-            <canvas id="rightCanvas" width="512" height="512"></canvas>
+            <img id="originalImage" src="./Castles/generated/Le_Castillet_generated.jpg">
+            <canvas id="left" width="1024" height="1024"></canvas>
+            <canvas id="right" width="1024" height="1024"></canvas>
         </a-assets>
-        
-        <!-- Kamera -->
-        <a-camera 
-            position="0 1.6 0" 
-            look-controls="enabled: true">
-        </a-camera>
-        
-        <!-- Left eye - sphere POUZE s levou polovinou obrázku -->
-        <a-sphere 
-            id="leftEye"
-            src="#leftCanvas"
-            radius="10"
-            phi-start="270" 
-            phi-length="180"
-            theta-start="30"
-            theta-length="120"
-            rotation="0 0 0"
-            material="side: back">
-        </a-sphere>
-        
-        <!-- Right eye - sphere POUZE s pravou polovinou obrázku -->
-        <a-sphere 
-            id="rightEye"
-            src="#rightCanvas" 
-            radius="10"
-            phi-start="270"
-            phi-length="180" 
-            theta-start="30"
-            theta-length="120"
-            rotation="0 0 0"
-            material="side: back">
-        </a-sphere>
-        
-        <!-- Základní osvětlení -->
-        <a-light type="ambient" color="#ffffff"></a-light>
+
+        <!-- Camera -->
+        <a-entity camera look-controls position="0 0 0" stereocam="eye:left;"></a-entity>
+
+        <!-- Sky sphere -->
+        <a-sky id="sky1" src="#left" stereo="eye:left"></a-sky>
+        <a-sky id="sky2" src="#right" stereo="eye:right"></a-sky>
     </a-scene>
 
     <script>
-        let sceneLoaded = false;
-        let uiVisible = true;
-        let stereoImage = null;
-        
-        // Debug funkce
-        function debugLog(message, type = 'info') {
-            const debugDiv = document.getElementById('debugOutput');
-            const timestamp = new Date().toLocaleTimeString();
+        function log(message, type = 'info') {
+            const status = document.getElementById('status');
             const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
-            debugDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
-            debugDiv.scrollTop = debugDiv.scrollHeight;
+            status.innerHTML += `<div class="${className}">${message}</div>`;
             console.log(message);
         }
         
-        function splitStereoImage() {
-            debugLog('🔄 Rozděluju side-by-side stereo obrázek...', 'info');
-            
-            const img = document.querySelector('#stereoImage');
-            const leftCanvas = document.querySelector('#leftCanvas');
-            const rightCanvas = document.querySelector('#rightCanvas');
+        function toggleDebug() {
+            const debug = document.querySelector('.debug');
+            debug.style.display = debug.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        function splitStereoToCanvases() {
+            const img = document.getElementById('originalImage');
+            const leftCanvas = document.getElementById('left');
+            const rightCanvas = document.getElementById('right');
             
             if (!img.complete) {
-                debugLog('❌ Obrázek ještě není načten', 'error');
-                return false;
+                log('❌ Obrázek není načten', 'error');
+                return;
             }
             
             const fullWidth = img.naturalWidth;
             const fullHeight = img.naturalHeight;
-            const halfWidth = fullWidth / 2; // Každá polovina pro jedno oko
+            const halfWidth = fullWidth / 2;
             
-            debugLog(`Celkové rozměry: ${fullWidth}x${fullHeight}`, 'info');
-            debugLog(`Levé oko: 0-${halfWidth}, Pravé oko: ${halfWidth}-${fullWidth}`, 'info');
+            log(`📏 Celkový obrázek: ${fullWidth}x${fullHeight}`, 'info');
+            log(`🔄 Levá polovina: 0-${halfWidth}, Pravá: ${halfWidth}-${fullWidth}`, 'info');
             
-            // Nastavit velikost canvas pro každé oko
+            // Nastavit velikost canvas
             leftCanvas.width = halfWidth;
             leftCanvas.height = fullHeight;
             rightCanvas.width = halfWidth;
@@ -180,182 +85,40 @@
             const rightCtx = rightCanvas.getContext('2d');
             
             try {
-                // LEVÉ OKO: Nakreslit LEVOU polovinu obrázku (x: 0 → halfWidth)
-                leftCtx.drawImage(
-                    img,           // source image
-                    0, 0,          // source x,y (levá polovina)
-                    halfWidth, fullHeight,  // source width,height 
-                    0, 0,          // dest x,y
-                    halfWidth, fullHeight   // dest width,height
-                );
+                // Levá polovina obrázku → left canvas
+                leftCtx.drawImage(img, 0, 0, halfWidth, fullHeight, 0, 0, halfWidth, fullHeight);
                 
-                // PRAVÉ OKO: Nakreslit PRAVOU polovinu obrázku (x: halfWidth → fullWidth)
-                rightCtx.drawImage(
-                    img,           // source image  
-                    halfWidth, 0,  // source x,y (pravá polovina)
-                    halfWidth, fullHeight,  // source width,height
-                    0, 0,          // dest x,y
-                    halfWidth, fullHeight   // dest width,height
-                );
+                // Pravá polovina obrázku → right canvas
+                rightCtx.drawImage(img, halfWidth, 0, halfWidth, fullHeight, 0, 0, halfWidth, fullHeight);
                 
-                debugLog('✅ Stereo obrázek SPRÁVNĚ rozdělen na L/R!', 'success');
-                debugLog(`Každé oko: ${halfWidth}x${fullHeight}`, 'info');
-                
-                // Force update textur v A-Frame
-                setTimeout(() => {
-                    const leftSphere = document.querySelector('#leftEye');
-                    const rightSphere = document.querySelector('#rightEye');
-                    
-                    // Vynutit reload textur
-                    leftSphere.removeAttribute('src');
-                    rightSphere.removeAttribute('src');
-                    
-                    setTimeout(() => {
-                        leftSphere.setAttribute('src', '#leftCanvas');
-                        rightSphere.setAttribute('src', '#rightCanvas');
-                        debugLog('🎯 Textury aktualizovány v A-Frame', 'success');
-                    }, 100);
-                }, 100);
-                
-                return true;
+                log('✅ Side-by-side rozdělen na L/R canvas!', 'success');
+                log('🥽 build.js stereo komponenty připraveny', 'success');
+                log('👆 Klikněte VR tlačítko vpravo dole', 'success');
             } catch (error) {
-                debugLog(`❌ Chyba při rozdělení: ${error.message}`, 'error');
-                return false;
+                log(`❌ Chyba při rozdělení: ${error.message}`, 'error');
             }
         }
         
-        function loadVRScene() {
-            debugLog('Načítám VR scénu...', 'info');
+        // Inicializace
+        window.addEventListener('load', () => {
+            log('🚀 Spouštím s build.js knihovnou...', 'info');
             
-            const scene = document.querySelector('#vrScene');
-            const img = document.querySelector('#stereoImage');
+            const img = document.getElementById('originalImage');
             
-            debugLog(`Cesta k obrázku: ${img.src}`, 'info');
-            
-            // Přidat posluchače událostí
-            img.addEventListener('load', function() {
-                debugLog('✅ Stereo obrázek načten úspěšně!', 'success');
-                debugLog(`Rozměry obrázku: ${img.naturalWidth}x${img.naturalHeight}`, 'info');
-                
-                // Rozdělit na L/R
-                if (splitStereoImage()) {
-                    sceneLoaded = true;
-                    debugLog('🎯 Insta 360 EVO side-by-side zpracováno', 'success');
-                    
-                    // Zdůraznit VR tlačítko
-                    setTimeout(() => {
-                        const vrButton = document.querySelector('.a-enter-vr');
-                        if (vrButton) {
-                            vrButton.style.background = '#28a745';
-                            vrButton.style.border = '3px solid #fff';
-                            vrButton.innerHTML = '🥽 VSTUP DO VR';
-                            debugLog('✅ VR tlačítko je připravené!', 'success');
-                        }
-                    }, 1000);
-                }
+            img.addEventListener('load', () => {
+                log('✅ Insta 360 EVO obrázek načten', 'success');
+                splitStereoToCanvases();
             });
             
-            img.addEventListener('error', function(e) {
-                debugLog('❌ CHYBA při načítání obrázku!', 'error');
-                debugLog(`Chyba: ${e.type}`, 'error');
-                debugLog('Zkontrolujte cestu: ./Castles/generated/Le_Castillet_generated.jpg', 'error');
+            img.addEventListener('error', () => {
+                log('❌ Chyba načítání obrázku', 'error');
+                log('Zkontrolujte cestu: ./Castles/generated/Le_Castillet_generated.jpg', 'error');
             });
             
-            // Vynutit načtení, pokud už je cached
+            // Pokud už je načten
             if (img.complete && img.naturalWidth > 0) {
-                debugLog('✅ Obrázek již v cache, zpracovávám...', 'success');
                 img.dispatchEvent(new Event('load'));
             }
-            
-            // Sledovat A-Frame eventy
-            scene.addEventListener('enter-vr', () => {
-                debugLog('🥽 VSTUP DO VR REŽIMU!', 'success');
-                debugLog('👀 Levé oko = layer 1, Pravé oko = layer 2', 'info');
-                toggleUI(false);
-            });
-            
-            scene.addEventListener('exit-vr', () => {
-                debugLog('👋 Výstup z VR režimu', 'info');
-                toggleUI(true);
-            });
-        }
-        
-        async function forceVR() {
-            debugLog('🚀 Vynucený pokus o VR vstup...', 'info');
-            
-            try {
-                if (!navigator.xr) {
-                    throw new Error('WebXR není dostupný');
-                }
-                
-                const supported = await navigator.xr.isSessionSupported('immersive-vr');
-                if (!supported) {
-                    throw new Error('Immersive VR není podporováno');
-                }
-                
-                debugLog('✅ WebXR je funkční, hledám VR tlačítko...', 'success');
-                
-                const vrButton = document.querySelector('.a-enter-vr');
-                if (vrButton) {
-                    // Zvýraznit před kliknutím
-                    vrButton.style.background = '#dc3545';
-                    vrButton.innerHTML = '🔄 SPOUŠTÍM VR...';
-                    
-                    setTimeout(() => {
-                        vrButton.click();
-                        debugLog('🎯 VR tlačítko aktivováno!', 'success');
-                    }, 500);
-                } else {
-                    throw new Error('VR tlačítko nenalezeno');
-                }
-                
-            } catch (error) {
-                debugLog(`❌ VR vstup selhal: ${error.message}`, 'error');
-            }
-        }
-        
-        function toggleUI(force = null) {
-            const overlay = document.getElementById('uiOverlay');
-            if (force !== null) {
-                uiVisible = force;
-            } else {
-                uiVisible = !uiVisible;
-            }
-            
-            overlay.style.display = uiVisible ? 'block' : 'none';
-            debugLog(`UI ${uiVisible ? 'zobrazeno' : 'skryto'}`, 'info');
-        }
-        
-        // Inicializace při načtení
-        window.addEventListener('load', () => {
-            debugLog('🚀 Stránka načtena', 'success');
-            debugLog(`A-Frame verze: ${AFRAME.version}`, 'info');
-            debugLog('🔧 Základní A-Frame přístup bez externích knihoven', 'info');
-            
-            // Zkontrolovat WebXR
-            if (navigator.xr) {
-                debugLog('✅ WebXR je dostupný', 'success');
-                navigator.xr.isSessionSupported('immersive-vr').then(supported => {
-                    if (supported) {
-                        debugLog('✅ Immersive VR je podporováno!', 'success');
-                    } else {
-                        debugLog('❌ Immersive VR není podporováno', 'error');
-                    }
-                });
-            } else {
-                debugLog('❌ WebXR není dostupný', 'error');
-            }
-            
-            // Auto-načtení scény
-            setTimeout(() => {
-                debugLog('🔄 Auto-načítám VR scénu...', 'info');
-                loadVRScene();
-            }, 2000);
-        });
-        
-        // Error handling
-        window.addEventListener('error', (event) => {
-            debugLog(`GLOBÁLNÍ CHYBA: ${event.message}`, 'error');
         });
     </script>
 </body>
