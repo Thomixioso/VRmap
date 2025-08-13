@@ -352,24 +352,31 @@
         locations.forEach(location => {
             let marker = L.marker([location.lat, location.lon]).addTo(map);
             marker.bindPopup(location.name);
-            marker.on('click', () => showLocationDetails(location));
+            marker.on('click', (e) => showLocationDetails(location, e));
         });
 
         function updateStatus(message) {
             document.getElementById('vr-status').textContent = message;
         }
 
-        function showLocationDetails(location) {
+        function showLocationDetails(location, event) {
             const popup = document.getElementById('detailsPopup');
             const content = document.getElementById('popupContent');
+            
+            // Získat pozici markeru na obrazovce
+            const markerLatLng = event.target.getLatLng();
+            const markerPoint = map.latLngToContainerPoint(markerLatLng);
             
             content.innerHTML = `
                 <h3>${location.name}</h3>
                 <p><strong>Kategorie:</strong> ${location.category}</p>
-                <img src="${location.image}" alt="${location.name}" class="popup-image" onerror="this.style.display='none'">
                 <p id="description">Načítání popisu...</p>
                 <button class="enter-vr-btn" id="enterVRBtn">Enter VR</button>
             `;
+            
+            // Umístit popup nad marker
+            popup.style.left = (markerPoint.x - 125) + 'px'; // Centrovat nad markerem
+            popup.style.top = (markerPoint.y - 180) + 'px';  // Nad markerem
             
             // Přidat event listener pro VR tlačítko
             document.getElementById('enterVRBtn').addEventListener('click', () => {
