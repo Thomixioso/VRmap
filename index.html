@@ -10,23 +10,66 @@
     <style>
         body {
             margin: 0;
-            padding: 20px;
+            padding: 0;
             font-family: Arial, sans-serif;
+            overflow: hidden;
         }
         
+        /* Mapa přes celý obraz */
         #map { 
-            height: 400px; 
-            margin-bottom: 20px;
+            height: 100vh;
+            width: 100vw;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1;
         }
         
-        #detailsContainer { 
-            margin-bottom: 20px; 
+        /* Malé popup okénko pro detaily */
+        #detailsPopup {
+            display: none;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            max-height: 400px;
+            background: white;
+            border: 2px solid #333;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1000;
+            overflow-y: auto;
         }
         
-        #imageContainer img { 
-            max-width: 100%; 
-            height: auto; 
-            margin-bottom: 10px;
+        #detailsPopup.active {
+            display: block;
+        }
+        
+        #closePopup {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+        }
+        
+        #closePopup:hover {
+            background: #cc0000;
+        }
+        
+        .popup-image {
+            width: 100%;
+            height: auto;
+            margin: 10px 0;
+            border-radius: 5px;
         }
         
         /* VR Container - fullscreen overlay */
@@ -38,7 +81,7 @@
             width: 100%; 
             height: 100%;
             background: #000;
-            z-index: 1000;
+            z-index: 2000;
         }
         
         #vrContainer.active { 
@@ -107,11 +150,13 @@
             background: #007cba;
             color: white;
             border: none;
-            padding: 10px 20px;
-            margin-top: 10px;
+            padding: 15px 25px;
+            margin-top: 15px;
             cursor: pointer;
-            border-radius: 5px;
-            font-size: 16px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            width: 100%;
         }
         
         .enter-vr-btn:hover {
@@ -122,13 +167,28 @@
             color: red; 
             margin-top: 10px; 
         }
+        
+        /* Responsive popup */
+        @media (max-width: 768px) {
+            #detailsPopup {
+                top: 10px;
+                right: 10px;
+                left: 10px;
+                width: auto;
+                max-height: 50vh;
+            }
+        }
     </style>
-</head>
+    </head>
 <body>
-    <h1>Interaktivní mapa s VR prohlížením</h1>
+    <!-- Mapa přes celý obraz -->
     <div id="map"></div>
-    <div id="detailsContainer"></div>
-    <div id="imageContainer"></div>
+    
+    <!-- Malé popup okénko pro detaily místa -->
+    <div id="detailsPopup">
+        <button id="closePopup" onclick="closeDetailsPopup()">&times;</button>
+        <div id="popupContent"></div>
+    </div>
     
     <!-- VR Container s vaším funkčním VR viewerem -->
     <div id="vrContainer">
