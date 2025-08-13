@@ -8,6 +8,80 @@
     <!-- A-Frame pro lepší VR podporu -->
     <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
     
+    <!-- Custom stereo komponenta -->
+    <script>
+        // Registrace custom stereo komponenty pro side-by-side obrázky
+        AFRAME.registerComponent('stereo-sphere', {
+            schema: {
+                src: {type: 'string'},
+                eye: {type: 'string', default: 'left'} // 'left' nebo 'right'
+            },
+            
+            init: function () {
+                const data = this.data;
+                const el = this.el;
+                
+                // Vytvoř sphere geometrii pro 180°
+                const geometry = new THREE.SphereGeometry(
+                    10,    // radius
+                    64,    // widthSegments 
+                    32,    // heightSegments
+                    0,     // phiStart - začátek horizontálně
+                    Math.PI, // phiLength - 180° horizontálně  
+                    0,     // thetaStart - začátek vertikálně
+                    Math.PI  // thetaLength - 180° vertikálně (horní polovina)
+                );
+                
+                // Otočit geometrii dovnitř
+                geometry.scale(-1, 1, 1);
+                
+                // Upravit UV souřadnice pro stereo
+                const uvs = geometry.attributes.uv.array;
+                const uvCount = uvs.length / 2;
+                
+                for (let i = 0; i < uvCount; i++) {
+                    const u = uvs[i * 2];
+                    const v = uvs[i * 2 + 1];
+                    
+                    if (data.eye === 'left') {
+                        // Levé oko - levá polovina obrázku (u: 0-0.5)
+                        uvs[i * 2] = u * 0.5;
+                    } else {
+                        // Pravé oko - pravá polovina obrázku (u: 0.5-1.0)
+                        uvs[i * 2] = u * 0.5 + 0.5;
+                    }
+                }
+                
+                // Aktualizovat UV souřadnice
+                geometry.attributes.uv.needsUpdate = true;
+                
+                // Vytvořit materiál
+                const loader = new THREE.TextureLoader();
+                loader.load(data.src, (texture) => {
+                    const material = new THREE.MeshBasicMaterial({
+                        map: texture,
+                        side: THREE.BackSide
+                    });
+                    
+                    // Vytvořit mesh
+                    const mesh = new THREE.Mesh(geometry, material);
+                    
+                    // Nastavit layer pro správné oko
+                    if (data.eye === 'left') {
+                        mesh.layers.set(1); // Levé oko
+                    } else {
+                        mesh.layers.set(2); // Pravé oko
+                    }
+                    
+                    // Přidat do scény
+                    el.setObject3D('mesh', mesh);
+                    
+                    console.log(`${data.eye} eye stereo sphere vytvořena`);
+                });
+            }
+        });
+    </script>
+    
     <style>
         body {
             margin: 0;
@@ -109,17 +183,17 @@
         </a-assets>
         
         <!-- VR prostředí pro 180° stereo -->
-        <a-sphere 
-            id="skybox" 
-            src="#stereoImage" 
-            radius="10"
-            theta-start="0"
-            theta-length="180"
-            phi-start="0" 
-            phi-length="360"
-            rotation="0 -90 0"
-            material="side: back; shader: flat">
-        </a-sphere>
+        <!-- Levé oko - levá polovina obrázku -->
+        <a-entity 
+            id="leftEye"
+            stereo-sphere="src: #stereoImage; eye: left">
+        </a-entity>
+        
+        <!-- Pravé oko - pravá polovina obrázku -->
+        <a-entity 
+            id="rightEye"
+            stereo-sphere="src: #stereoImage; eye: right">
+        </a-entity>
         
         <!-- Kamera s ovládáním -->
         <a-entity 
@@ -129,6 +203,8 @@
                 id="camera"
                 look-controls="enabled: true; touchEnabled: true"
                 wasd-controls="enabled: false">
+                <!-- Explicitně povolit oba layers pro stereo -->
+                <a-entity camera layers="1,2"></a-entity>
             </a-camera>
         </a-entity>
         
@@ -312,7 +388,8 @@
                 navigator.xr.isSessionSupported('immersive-vr').then(supported => {
                     if (supported) {
                         debugLog('✅ Immersive VR je podporováno!', 'success');
-                        debugLog('💡 Klikněte "Načíst VR scénu" pro start', 'info');
+                        debugLog('💡 Klikněte "Načíst VR scénu" → pak VR tlačítko vpravo dole', 'info');
+            debugLog('🔍 Stereo: Levé oko = levá polovina obrázku, Pravé oko = pravá polovina', 'info');
                     } else {
                         debugLog('❌ Immersive VR není podporováno', 'error');
                     }
