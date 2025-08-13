@@ -95,11 +95,11 @@
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 0, 0);
             
-            // Renderer s WebXR
+            // Renderer s WebXR - zkusíme local místo viewer
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
-            renderer.xr.setReferenceSpaceType('viewer');
+            renderer.xr.setReferenceSpaceType('local'); // Local pro head tracking
             
             document.getElementById('viewer').appendChild(renderer.domElement);
             
@@ -139,11 +139,28 @@
 
         async function startVR() {
             try {
-                const session = await navigator.xr.requestSession('immersive-vr');
+                updateStatus('Spouštím VR session...');
+                console.log('Requesting VR session...');
+                
+                // Zkusíme local reference space pro head tracking
+                renderer.xr.setReferenceSpaceType('local');
+                console.log('Reference space type nastaven na local');
+                
+                // Požádat o VR session s local jako optional feature
+                const session = await navigator.xr.requestSession('immersive-vr', {
+                    optionalFeatures: ['local']
+                });
+                console.log('VR session vytvořen:', session);
+                
+                updateStatus('Nastavuji renderer...');
+                console.log('Setting XR session on renderer...');
+                
                 await renderer.xr.setSession(session);
+                console.log('Renderer XR session nastaven');
                 
                 // Nastavení kamer pro každé oko
                 setupEyeLayers();
+                console.log('Eye layers nastaveny');
                 
                 vrButton.style.display = 'none';
                 updateStatus('VR aktivní');
@@ -151,11 +168,33 @@
                 session.addEventListener('end', () => {
                     vrButton.style.display = 'block';
                     updateStatus('VR ukončeno');
+                    console.log('VR session ukončen');
                 });
                 
             } catch (error) {
-                console.error('VR Error:', error);
-                updateStatus('Chyba VR: ' + error.message);
+                console.error('VR Error - zkouším fallback na viewer:', error);
+                
+                // Fallback na viewer pokud local selže
+                try {
+                    updateStatus('Fallback na viewer...');
+                    renderer.xr.setReferenceSpaceType('viewer');
+                    
+                    const session = await navigator.xr.requestSession('immersive-vr');
+                    await renderer.xr.setSession(session);
+                    
+                    setupEyeLayers();
+                    vrButton.style.display = 'none';
+                    updateStatus('VR aktivní (viewer mode)');
+                    
+                    session.addEventListener('end', () => {
+                        vrButton.style.display = 'block';
+                        updateStatus('VR ukončeno');
+                    });
+                    
+                } catch (fallbackError) {
+                    console.error('Fallback také selhal:', fallbackError);
+                    updateStatus('VR nedostupné');
+                }
             }
         }
 
@@ -222,8 +261,9 @@
             leftSphere = new THREE.Mesh(geometry.clone(), leftMaterial);
             rightSphere = new THREE.Mesh(geometry.clone(), rightMaterial);
             
-            // ŽÁDNÁ rotace - necháme původní orientaci
-            // Obrázek by měl být před námi už ve výchozím stavu
+            // Otočení sfér tak, aby obrázek byl před námi
+            leftSphere.rotation.y = Math.PI;
+            rightSphere.rotation.y = Math.PI;
             
             // Nastavení vrstev pro stereo zobrazení
             leftSphere.layers.set(1);  // Levé oko
