@@ -96,10 +96,11 @@
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 0, 0);
             
-            // Renderer s WebXR - bez přednastavení reference space
+            // Renderer s WebXR - nastavíme viewer jako default
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
+            renderer.xr.setReferenceSpaceType('viewer'); // Nastavit před session!
             
             console.log('Three.js verze:', THREE.REVISION);
             console.log('WebXR enabled:', renderer.xr.enabled);
@@ -147,20 +148,18 @@
                 updateStatus('Spouštím VR session...');
                 console.log('Requesting VR session...');
                 
+                // Ujistit se že máme správný reference space type nastavený
+                renderer.xr.setReferenceSpaceType('viewer');
+                console.log('Reference space type nastaven na viewer');
+                
                 // Požádat o VR session bez jakýchkoliv features
                 const session = await navigator.xr.requestSession('immersive-vr');
                 console.log('VR session vytvořen:', session);
                 
-                updateStatus('Nastavuji reference space...');
-                console.log('Requesting viewer reference space...');
-                
-                // Použít pouze 'viewer' reference space - funguje všude
-                const referenceSpace = await session.requestReferenceSpace('viewer');
-                console.log('Reference space vytvořen:', referenceSpace);
-                
                 updateStatus('Nastavuji renderer...');
                 console.log('Setting XR session on renderer...');
                 
+                // Nyní by mělo fungovat s viewer reference space
                 await renderer.xr.setSession(session);
                 console.log('Renderer XR session nastaven');
                 
