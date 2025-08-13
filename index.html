@@ -96,11 +96,11 @@
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 0, 0);
             
-            // Renderer s WebXR - zkusíme local místo viewer
+            // Renderer s WebXR - zpět na viewer (fungovalo)
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.xr.enabled = true;
-            renderer.xr.setReferenceSpaceType('local'); // Local pro head tracking
+            renderer.xr.setReferenceSpaceType('viewer'); // Zpět na viewer
             
             console.log('Three.js verze:', THREE.REVISION);
             console.log('WebXR enabled:', renderer.xr.enabled);
@@ -148,14 +148,12 @@
                 updateStatus('Spouštím VR session...');
                 console.log('Requesting VR session...');
                 
-                // Zkusíme local reference space pro head tracking
-                renderer.xr.setReferenceSpaceType('local');
-                console.log('Reference space type nastaven na local');
+                // Zpět na viewer (fungovalo)
+                renderer.xr.setReferenceSpaceType('viewer');
+                console.log('Reference space type nastaven na viewer');
                 
-                // Požádat o VR session s local jako optional feature
-                const session = await navigator.xr.requestSession('immersive-vr', {
-                    optionalFeatures: ['local']
-                });
+                // Požádat o VR session bez features
+                const session = await navigator.xr.requestSession('immersive-vr');
                 console.log('VR session vytvořen:', session);
                 
                 updateStatus('Nastavuji renderer...');
@@ -178,29 +176,8 @@
                 });
                 
             } catch (error) {
-                console.error('VR Error - zkouším fallback na viewer:', error);
-                
-                // Fallback na viewer pokud local selže
-                try {
-                    updateStatus('Fallback na viewer...');
-                    renderer.xr.setReferenceSpaceType('viewer');
-                    
-                    const session = await navigator.xr.requestSession('immersive-vr');
-                    await renderer.xr.setSession(session);
-                    
-                    setupEyeLayers();
-                    vrButton.style.display = 'none';
-                    updateStatus('VR aktivní (viewer mode)');
-                    
-                    session.addEventListener('end', () => {
-                        vrButton.style.display = 'block';
-                        updateStatus('VR ukončeno');
-                    });
-                    
-                } catch (fallbackError) {
-                    console.error('Fallback také selhal:', fallbackError);
-                    updateStatus('VR nedostupné');
-                }
+                console.error('VR Error detail:', error);
+                updateStatus('VR chyba: ' + error.message);
             }
         }
 
@@ -210,6 +187,41 @@
             
             if (leftSphere) leftSphere.layers.set(1);
             if (rightSphere) rightSphere.layers.set(2);
+            
+            // Přidat VR controller listener
+            setupVRControllerExit();
+        }
+        
+        function setupVRControllerExit() {
+            // Event listener pro VR controller exit
+            const session = renderer.xr.getSession();
+            
+            if (session) {
+                // Poslouchat na selectstart (trigger stisknutí)
+                session.addEventListener('selectstart', (event) => {
+                    console.log('VR Controller trigger stisknut - ukončuji VR');
+                    session.end();
+                });
+                
+                // Poslouchat na selectend (trigger pustění) - alternativa
+                session.addEventListener('selectend', (event) => {
+                    console.log('VR Controller trigger puštěn - ukončuji VR');
+                    session.end();
+                });
+                
+                // Poslouchat na squeeze (grip stisknutí)
+                session.addEventListener('squeezestart', (event) => {
+                    console.log('VR Controller grip stisknut - ukončuji VR');
+                    session.end();
+                });
+                
+                // A button, X button, menu atd. (obecné input)
+                session.addEventListener('inputsourceschange', (event) => {
+                    console.log('VR Input change detected');
+                });
+                
+                console.log('VR Controller exit listeners nastaveny');
+            }
         }
 
         function loadStereoImage() {
@@ -267,9 +279,8 @@
             leftSphere = new THREE.Mesh(geometry.clone(), leftMaterial);
             rightSphere = new THREE.Mesh(geometry.clone(), rightMaterial);
             
-            // Otočení sfér tak, aby obrázek byl před námi
-            leftSphere.rotation.y = Math.PI;
-            rightSphere.rotation.y = Math.PI;
+            // ŽÁDNÁ rotace - necháme původní orientaci
+            // Obrázek by měl být před námi už ve výchozím stavu
             
             // Nastavení vrstev pro stereo zobrazení
             leftSphere.layers.set(1);  // Levé oko
